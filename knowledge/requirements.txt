@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+qdrant-client
+python-multipart
+pydantic-settings
+tenacity  # Retry logic (quan trọng cho production)
+pypdf     # Đọc PDF đơn giản
+langchain==0.3.17
+langchain-experimental==0.3.4
+langchain-openai==0.3.32
+fastembed
