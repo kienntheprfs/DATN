@@ -1,0 +1,15 @@
+# Cách chạy repo
+Dịch vụ quản lý tri thức
+- `cd knowledge`
+- Tải đầy đủ theo `requirements.txt`
+- Thêm `.env`
+- `uvicorn src.main:app --reload --port 8000`
+---
+Chatbot backend
+- `cd agent-service-toolkit`
+- Tải đầy đủ theo `pyproject.toml`
+- Thêm `.env`
+- `python src/run_service.py`
+
+Chatbot UI
+- `streamlit run src/streamlit_app.py`
