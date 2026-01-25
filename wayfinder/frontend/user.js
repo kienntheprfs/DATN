@@ -92,15 +92,15 @@ async function selectMap(mapId) {
 	};
 }
 async function loadNodes() {
-	nodes = await fetchJSON(`/nodes?map_id=${currentMap.id}`);
-	// load alias cho tooltip (đơn giản, như Editor)
+	// Use optimized service to get nodes with aliases in single request
+	const data = await fetchJSON(`/nodes/map/${currentMap.id}/with-aliases`);
+	nodes = data;
+	
+	// Organize aliases by node_id from the complete data
 	aliasesByNode = {};
-	await Promise.all(
-		nodes.map(async (n) => {
-			const arr = await fetchJSON(`/aliases?node_id=${n.id}`);
-			aliasesByNode[n.id] = arr;
-		})
-	);
+	for (const node of nodes) {
+		aliasesByNode[node.id] = node.aliases || [];
+	}
 }
 
 // --------- Render ----------
@@ -147,6 +147,18 @@ function renderAll() {
 
 function drawRoute(polyline) {
 	if (routeEl) routeEl.remove();
+	
+	// Parse polyline from JSON string if needed
+	if (typeof polyline === 'string') {
+		try {
+			polyline = JSON.parse(polyline);
+		} catch (err) {
+			console.error('Invalid polyline JSON:', polyline);
+			return;
+		}
+	}
+	if (!Array.isArray(polyline)) return;
+	
 	routeEl = document.createElementNS(
 		"http://www.w3.org/2000/svg",
 		"polyline"
@@ -264,7 +276,7 @@ goBtn.addEventListener("click", async () => {
 		setHint(`Tổng quãng ~ ${fmtMeters(res.length_px)}`);
 	} catch (err) {
 		setHint("Không tìm được đường: " + err.message);
-		// gợi ý từ khóa alias
+// gợi ý từ khóa alias using new optimized service
 		try {
 			const parts = queryEl.value
 				.toLowerCase()
@@ -274,10 +286,12 @@ goBtn.addEventListener("click", async () => {
 			const sug = new Set();
 			for (const p of uniq) {
 				const s = await fetchJSON(
-					`/aliases/search?q=${encodeURIComponent(p)}`
+					`/nodes/search?map_id=${currentMap.id}&q=${encodeURIComponent(p)}`
 				);
-				s.forEach((it) =>
-					sug.add(`${p} → #node ${it.node_id} (${it.name})`)
+				s.forEach((node) =>
+					node.matching_aliases.forEach((alias) =>
+						sug.add(`${p} → #node ${node.id} (${alias.name})`)
+					)
 				);
 			}
 			suggestList.innerHTML = [...sug]

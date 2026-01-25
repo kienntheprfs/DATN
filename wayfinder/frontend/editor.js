@@ -134,12 +134,14 @@ function ensureCurrentFloor() {
 async function loadFloorsForCurrentMap() {
 	if (!currentMap) return;
 
-	// gom floor từ nodes & edges (nếu chưa có gì thì trả [1])
-	const [ns, es] = await Promise.all([fetchJSON(`/nodes?map_id=${currentMap.id}`), fetchJSON(`/edges?map_id=${currentMap.id}`)]);
-
+	// Use complete data service to get all floors
+	const data = await fetchJSON(`/nodes/map/${currentMap.id}/complete`);
 	const floors = new Set();
-	(ns || []).forEach((n) => floors.add(n.floor ?? 1));
-	(es || []).forEach((e) => floors.add(e.floor ?? 1));
+	
+	// Collect floors from nodes
+	(data.nodes || []).forEach((n) => floors.add(n.floor ?? 1));
+	// Collect floors from edges  
+	(data.edges || []).forEach((e) => floors.add(e.floor ?? 1));
 
 	let list = Array.from(floors).sort((a, b) => Number(a) - Number(b));
 	if (!list.length) list = [1];
@@ -210,9 +212,17 @@ async function selectMap(mapId) {
 
 async function loadNodesEdgesForFloor(floor) {
 	if (!currentMap) return;
-	nodes = await fetchJSON(`/nodes?map_id=${currentMap.id}&floor=${floor}`);
-	edges = await fetchJSON(`/edges?map_id=${currentMap.id}&floor=${floor}`);
-	await loadAliasesForNodes(nodes.map((n) => n.id));
+	// Use new optimized service to get all data in single request
+	const data = await fetchJSON(`/nodes/map/${currentMap.id}/complete?floor=${floor}`);
+	nodes = data.nodes;
+	edges = data.edges;
+	
+	// Organize aliases by node_id from the complete data
+	aliasesByNode = {};
+	for (const node of nodes) {
+		aliasesByNode[node.id] = node.aliases || [];
+	}
+	
 	renderOverlay();
 	renderLists();
 }
@@ -234,8 +244,18 @@ function updateConnectedEdges(nodeId) {
 	if (!node) return;
 
 	for (const edge of connectedEdges) {
-		// 1. Lấy polyline hiện tại (từ state) và tạo bản sao
-		const polyline = edge.polyline.slice();
+// 1. Lấy polyline hiện tại (từ state) và tạo bản sao
+		let polyline = edge.polyline;
+		if (typeof polyline === 'string') {
+			try {
+				polyline = JSON.parse(polyline);
+			} catch (err) {
+				console.error('Invalid polyline JSON:', edge.polyline);
+				return;
+			}
+		}
+		if (!Array.isArray(polyline)) return;
+		polyline = polyline.slice();
 
 		// 2. Cập nhật điểm đầu (start_node)
 		if (edge.start_node_id === nodeId) {
@@ -259,9 +279,21 @@ function renderOverlay() {
 	overlay.innerHTML = ""; // clear
 	overlay.style.pointerEvents = mode === "idle" ? "none" : "auto";
 
-	// edges
+// edges
 	for (const e of edges) {
-		const d = e.polyline.map((p) => p.join(",")).join(" ");
+		// Parse polyline from JSON string if needed
+		let polyline = e.polyline;
+		if (typeof polyline === 'string') {
+			try {
+				polyline = JSON.parse(polyline);
+			} catch (err) {
+				console.error('Invalid polyline JSON:', e.polyline);
+				continue;
+			}
+		}
+		if (!Array.isArray(polyline)) continue;
+		
+		const d = polyline.map((p) => p.join(",")).join(" ");
 		const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
 		line.setAttribute("points", d);
 		line.setAttribute("class", "edge-line");
@@ -619,17 +651,15 @@ nodeList.addEventListener("click", async (e) => {
 		const input = nodeList.querySelector(`input[data-input-alias="${nodeId}"]`);
 		const val = (input?.value || "").trim();
 		if (!val) return;
-		try {
+try {
 			await fetchJSON("/aliases", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ node_id: nodeId, name: val }),
 			});
 			input.value = "";
-			// reload alias của node
-			const arr = await fetchJSON(`/aliases?node_id=${nodeId}`);
-			aliasesByNode[nodeId] = arr;
-			renderLists();
+			// Reload complete data instead of individual alias request
+			await loadNodesEdgesForFloor(currentFloor);
 		} catch (err) {
 			alert(err.message);
 		}
@@ -649,9 +679,8 @@ nodeList.addEventListener("click", async (e) => {
 		if (!confirm("Xóa alias này?")) return;
 		try {
 			await fetchJSON(`/aliases/${aliasId}`, { method: "DELETE" });
-			const arr = await fetchJSON(`/aliases?node_id=${nodeId}`);
-			aliasesByNode[nodeId] = arr;
-			renderLists();
+			// Reload complete data instead of individual alias request
+			await loadNodesEdgesForFloor(currentFloor);
 		} catch (err) {
 			alert(err.message);
 		}
@@ -841,8 +870,18 @@ async function onNodeDragEnd(ev) {
 		const connectedEdges = edges.filter((e) => e.start_node_id === nodeId || e.end_node_id === nodeId);
 
 		const edgeUpdates = connectedEdges.map(async (edge) => {
-			// Tạo polyline mới dựa trên vị trí Node đã cập nhật
-			const newPolyline = edge.polyline.slice();
+// Tạo polyline mới dựa trên vị trí Node đã cập nhật
+			let newPolyline = edge.polyline;
+			if (typeof newPolyline === 'string') {
+				try {
+					newPolyline = JSON.parse(newPolyline);
+				} catch (err) {
+					console.error('Invalid polyline JSON:', edge.polyline);
+					return;
+				}
+			}
+			if (!Array.isArray(newPolyline)) return;
+			newPolyline = newPolyline.slice();
 
 			// Cập nhật điểm đầu (chắc chắn là Node đang kéo)
 			if (edge.start_node_id === nodeId) {
