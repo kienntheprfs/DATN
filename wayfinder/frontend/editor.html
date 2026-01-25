@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wayfinder — Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="app.css" />
+
+    <style>
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text-heading);
+        }
+
+        .form-control {
+            width: 100%;
+            background: #fff;
+            color: var(--text-heading);
+            border: 1px solid #dce7f1;
+            padding: 8px 12px;
+            border-radius: 6px;
+            outline: none;
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(67, 94, 190, 0.1);
+        }
+
+        .d-flex {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .text-brand {
+            color: var(--accent);
+            font-weight: 800;
+            font-size: 18px;
+            margin-right: 12px;
+        }
+
+        .divider {
+            height: 24px;
+            width: 1px;
+            background: #dce7f1;
+            margin: 0 8px;
+        }
+
+        /* Thêm đoạn này vào file CSS */
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            /* Bo góc nhẹ giống các input khác */
+            background: transparent;
+            color: var(--text-heading);
+            text-decoration: none;
+            margin-right: 8px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .btn-back:hover {
+            background: #fff;
+            border-color: #dce7f1;
+            color: var(--accent);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-back svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2.5;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <a href="dashboard.html" class="btn-back" title="Quay về Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 12H5"></path>
+                <path d="M12 19l-7-7 7-7"></path>
+            </svg>
+        </a>
+        <div class="text-brand">Wayfinder</div>
+
+        <div class="d-flex">
+            <select id="floorSelect" style="width: 100px;" title="Chọn tầng">
+            </select>
+            <button id="addFloorBtn" class="btn-mini" title="Thêm tầng mới">+</button>
+        </div>
+
+        <div class="d-flex flex-1">
+            <select id="mapSelect" style="width: 100%; max-width: 200px;" title="Chọn bản đồ">
+            </select>
+            <button id="reloadBtn" title="Tải lại dữ liệu">↻</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="d-flex">
+            <span class="badge" id="modeBadge">Idle</span>
+            <button id="modeAddNodeBtn" class="btn-mini">📍 Điểm</button>
+            <button id="modeDrawEdgeBtn" class="btn-mini">⟂ Đường</button>
+            <button id="finishEdgeBtn" class="btn-mini" disabled>✓ Xong</button>
+            <button id="cancelModeBtn" style="color: var(--danger);">Hủy</button>
+            <button id="clearAllBtn" class="btn-danger">🗑 Xóa Map</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="board" id="board">
+            <div class="map-wrap" id="mapWrap">
+                <img id="mapImage" alt="Chưa có bản đồ" />
+                <svg id="overlay"></svg>
+            </div>
+            <div id="tooltip" class="tooltip"></div>
+        </div>
+
+        <aside class="sidebar">
+
+            <div class="section">
+                <h3>Hướng dẫn nhanh</h3>
+                <div class="list">
+                    <div class="item">
+                        <div class="d-flex">
+                            <span>📍</span>
+                            <div>
+                                <div>Thêm điểm</div>
+                                <div class="sub">Click lên bản đồ → Nhập tên</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="item">
+                        <div class="d-flex">
+                            <span>⟂</span>
+                            <div>
+                                <div>Vẽ đường</div>
+                                <div class="sub">Click Node đầu → Node đích (Double-click để kết thúc)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Quản lý bản đồ</h3>
+                <div style="background: #f7f8fa; padding: 12px; border-radius: 8px; border: 1px solid #eef0f7;">
+                    <div class="form-group">
+                        <label class="form-label">Tên bản đồ</label>
+                        <input id="upName" type="text" placeholder="Vd: Sảnh chính - Tầng 1" class="form-control" />
+                    </div>
+
+                    <div class="d-flex form-group">
+                        <div style="flex:1">
+                            <label class="form-label">Tầng</label>
+                            <input id="upFloor" type="number" placeholder="1" class="form-control" />
+                        </div>
+                        <div style="flex:1">
+                            <label class="form-label">PPM</label>
+                            <input id="upPPM" type="number" placeholder="100" class="form-control"
+                                title="Pixels per meter" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">File ảnh</label>
+                        <input id="upFile" type="file" accept="image/*" class="form-control" style="padding: 6px;" />
+                    </div>
+
+                    <button id="upBtn" class="btn-mini" style="width: 100%; justify-content: center;">⬆ Tải lên</button>
+                    <div id="upHint" class="small" style="margin-top: 8px; color: var(--accent);"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Danh sách Node</h3>
+                <div id="nodeList" class="list">
+                    <div class="small" style="padding: 10px; text-align: center;">Chưa có dữ liệu</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Danh sách Edge</h3>
+                <div id="edgeList" class="list">
+                </div>
+            </div>
+
+        </aside>
+    </div>
+
+    <script src="editor.js"></script>
+</body>
+
+</html>
