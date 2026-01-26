@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str
 
+    STORAGE_TYPE: str = "local"
+
+    S3_ENDPOINT: str | None = None
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_BUCKET: str | None = None
+    S3_REGION: str | None = None
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:

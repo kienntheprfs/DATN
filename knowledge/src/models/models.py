@@ -183,6 +183,7 @@ class DocumentVersion(Base, TimestampMixin):
     chunks: Mapped[List["Chunk"]] = relationship(back_populates="document_version", cascade="all, delete-orphan")
 
     __table_args__ = (
+        UniqueConstraint("document_id", "version", name="uq_document_version"),
         Index("idx_doc_ver_status", "processing_status"),
     )
 

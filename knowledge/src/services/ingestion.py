@@ -1,7 +1,7 @@
 # src/services/ingestion.py
 import asyncio
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, BinaryIO
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_experimental.text_splitter import SemanticChunker
@@ -48,73 +48,135 @@ class IngestionService:
                 api_version=settings.EMBEDDING_API_VERSION
             )
 
-    def extract_text(self, file_path: str, doc_type: Any) -> str:
+    def extract_text(self, file_stream: BinaryIO, doc_type: Any, filename: str = "") -> str:
         """
-        Hàm chính để rút trích văn bản.
-        Lưu ý: Hàm này chạy Synchronous (đồng bộ).
-        Caller (tasks.py) PHẢI bọc hàm này trong asyncio.to_thread để không block loop.
+        Refactored: Nhận vào file_stream (BytesIO hoặc File Object) thay vì path.
+        filename chỉ dùng để log hoặc detect type phụ trợ, không dùng để open.
         """
-        path = Path(file_path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"File path does not exist: {file_path}")
-
         try:
-            # Chuyển đổi doc_type sang string để so sánh cho dễ (phòng trường hợp Enum khác nhau)
-            # Hoặc bạn so sánh trực tiếp: if doc_type == DocumentType.PDF:
+            # 1. Reset con trỏ file về đầu (Defensive programming)
+            # Để đảm bảo nếu stream đã bị đọc trước đó thì vẫn đọc lại được từ đầu
+            if file_stream.seekable():
+                file_stream.seek(0)
             
-            dtype_str = str(doc_type).upper() # Ví dụ: "DOCUMENTTYPE.PDF" hoặc "PDF"
+            dtype_str = str(doc_type).upper()
 
             if "PDF" in dtype_str:
-                return self._extract_pdf(path)
+                return self._extract_pdf(file_stream)
             
             elif "TXT" in dtype_str or "MD" in dtype_str or "MARKDOWN" in dtype_str:
-                return self._extract_plain_text(path)
+                return self._extract_plain_text(file_stream)
             
             else:
-                # Fallback: Thử đọc như text thường nếu không nhận diện được
-                logger.warning(f"Unknown doc_type {doc_type}, trying plain text extraction.")
-                return self._extract_plain_text(path)
+                logger.warning(f"Unknown doc_type {doc_type} for {filename}, trying plain text.")
+                return self._extract_plain_text(file_stream)
 
         except Exception as e:
-            logger.error(f"Failed to extract text from {file_path}: {e}")
+            logger.error(f"Failed to extract text from {filename}: {e}")
             raise e
 
-    def _extract_pdf(self, path: Path) -> str:
-        """Đọc file PDF dùng pypdf"""
+    def _extract_pdf(self, stream: BinaryIO) -> str:
+        """
+        Đọc PDF từ stream.
+        Lưu ý: Không dùng 'with open...' nữa vì stream đã mở sẵn.
+        """
         text_content = []
         try:
-            with open(path, "rb") as f:
-                reader = PdfReader(f)
-                
-                # Check nếu file bị encrypt
-                if reader.is_encrypted:
-                    # Nếu có password thì reader.decrypt('password')
-                    # Ở đây giả sử file upload không có pass hoặc đã decrypt
-                    try:
-                        reader.decrypt("")
-                    except:
-                        pass
+            # PdfReader hỗ trợ đọc trực tiếp từ stream/bytes
+            reader = PdfReader(stream)
+            
+            if reader.is_encrypted:
+                try: reader.decrypt("")
+                except: pass
 
-                for i, page in enumerate(reader.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        # Clean cơ bản: xóa null bytes có thể gây lỗi Postgres
-                        clean_text = page_text.replace('\x00', '')
-                        text_content.append(clean_text)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    clean_text = page_text.replace('\x00', '')
+                    text_content.append(clean_text)
             
             return "\n".join(text_content)
         except Exception as e:
-            raise RuntimeError(f"Error parsing PDF: {e}")
+            raise RuntimeError(f"Error parsing PDF stream: {e}")
 
-    def _extract_plain_text(self, path: Path) -> str:
-        """Đọc file TXT hoặc MD"""
+    def _extract_plain_text(self, stream: BinaryIO) -> str:
+        """
+        Đọc Text từ stream (Bytes -> String)
+        """
         try:
-            # errors='ignore' để tránh crash nếu file có ký tự lạ không phải UTF-8
-            with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()
+            # stream.read() trả về bytes -> phải decode sang string
+            content_bytes = stream.read()
+            return content_bytes.decode("utf-8", errors="ignore")
         except Exception as e:
-            raise RuntimeError(f"Error reading text file: {e}")
+            raise RuntimeError(f"Error reading text stream: {e}")
+
+    # def extract_text(self, file_path: str, doc_type: Any) -> str:
+    #     """
+    #     Hàm chính để rút trích văn bản.
+    #     Lưu ý: Hàm này chạy Synchronous (đồng bộ).
+    #     Caller (tasks.py) PHẢI bọc hàm này trong asyncio.to_thread để không block loop.
+    #     """
+    #     path = Path(file_path)
+        
+    #     if not path.exists():
+    #         raise FileNotFoundError(f"File path does not exist: {file_path}")
+
+    #     try:
+    #         # Chuyển đổi doc_type sang string để so sánh cho dễ (phòng trường hợp Enum khác nhau)
+    #         # Hoặc bạn so sánh trực tiếp: if doc_type == DocumentType.PDF:
+            
+    #         dtype_str = str(doc_type).upper() # Ví dụ: "DOCUMENTTYPE.PDF" hoặc "PDF"
+
+    #         if "PDF" in dtype_str:
+    #             return self._extract_pdf(path)
+            
+    #         elif "TXT" in dtype_str or "MD" in dtype_str or "MARKDOWN" in dtype_str:
+    #             return self._extract_plain_text(path)
+            
+    #         else:
+    #             # Fallback: Thử đọc như text thường nếu không nhận diện được
+    #             logger.warning(f"Unknown doc_type {doc_type}, trying plain text extraction.")
+    #             return self._extract_plain_text(path)
+
+    #     except Exception as e:
+    #         logger.error(f"Failed to extract text from {file_path}: {e}")
+    #         raise e
+
+    # def _extract_pdf(self, path: Path) -> str:
+    #     """Đọc file PDF dùng pypdf"""
+    #     text_content = []
+    #     try:
+    #         with open(path, "rb") as f:
+    #             reader = PdfReader(f)
+                
+    #             # Check nếu file bị encrypt
+    #             if reader.is_encrypted:
+    #                 # Nếu có password thì reader.decrypt('password')
+    #                 # Ở đây giả sử file upload không có pass hoặc đã decrypt
+    #                 try:
+    #                     reader.decrypt("")
+    #                 except:
+    #                     pass
+
+    #             for i, page in enumerate(reader.pages):
+    #                 page_text = page.extract_text()
+    #                 if page_text:
+    #                     # Clean cơ bản: xóa null bytes có thể gây lỗi Postgres
+    #                     clean_text = page_text.replace('\x00', '')
+    #                     text_content.append(clean_text)
+            
+    #         return "\n".join(text_content)
+    #     except Exception as e:
+    #         raise RuntimeError(f"Error parsing PDF: {e}")
+
+    # def _extract_plain_text(self, path: Path) -> str:
+    #     """Đọc file TXT hoặc MD"""
+    #     try:
+    #         # errors='ignore' để tránh crash nếu file có ký tự lạ không phải UTF-8
+    #         with open(path, "r", encoding="utf-8", errors="ignore") as f:
+    #             return f.read()
+    #     except Exception as e:
+    #         raise RuntimeError(f"Error reading text file: {e}")
 
     def _embed_sparse_sync(self, texts: List[str]) -> List[Dict[str, Any]]:
         """
