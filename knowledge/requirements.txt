@@ -12,4 +12,14 @@ langchain-experimental==0.3.4
 langchain-openai==0.3.32
 fastembed
 boto3 # storage
+
 # aiofiles # storage asyn / hiện chưa dùng
+
+# celery
+celery
+redis
+flower
+
+# alembic
+alembic
+psycopg2-binary

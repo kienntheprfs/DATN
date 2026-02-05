@@ -72,3 +72,48 @@ class VectorDBService:
             wait=True
         )
         return generated_ids
+    
+    async def upsert_faq_batch(self, points_data: List[Dict[str, Any]]) -> bool:
+        """
+        Upsert FAQ variants.
+        Dữ liệu FAQ nên nằm chung Collection với Chunks để tận dụng Unified Search.
+        Ta phân biệt bằng payload field `type: "faq"`.
+        """
+        points = []
+        
+        for item in points_data:
+            # item bao gồm: id (uuid), dense, sparse, payload
+            points.append(models.PointStruct(
+                id=item["id"], # Sử dụng ID được tạo từ bên ngoài để map với Postgres
+                vector={
+                    self.DENSE_VECTOR_NAME: item["dense"], 
+                    self.SPARSE_VECTOR_NAME: item["sparse"]
+                },
+                payload=item["payload"]
+            ))
+
+        # Dùng wait=True để đảm bảo data consistency cho luồng xử lý tiếp theo
+        await self.client.upsert(
+            collection_name=self.collection_name,
+            points=points,
+            wait=True
+        )
+        return True
+    
+    async def delete_vectors_by_version(self, version_id: int):
+        """
+        ROLLBACK QDRANT: Xóa vector theo Filter (Payload)
+        """
+        await self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="version_id",
+                            match=models.MatchValue(value=version_id),
+                        )
+                    ]
+                )
+            ),
+        )
