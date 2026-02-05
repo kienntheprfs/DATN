@@ -14,11 +14,18 @@ class Settings(BaseSettings):
     # Qdrant
     QDRANT_URL: str | None = None
     QDRANT_API_KEY: str | None = None
+    FAQ_COLLECTION_NAME: str | None = "faqs"
 
     # Embeddings
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DEPLOYMENT_NAME: str | None = None
     EMBEDDING_API_VERSION: str | None = None
+
+    # Generation
+    AZURE_OPENAI_ENDPOINT: str | None = None
+    AZURE_OPENAI_API_VERSION: str | None = None
+    AZURE_OPENAI_DEPLOYMENT_MAP: str | None = None
+    AZURE_OPENAI_API_MODEL_NAME: str | None = None
 
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
@@ -33,6 +40,9 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str | None = None
     S3_BUCKET: str | None = None
     S3_REGION: str | None = None
+
+    REDIS_BROKER_URL: str = "redis://localhost:6379/0"
+    REDIS_BACKEND_URL: str = "redis://localhost:6379/1"
 
     @computed_field
     @property
