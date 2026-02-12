@@ -15,4 +15,5 @@ Chatbot UI
 - `streamlit run src/streamlit_app.py`
 
 API Gateway
-- `cd api_gateway; docker compose up -d; uv run uvicorn src.main:app --reload --port 8002`
+- cài đặt package: `cd api_gateway; uv sync`
+- chạy: `cd api_gateway; docker compose up -d; uv run uvicorn src.main:app --reload --port 8002`

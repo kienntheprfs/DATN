@@ -1,6 +1,5 @@
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from redis.asyncio import Redis
 import httpx
 
 from src.config import settings
@@ -28,20 +27,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def get_redis() -> AsyncGenerator[Redis, None]:
-    """Dependency for Redis connections."""
-    redis = Redis.from_url(
-        settings.redis_url,
-        encoding="utf-8",
-        decode_responses=True,
-    )
-    try:
-        yield redis
-    finally:
-        await redis.aclose()
 
 
 async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
-    """Dependency for HTTP client (for proxying requests)."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    """Dependency for HTTP client (for proxying requests).
+    
+    follow_redirects=True: Auto-follow 307/308 redirects from backend services
+    This handles trailing slash redirects from knowledge/wayfinder services
+    """
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         yield client

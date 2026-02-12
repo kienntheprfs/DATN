@@ -1,91 +1,134 @@
-"""Database models."""
+"""Database models using SQLModel (SQLAlchemy + Pydantic)."""
 from datetime import datetime
-from typing import List
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Table, Column
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import Optional, List
 from uuid import uuid4
+from sqlmodel import SQLModel, Field, Relationship
+
+# Export SQLModel as Base for Alembic compatibility
+Base = SQLModel
 
 
-class Base(DeclarativeBase):
-    """Base class for all models."""
-    pass
+# Link model for many-to-many relationship between users and roles
+class UserRoleLink(SQLModel, table=True):
+    """Link table for User-Role many-to-many relationship."""
+    __tablename__ = "user_roles"
+    
+    user_id: str = Field(foreign_key="users.id", primary_key=True, max_length=36)
+    role_id: str = Field(foreign_key="roles.id", primary_key=True, max_length=36)
 
 
-# Association table for many-to-many relationship between users and roles
-user_roles = Table(
-    "user_roles",
-    Base.metadata,
-    Column("user_id", String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", String(36), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-)
-
-
-class User(Base):
-    """User model."""
+class User(SQLModel, table=True):
+    """User model combining SQLAlchemy ORM + Pydantic validation."""
     __tablename__ = "users"
     
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
-        nullable=False
+    id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+        max_length=36,
     )
+    email: str = Field(
+        unique=True,
+        index=True,
+        max_length=255,
+    )
+    hashed_password: str = Field(
+        max_length=255,
+    )
+    is_active: bool = Field(default=True)
+    is_superuser: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    roles: Mapped[List["Role"]] = relationship(
-        "Role",
-        secondary=user_roles,
+    roles: List["Role"] = Relationship(
         back_populates="users",
-        lazy="selectin",
+        link_model=UserRoleLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
-    resource_ownerships: Mapped[List["ResourceOwnership"]] = relationship(
-        "ResourceOwnership",
+    threads: List["Thread"] = Relationship(
         back_populates="owner",
-        cascade="all, delete-orphan",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
     
-    def __repr__(self) -> str:
-        return f"<User(id={self.id}, email={self.email})>"
+    def has_role(self, role_name: str) -> bool:
+        """Check if user has a specific role."""
+        return any(role.name == role_name for role in self.roles)
+    
+    def get_role_names(self) -> List[str]:
+        """Get list of role names."""
+        return [role.name for role in self.roles]
 
 
-class Role(Base):
+class Role(SQLModel, table=True):
     """Role model for RBAC."""
     __tablename__ = "roles"
     
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
-    description: Mapped[str] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    
-    # Relationships
-    users: Mapped[List["User"]] = relationship(
-        "User",
-        secondary=user_roles,
-        back_populates="roles",
+    id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+        max_length=36,
     )
-    
-    def __repr__(self) -> str:
-        return f"<Role(id={self.id}, name={self.name})>"
-
-
-class ResourceOwnership(Base):
-    """Resource ownership for extensibility (threads, documents, etc)."""
-    __tablename__ = "resource_ownerships"
-    
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    resource_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # "thread", "document"
-    resource_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    name: str = Field(
+        unique=True,
+        index=True,
+        max_length=50,
+    )
+    description: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    owner: Mapped["User"] = relationship("User", back_populates="resource_ownerships")
+    users: List["User"] = Relationship(
+        back_populates="roles",
+        link_model=UserRoleLink,
+    )
+
+
+class Thread(SQLModel, table=True):
+    """Thread model for conversation tracking."""
+    __tablename__ = "threads"
     
-    def __repr__(self) -> str:
-        return f"<ResourceOwnership(resource_type={self.resource_type}, resource_id={self.resource_id}, owner_id={self.owner_id})>"
+    id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+        max_length=36,
+    )
+    user_id: str = Field(
+        foreign_key="users.id",
+        index=True,
+        max_length=36,
+    )
+    agent_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+    )
+    title: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationships
+    owner: "User" = Relationship(back_populates="threads")
+    
+    def is_owned_by(self, user_id: str) -> bool:
+        """Check if thread is owned by given user."""
+        return self.user_id == user_id
+
+
+# Export all models for Alembic autogenerate
+__all__ = [
+    "Base",
+    "SQLModel",
+    "User",
+    "Role",
+    "UserRoleLink",
+    "Thread",
+]
+
+
+
+

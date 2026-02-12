@@ -1,7 +1,8 @@
 """Proxy middleware for routing requests to downstream services."""
 import httpx
-from fastapi import Request, Response
+from fastapi import Request, Response, Depends
 from starlette.background import BackgroundTask
+from src.dependencies import get_http_client
 
 from src.config import settings
 
@@ -9,7 +10,7 @@ from src.config import settings
 async def proxy_request(
     request: Request,
     target_url: str,
-    client: httpx.AsyncClient
+    client = Depends(get_http_client)
 ) -> Response:
     """
     Proxy request to downstream service.

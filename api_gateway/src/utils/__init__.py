@@ -1,7 +1,5 @@
 """Utils package."""
-from src.utils.cache_keys import generate_jwt_cache_key, generate_policy_cache_key
+# No utilities currently in use
+# Previously had cache_keys.py (removed - using in-memory cache)
 
-__all__ = [
-    "generate_jwt_cache_key",
-    "generate_policy_cache_key",
-]
+__all__ = []

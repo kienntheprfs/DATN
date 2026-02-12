@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # Downstream Services
     agent_service_url: str = "http://localhost:8080"
     knowledge_service_url: str = "http://localhost:8000"
+    wayfinder_service_url: str = "http://localhost:8001"
     
     # Internal Security
     internal_secret: str = "your-internal-secret-for-service-to-service-auth"

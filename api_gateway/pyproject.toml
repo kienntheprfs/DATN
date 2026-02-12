@@ -1,7 +1,7 @@
 [project]
 name = "api-gateway"
 version = "0.1.0"
-description = "API Gateway with JWT + OPA Authorization"
+description = "API Gateway with JWT + Python-based Authorization"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
     "email-validator>=2.0.0",
+    "sqlmodel>=0.0.22",
     "sqlalchemy>=2.0.36",
     "alembic>=1.14.0",
     "asyncpg>=0.30.0",
@@ -20,6 +21,7 @@ dependencies = [
     "redis>=5.2.0",
     "httpx>=0.28.0",
     "python-dotenv>=1.0.0",
+    "cachetools>=5.5.0",
 ]
 
 

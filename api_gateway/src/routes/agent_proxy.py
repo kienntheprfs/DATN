@@ -1,61 +1,181 @@
-"""Agent service proxy routes."""
-from fastapi import APIRouter, Request, Depends
+"""Agent service proxy routes with selective authorization.
+
+Implements proxy pattern following SOLID principles:
+- Single Responsibility: Only handles proxying to agent service
+- Open/Closed: Extensible for new agent routes
+- Liskov Substitution: Could implement IProxyRouter interface
+- Dependency Inversion: Depends on httpx abstraction
+"""
+from typing import Optional
+from fastapi import APIRouter, Request, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
-import re
 
 from src.config import settings
-from src.dependencies import get_http_client
+from src.dependencies import get_http_client, get_db
 from src.middleware.proxy_middleware import proxy_request
-from src.shared.auth.authorization import check_authorization
+from src.shared.auth.fastapiDI import require_ownership
+from src.services.thread_service import ThreadService
+from src.models import Thread
+
 
 router = APIRouter(prefix="/agent", tags=["Agent Service"])
 
 
-@router.get("/{path:path}", operation_id="agent_get")
+@router.post(
+    "/invoke",
+    summary="Invoke agent",
+    description="Invoke agent for chat completion (public, guest-friendly)",
+)
+async def invoke_agent(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_http_client),
+):
+    """Invoke agent - public endpoint, supports both authenticated users and guests.
+    
+    Behavior:
+    - Authenticated users: Optionally track thread in database
+    - Guest users: No thread tracking (client-side thread_id in sessionStorage)
+    
+    Request body should contain:
+    - thread_id (optional): Client-provided thread ID
+    - agent_id (optional): Agent identifier
+    - messages: List of chat messages
+    """
+    user = getattr(request.state, "user", None)
+    
+    # Optional: Auto-create thread for authenticated users
+    # This is optional - client can also manage threads via /threads endpoints
+    if user is not None:
+        # Try to extract thread_id from request body for tracking
+        # This is a best-effort approach
+        try:
+            body = await request.json()
+            thread_id = body.get("thread_id")
+            agent_id = body.get("agent_id")
+            
+            # If thread_id not provided, create new thread
+            if not thread_id and agent_id:
+                thread = await ThreadService.create_thread(
+                    db=db,
+                    user_id=user.id,
+                    agent_id=agent_id,
+                    title="New Conversation",
+                )
+                # Note: We can't modify request body easily in FastAPI
+                # Client should create thread first via POST /threads
+                # This is just a placeholder for potential auto-tracking
+        except Exception:
+            # If body parsing fails, continue without tracking
+            pass
+    
+    # Proxy to agent service
+    target_url = settings.agent_service_url
+    
+    # Inject user headers if authenticated
+    if user:
+        request.headers.__dict__["_list"].append(
+            (b"x-user-id", user.id.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-email", user.email.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-roles", ",".join(user.roles).encode())
+        )
+    
+    # Inject internal secret for service-to-service auth
+    request.headers.__dict__["_list"].append(
+        (b"x-internal-secret", settings.internal_secret.encode())
+    )
+    
+    return await proxy_request(request, target_url, client)
+
+
+@router.get(
+    "/history/{thread_id}",
+    summary="Get thread history",
+    description="Retrieve chat history for a thread (requires ownership)",
+    dependencies=[Depends(require_ownership("thread_id", Thread))],
+)
+async def get_thread_history(
+    thread_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_http_client),
+):
+    """Get thread history - requires authentication and ownership.
+    
+    Authorization:
+    - User must own the thread (checked by @require_ownership fastapiDI)
+    - Admins can access all thread histories
+    """
+    user = request.state.user
+    
+    # Build target URL
+    target_url = f"{settings.agent_service_url}/history/{thread_id}"
+    
+    # Inject user headers
+    request.headers.__dict__["_list"].append(
+        (b"x-user-id", user.id.encode())
+    )
+    request.headers.__dict__["_list"].append(
+        (b"x-user-email", user.email.encode())
+    )
+    request.headers.__dict__["_list"].append(
+        (b"x-user-roles", ",".join(user.roles).encode())
+    )
+    request.headers.__dict__["_list"].append(
+        (b"x-internal-secret", settings.internal_secret.encode())
+    )
+    
+    return await proxy_request(request, target_url, client)
+
+
+# Generic proxy for other agent endpoints (catch-all)
+@router.get(
+    "/{path:path}",
+    summary="Proxy to agent service",
+    description="Generic proxy for other agent endpoints",
+    operation_id="agent_get"
+)
 @router.post("/{path:path}", operation_id="agent_post")
 @router.put("/{path:path}", operation_id="agent_put")
 @router.delete("/{path:path}", operation_id="agent_delete")
 @router.patch("/{path:path}", operation_id="agent_patch")
-async def proxy_to_agent(
+async def proxy_agent_generic(
     path: str,
     request: Request,
-    client: httpx.AsyncClient = Depends(get_http_client)
+    client: httpx.AsyncClient = Depends(get_http_client),
 ):
-    """Proxy all requests to agent service with authorization checks."""
-    # Extract resource info from path for authorization
-    # Example paths: threads/{thread_id}/invoke, threads/{thread_id}
-    # thread_match = re.match(r'threads/([^/]+)(/.*)?', path)
+    """Generic proxy for agent service endpoints.
     
-    # if thread_match:
-    #     thread_id = thread_match.group(1)
-    #     action_path = thread_match.group(2) or ""
-        
-    #     # Determine action based on method and path
-    #     if request.method == "POST" and "/invoke" in action_path:
-    #         action = "invoke"
-    #     elif request.method in ["PUT", "PATCH"]:
-    #         action = "update"
-    #     elif request.method == "DELETE":
-    #         action = "delete"
-    #     else:
-    #         action = "read"
-        
-    #     # Check authorization (will raise 403 if denied)
-    #     await check_authorization(
-    #         request=request,
-    #         resource_type="thread",
-    #         resource_id=thread_id,
-    #         action=action,
-    #         owner_id=None  # TODO: fetch from database if needed for ownership check
-    #     )
-    
-    # Remove /agent prefix
-    actual_path = f"/{path}" if path else "/"
+    Note: No authorization by default - add fastapiDI as needed.
+    """
+    user = getattr(request.state, "user", None)
     
     # Build target URL
     target_url = settings.agent_service_url
     
     # Update request path
-    request._url = request.url.replace(path=actual_path)
+    request._url = request.url.replace(path=f"/{path}")
+    
+    # Inject headers if authenticated
+    if user:
+        request.headers.__dict__["_list"].append(
+            (b"x-user-id", user.id.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-email", user.email.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-roles", ",".join(user.roles).encode())
+        )
+    
+    request.headers.__dict__["_list"].append(
+        (b"x-internal-secret", settings.internal_secret.encode())
+    )
     
     return await proxy_request(request, target_url, client)
+
