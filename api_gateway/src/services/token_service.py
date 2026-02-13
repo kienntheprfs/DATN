@@ -156,6 +156,66 @@ class TokenService:
         return refresh_token
     
     @staticmethod
+    async def revoke_user_refresh_token(
+        token: str,
+        user_id: str,
+        db: AsyncSession
+    ) -> RefreshToken:
+        """
+        Revoke a refresh token for a specific user (with ownership verification).
+        User can only revoke their own tokens.
+        Uses SELECT FOR UPDATE to ensure atomic revocation.
+        
+        Args:
+            token: The JWT refresh token string
+            user_id: User ID who owns the token
+            db: Database session
+            
+        Returns:
+            RefreshToken: Revoked token record
+            
+        Raises:
+            HTTPException: If token not found, doesn't belong to user, or database error
+        """
+        try:
+            # Lock the row with SELECT FOR UPDATE to prevent concurrent modifications
+            refresh_token = await TokenService.get_refresh_token(token, db, for_update=True)
+            
+            if not refresh_token:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Refresh token not found"
+                )
+            
+            # Verify ownership
+            if refresh_token.user_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot revoke token that belongs to another user"
+                )
+            
+            if refresh_token.is_revoked:
+                # Already revoked, return it as is (idempotent operation)
+                # No need to commit since nothing changed
+                return refresh_token
+            
+            # Revoke the token (this is now safe because we have the row lock)
+            refresh_token.revoke()
+            await db.commit()
+            await db.refresh(refresh_token)
+            
+            return refresh_token
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to revoke token: {str(e)}"
+            )
+    
+    @staticmethod
     async def revoke_refresh_token(
         token: str,
         db: AsyncSession

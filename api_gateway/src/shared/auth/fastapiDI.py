@@ -7,12 +7,15 @@ Provides dependency-based authorization following SOLID principles:
 - Interface Segregation: Minimal dependency interfaces
 - Dependency Inversion: Depends on abstractions (request.state.user)
 """
+import logging
 from typing import List, Type, Callable
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from src.dependencies import get_db
+
+logger = logging.getLogger(__name__)
 
 
 async def require_auth(request: Request):
@@ -59,7 +62,7 @@ def require_roles(allowed_roles: List[str]) -> Callable:
         path = request.url.path
         
         if user is None:
-            print(f"[AUTH] 401 - No user info: path={path}")
+            logger.warning(f"Missing user info for role check: path={path}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required",
@@ -69,9 +72,10 @@ def require_roles(allowed_roles: List[str]) -> Callable:
         user_roles = getattr(user, "roles", [])
         has_role = any(role in allowed_roles for role in user_roles)
 
-        print(f"[AUTH] Role check: path={path}, user={user.email}, user_roles={user_roles}, allowed={allowed_roles}, has_role={has_role}")
+        logger.debug(f"Role check: path={path}, user={user.email}, user_roles={user_roles}, allowed={allowed_roles}, has_role={has_role}")
 
         if not has_role:
+            logger.warning(f"Insufficient privileges: path={path}, user={user.email}, requires={allowed_roles}, has={user_roles}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Required role: {' or '.join(allowed_roles)}",

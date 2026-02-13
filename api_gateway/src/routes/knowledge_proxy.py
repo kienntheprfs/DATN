@@ -3,13 +3,16 @@
 Implements proxy pattern with role-based authorization following SOLID principles.
 All knowledge service endpoints require admin role.
 """
-from fastapi import APIRouter, Request, Depends
+import logging
+from fastapi import APIRouter, Request, Depends, HTTPException, status
 import httpx
 
 from src.config import settings
 from src.dependencies import get_http_client
 from src.middleware.proxy_middleware import proxy_request
 from src.shared.auth.fastapiDI import require_roles
+
+logger = logging.getLogger(__name__)
 
 
 # Apply admin_required at router level - all routes in this router require admin
@@ -47,27 +50,38 @@ async def proxy_to_knowledge(
     - PUT /kb/documents/{id} -> knowledge-service/documents/{id}
     - DELETE /kb/documents/{id} -> knowledge-service/documents/{id}
     """
-    user = request.state.user
-    
-    # Build target URL
-    target_url = settings.knowledge_service_url
-    
-    # Update request path (remove /kb prefix)
-    actual_path = f"/{path}" if path else "/"
-    request._url = request.url.replace(path=actual_path)
-    
-    # Inject user headers for downstream service
-    request.headers.__dict__["_list"].append(
-        (b"x-user-id", user.id.encode())
-    )
-    request.headers.__dict__["_list"].append(
-        (b"x-user-email", user.email.encode())
-    )
-    request.headers.__dict__["_list"].append(
-        (b"x-user-roles", ",".join(user.roles).encode())
-    )
-    request.headers.__dict__["_list"].append(
-        (b"x-internal-secret", settings.internal_secret.encode())
-    )
-    
-    return await proxy_request(request, target_url, client)
+    try:
+        user = request.state.user
+        
+        # Build target URL
+        target_url = settings.knowledge_service_url
+        
+        # Update request path (remove /kb prefix)
+        actual_path = f"/{path}" if path else "/"
+        request._url = request.url.replace(path=actual_path)
+        
+        # Inject user headers for downstream service
+        request.headers.__dict__["_list"].append(
+            (b"x-user-id", user.id.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-email", user.email.encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-roles", ",".join(user.roles).encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-internal-secret", settings.internal_secret.encode())
+        )
+        
+        return await proxy_request(request, target_url, client)
+        
+    except HTTPException:
+        # Re-raise HTTPException from fastapiDI (role check)
+        raise
+    except Exception as e:
+        logger.error(f"Error proxying request to knowledge service for path /{path}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to process knowledge service request. Please try again later."
+        )

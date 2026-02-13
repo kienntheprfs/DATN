@@ -6,6 +6,7 @@ Implements middleware following SOLID principles:
 - Interface Segregation: Minimal interface (sets request.state.user)
 - Dependency Inversion: Depends on jwt_handler abstraction
 """
+import logging
 from typing import Optional
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -14,6 +15,8 @@ from cachetools import TTLCache
 
 from src.shared.auth.jwt_handler import jwt_handler
 from src.schemas.user_info import UserInfo
+
+logger = logging.getLogger(__name__)
 
 
 # In-memory cache for JWT validation (replaces Redis for simplicity)
@@ -73,7 +76,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # If no JWT and auth required, return 401
         if not auth_header or not auth_header.startswith("Bearer "):
             if not is_guest_allowed:
-                print(f"[AUTH] 401 - No token: path={path}")
+                logger.warning(f"Missing or invalid authorization header: path={path}")
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     content={"detail": "Missing or invalid authorization header"},
@@ -81,27 +84,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
             else:
                 # Guest mode: no user info
-                print(f"[AUTH] Guest mode: path={path}")
+                logger.debug(f"Guest mode allowed: path={path}")
                 request.state.user = None
                 return await call_next(request)
         
         token = auth_header.split(" ")[1]
-        print(f"[AUTH] Token found: path={path}, token_prefix={token[:20]}...")
+        logger.debug(f"Token found: path={path}, token_prefix={token[:20]}...")
         
         # Try cache first
         user_info = jwt_cache.get(token)
         if user_info:
-            print(f"[AUTH] Token from cache: {user_info.email}, roles={user_info.roles}")
+            logger.debug(f"Token from cache: {user_info.email}, roles={user_info.roles}")
         
         if user_info is None:
             # Decode and validate JWT
             try:
                 token_payload = jwt_handler.decode_token(token)
-                print(f"[AUTH] Token decoded: sub={token_payload.sub}, email={token_payload.email}, roles={token_payload.roles}, type={token_payload.type}")
+                logger.debug(f"Token decoded: sub={token_payload.sub}, email={token_payload.email}, roles={token_payload.roles}, type={token_payload.type}")
                 
                 # Verify it's an access token
                 if not jwt_handler.verify_token_type(token_payload, "access"):
-                    print(f"[AUTH] 401 - Invalid token type: path={path}, type={getattr(token_payload, 'type', 'unknown')}")
+                    logger.warning(f"Invalid token type: path={path}, type={getattr(token_payload, 'type', 'unknown')}")
                     return JSONResponse(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         content={"detail": "Invalid token type"},
@@ -114,13 +117,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     email=token_payload.email,
                     roles=token_payload.roles,
                 )
-                print(f"[AUTH] UserInfo created: {user_info.email}, roles={user_info.roles}")
+                logger.debug(f"UserInfo created: {user_info.email}, roles={user_info.roles}")
                 
                 # Cache user info
                 jwt_cache[token] = user_info
                 
             except ValueError as e:
-                print(f"[AUTH] 401 - Token decode error: path={path}, error={str(e)}")
+                logger.warning(f"Token decode error: path={path}, error={str(e)}")
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     content={"detail": str(e)},
@@ -129,7 +132,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Set user info in request state
         request.state.user = user_info
-        print(f"[AUTH] ✓ Authenticated: path={path}, user={user_info.email}, roles={user_info.roles}")
+        logger.info(f"Authenticated successfully: path={path}, user={user_info.email}, roles={user_info.roles}")
         
         # Process request
         response = await call_next(request)

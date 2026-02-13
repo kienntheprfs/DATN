@@ -18,6 +18,7 @@ from typing import Optional, Dict, List, Tuple
 from enum import Enum
 from dataclasses import dataclass
 from uuid import uuid4
+from test_token_features import run_token_tests
 
 
 class Role(Enum):
@@ -136,6 +137,11 @@ class TestRunner:
             refresh_token = self.refresh_tokens.get(role)
             body = {"refresh_token": refresh_token or "invalid_refresh_token"}
         
+        # Special case: /auth/logout needs a refresh token
+        if "/auth/logout" in path and endpoint.method == "POST":
+            refresh_token = self.refresh_tokens.get(role)
+            body = {"refresh_token": refresh_token or "invalid_refresh_token"}
+
         # Special case: /auth/revoke needs a refresh token
         if "/auth/revoke" in path and endpoint.method == "POST":
             refresh_token = self.refresh_tokens.get(role)
@@ -234,7 +240,9 @@ def define_all_endpoints() -> List[EndpointTest]:
                  body={}),
         EndpointTest("POST", "/auth/login", ExpectedAccess.PUBLIC, "Login",
                      body={"email": "admin@gmail.com", "password": "admin@gmail.com"}),
-        EndpointTest("POST", "/auth/refresh", ExpectedAccess.PUBLIC, "Refresh token"),
+        EndpointTest("POST", "/auth/refresh", ExpectedAccess.AUTH, "Refresh token"),
+        EndpointTest("POST", "/auth/logout", ExpectedAccess.AUTH, "Logout (user/admin)"),
+        EndpointTest("POST", "/auth/logout-all", ExpectedAccess.AUTH, "Logout all devices (user/admin)"),
         EndpointTest("POST", "/auth/revoke", ExpectedAccess.ADMIN, "Revoke refresh token (admin only)"),
         EndpointTest("POST", "/auth/revoke-all", ExpectedAccess.ADMIN, "Revoke all tokens (admin only)"),
         
@@ -262,7 +270,7 @@ def define_all_endpoints() -> List[EndpointTest]:
     ]
 
 
-async def run_all_tests():
+async def run_endpoint_tests():
     """Run comprehensive tests for all endpoints with all roles."""
     print("=" * 80)
     print("🧪 COMPREHENSIVE API GATEWAY ENDPOINT TESTS")
@@ -371,6 +379,9 @@ async def run_all_tests():
         
         return failed_tests == 0
 
+async def run_all_tests():
+    await run_endpoint_tests()
+    await run_token_tests()
 
 if __name__ == "__main__":
     try:

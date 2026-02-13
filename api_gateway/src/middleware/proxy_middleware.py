@@ -1,10 +1,13 @@
 """Proxy middleware for routing requests to downstream services."""
+import logging
 import httpx
 from fastapi import Request, Response, Depends
 from starlette.background import BackgroundTask
 from src.dependencies import get_http_client
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def proxy_request(
@@ -71,9 +74,34 @@ async def proxy_request(
             headers=response_headers,
         )
     
-    except httpx.RequestError as e:
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout proxying to {target_url}: {str(e)}")
         return Response(
-            content=f'{{"error": "Service unavailable: {str(e)}"}}',
+            content='{"detail": "Request timeout. The service took too long to respond."}',
+            status_code=504,
+            media_type="application/json",
+        )
+    
+    except httpx.ConnectError as e:
+        logger.error(f"Connection error proxying to {target_url}: {str(e)}")
+        return Response(
+            content='{"detail": "Service unavailable. Unable to connect to the service."}',
             status_code=503,
+            media_type="application/json",
+        )
+    
+    except httpx.RequestError as e:
+        logger.error(f"Request error proxying to {target_url}: {str(e)}")
+        return Response(
+            content=f'{{"detail": "Service error: {type(e).__name__}"}}',
+            status_code=503,
+            media_type="application/json",
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error proxying to {target_url}: {str(e)}", exc_info=True)
+        return Response(
+            content='{"detail": "An unexpected error occurred while processing your request."}',
+            status_code=500,
             media_type="application/json",
         )

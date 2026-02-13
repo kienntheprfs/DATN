@@ -39,6 +39,28 @@ class RevokeAllTokensResponse(BaseModel):
     tokens_revoked: int
 
 
+class RevokeAllTokensRequest(BaseModel):
+    """Request for revoking all tokens of a user."""
+    user_id: Optional[str] = Field(None, description="User ID to revoke tokens for. If not provided, revokes admin's own tokens.")
+
+
+class LogoutRequest(BaseModel):
+    """Logout request schema (logout from current device)."""
+    refresh_token: str
+
+
+class LogoutResponse(BaseModel):
+    """Response for user logout."""
+    message: str
+    revoked_at: datetime
+
+
+class LogoutAllResponse(BaseModel):
+    """Response for logging out from all devices."""
+    message: str
+    tokens_revoked: int
+
+
 class TokenPayload(BaseModel):
     """JWT token payload schema."""
     sub: str  # user_id

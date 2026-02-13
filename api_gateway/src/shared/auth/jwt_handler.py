@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 import jwt
+import time
 from src.config import settings
 from src.schemas.auth import TokenPayload
 
@@ -27,6 +28,7 @@ class JWTHandler:
             "email": email,
             "roles": roles,
             "exp": expire,
+            "iat": time.time(),  # Add issued-at timestamp with microsecond precision. Unix timestamp với microseconds (e.g., 1707814245.123456)
             "type": "access",
         }
         
@@ -54,6 +56,7 @@ class JWTHandler:
             "sub": user_id,
             "email": email,
             "exp": expire,
+            "iat": time.time(),  # Add issued-at timestamp with microsecond precision. Unix timestamp với microseconds (e.g., 1707814245.123456)
             "type": "refresh",
         }
         
