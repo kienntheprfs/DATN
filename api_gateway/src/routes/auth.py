@@ -1,12 +1,36 @@
 """Authentication routes."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_db
-from src.schemas import LoginRequest, TokenResponse, RefreshTokenRequest, UserCreate, UserRead
+from src.dependencies import get_db, get_current_user
+from src.shared.auth.fastapiDI import require_roles
+from src.schemas import (
+    LoginRequest, 
+    TokenResponse, 
+    RefreshTokenRequest, 
+    RevokeTokenRequest,
+    RevokeTokenResponse,
+    RevokeAllTokensResponse,
+    UserCreate, 
+    UserRead
+)
 from src.services.auth_service import auth_service
+from src.services.token_service import token_service
+from src.models import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def get_client_info(request: Request) -> tuple[str | None, str | None]:
+    """Extract client information from request."""
+    user_agent = request.headers.get("user-agent")
+    # Try to get real IP, considering proxies
+    ip_address = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip() 
+        or request.headers.get("x-real-ip")
+        or request.client.host if request.client else None
+    )
+    return user_agent, ip_address
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -22,18 +46,73 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     login_data: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Login and get access/refresh tokens."""
-    tokens = await auth_service.login(login_data.email, login_data.password, db)
+    user_agent, ip_address = get_client_info(request)
+    tokens = await auth_service.login(
+        login_data.email, 
+        login_data.password, 
+        db,
+        user_agent=user_agent,
+        ip_address=ip_address
+    )
     return tokens
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token."""
-    tokens = await auth_service.refresh_token(refresh_data.refresh_token, db)
+    user_agent, ip_address = get_client_info(request)
+    tokens = await auth_service.refresh_token(
+        refresh_data.refresh_token, 
+        db,
+        user_agent=user_agent,
+        ip_address=ip_address
+    )
     return tokens
+
+
+@router.post("/revoke", response_model=RevokeTokenResponse, dependencies=[Depends(require_roles(["admin"]))])
+async def revoke_token(
+    revoke_data: RevokeTokenRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoke a specific refresh token (logout from current device).
+    This invalidates the refresh token, preventing it from being used to get new access tokens.
+    **Requires admin role.**
+    """
+    revoked_token = await token_service.revoke_refresh_token(
+        revoke_data.refresh_token,
+        db
+    )
+    return RevokeTokenResponse(
+        message="Token revoked successfully",
+        revoked_at=revoked_token.revoked_at
+    )
+
+
+@router.post("/revoke-all", response_model=RevokeAllTokensResponse, dependencies=[Depends(require_roles(["admin"]))])
+async def revoke_all_tokens(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Revoke all refresh tokens for the current user (logout from all devices).
+    **Requires admin role.**
+    """
+    count = await token_service.revoke_all_user_tokens(
+        current_user.id,
+        db
+    )
+    return RevokeAllTokensResponse(
+        message=f"All tokens revoked successfully",
+        tokens_revoked=count
+    )
+

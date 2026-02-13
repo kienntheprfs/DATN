@@ -133,11 +133,12 @@ class TestRunner:
         
         # Special case: /auth/refresh needs a real refresh token
         if "/auth/refresh" in path and endpoint.method == "POST":
-            refresh_token = (
-                self.refresh_tokens.get(role)
-                or self.refresh_tokens.get(Role.ADMIN)
-                or self.refresh_tokens.get(Role.USER)
-            )
+            refresh_token = self.refresh_tokens.get(role)
+            body = {"refresh_token": refresh_token or "invalid_refresh_token"}
+        
+        # Special case: /auth/revoke needs a refresh token
+        if "/auth/revoke" in path and endpoint.method == "POST":
+            refresh_token = self.refresh_tokens.get(role)
             body = {"refresh_token": refresh_token or "invalid_refresh_token"}
         
         try:
@@ -234,6 +235,8 @@ def define_all_endpoints() -> List[EndpointTest]:
         EndpointTest("POST", "/auth/login", ExpectedAccess.PUBLIC, "Login",
                      body={"email": "admin@gmail.com", "password": "admin@gmail.com"}),
         EndpointTest("POST", "/auth/refresh", ExpectedAccess.PUBLIC, "Refresh token"),
+        EndpointTest("POST", "/auth/revoke", ExpectedAccess.ADMIN, "Revoke refresh token (admin only)"),
+        EndpointTest("POST", "/auth/revoke-all", ExpectedAccess.ADMIN, "Revoke all tokens (admin only)"),
         
         # ==================== AGENT ENDPOINTS ====================
         EndpointTest("POST", "/agent/invoke", ExpectedAccess.PUBLIC, "Invoke agent (public)",

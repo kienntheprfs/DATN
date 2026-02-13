@@ -119,6 +119,63 @@ class Thread(SQLModel, table=True):
         return self.user_id == user_id
 
 
+class RefreshToken(SQLModel, table=True):
+    """Refresh token model for token management and revocation."""
+    __tablename__ = "refresh_tokens"
+    
+    id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+        max_length=36,
+    )
+    token: str = Field(
+        unique=True,
+        index=True,
+        max_length=500,
+        description="The JWT refresh token string",
+    )
+    user_id: str = Field(
+        foreign_key="users.id",
+        index=True,
+        max_length=36,
+    )
+    is_revoked: bool = Field(
+        default=False,
+        index=True,
+        description="Whether the token has been revoked",
+    )
+    expires_at: datetime = Field(
+        index=True,
+        description="Token expiration timestamp",
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    revoked_at: Optional[datetime] = Field(
+        default=None,
+        description="When the token was revoked",
+    )
+    
+    # Optional metadata for tracking
+    user_agent: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="User agent of the client that requested the token",
+    )
+    ip_address: Optional[str] = Field(
+        default=None,
+        max_length=45,  # IPv6 max length
+        description="IP address of the client",
+    )
+    
+    def revoke(self) -> None:
+        """Revoke this refresh token."""
+        self.is_revoked = True
+        self.revoked_at = datetime.utcnow()
+    
+    def is_valid(self) -> bool:
+        """Check if token is valid (not revoked and not expired)."""
+        return not self.is_revoked and self.expires_at > datetime.utcnow()
+
+
 # Export all models for Alembic autogenerate
 __all__ = [
     "Base",
@@ -127,6 +184,7 @@ __all__ = [
     "Role",
     "UserRoleLink",
     "Thread",
+    "RefreshToken",
 ]
 
 

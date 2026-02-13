@@ -40,10 +40,3 @@ class UserRead(UserBase):
     
     class Config:
         from_attributes = True
-
-
-class UserUpdate(BaseModel):
-    """User update schema."""
-    email: Optional[EmailStr] = None
-    password: Optional[str] = Field(None, min_length=8)
-    is_active: Optional[bool] = None

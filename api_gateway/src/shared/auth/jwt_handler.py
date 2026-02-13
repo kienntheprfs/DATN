@@ -1,6 +1,6 @@
 """JWT token handler."""
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 import jwt
 from src.config import settings
 from src.schemas.auth import TokenPayload
@@ -33,12 +33,18 @@ class JWTHandler:
         return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     
     @staticmethod
-    def create_refresh_token(
+    def create_refresh_token_with_expiry(
         user_id: str,
         email: str,
         expires_delta: Optional[timedelta] = None
-    ) -> str:
-        """Create refresh token."""
+    ) -> Tuple[str, datetime]:
+        """
+        Create refresh token and return both token and expiration time.
+        Useful for storing token in database.
+        
+        Returns:
+            Tuple[str, datetime]: (token, expiration_time)
+        """
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
         else:
@@ -51,7 +57,8 @@ class JWTHandler:
             "type": "refresh",
         }
         
-        return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+        token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+        return token, expire
     
     @staticmethod
     def decode_token(token: str) -> TokenPayload:
