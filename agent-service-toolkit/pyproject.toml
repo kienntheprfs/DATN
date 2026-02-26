@@ -63,6 +63,7 @@ dependencies = [
     "qdrant-client",
     "openai>=1.30.0",
     "fastembed",
+    "langchain_tavily",
 ]
 
 [dependency-groups]

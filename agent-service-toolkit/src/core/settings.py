@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8080
     GRACEFUL_SHUTDOWN_TIMEOUT: int = 30
-    LOG_LEVEL: LogLevel = LogLevel.WARNING
+    LOG_LEVEL: LogLevel = LogLevel.INFO
 
     AUTH_SECRET: SecretStr | None = None
 
@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str | None = None
     USE_FAKE_MODEL: bool = False
     OPENROUTER_API_KEY: str | None = None
+
+    # Tavily
+    TAVILY_API_KEY: str | None = None
 
     # Qdrant
     QDRANT_URL: str | None = None

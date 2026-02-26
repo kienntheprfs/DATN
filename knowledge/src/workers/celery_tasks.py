@@ -400,7 +400,7 @@ def map_faq_batches(self, payload: dict):
     
     return self.replace(faq_workflow)
 
-def trigger_ingestion_pipeline(version_id: int):
+def trigger_ingestion_pipeline(version_id: int, auto_generate_faq: bool = False):
     """
     Main Trigger:
     1. Extract (Common)
@@ -409,12 +409,16 @@ def trigger_ingestion_pipeline(version_id: int):
     # Bước 1: Extract
     extract_task = extract_and_chunk.s(version_id)
     
-    # Bước 2: Song song 2 nhánh
+    # Bước 2: Song song 
     # Output của extract_task sẽ được truyền vào cả 2 task bên dưới
-    parallel_flows = group(
-        map_batches.s(),      # Nhánh Doc
-        map_faq_batches.s()   # Nhánh FAQ
-    )
+    tasks_in_parallel = [map_batches.s()]
+    
+    # Nếu chọn tạo FAQ, thêm nhánh FAQ vào group
+    if auto_generate_faq:
+        tasks_in_parallel.append(map_faq_batches.s())
+    
+    # Tạo group từ danh sách tasks
+    parallel_flows = group(tasks_in_parallel)
     
     pipeline = chain(extract_task, parallel_flows)
     

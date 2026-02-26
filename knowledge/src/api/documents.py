@@ -17,7 +17,8 @@ async def upload_document(
     # Bỏ BackgroundTasks vì ta dùng Celery
     file: UploadFile = File(...),
     storage_id: int = Form(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    auto_generate_faq: bool = Form(False),
 ):
     service = DocumentService(db)
 
@@ -30,7 +31,7 @@ async def upload_document(
 
     # 2. Trigger Celery Pipeline
     # Hàm trigger_ingestion_pipeline trả về AsyncResult (chứa task_id)
-    task_result = trigger_ingestion_pipeline(version.id)
+    task_result = trigger_ingestion_pipeline(version.id, auto_generate_faq)
 
     return {
         "status": "queued",
