@@ -1,15 +1,18 @@
 """Authentication service."""
+import logging
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 
-from src.models import User, Role
+from src.models import AuthProvider, User, Role
 from src.shared.auth.password import password_handler
 from src.shared.auth.jwt_handler import jwt_handler
 from src.schemas import UserCreate, TokenResponse
 from src.services.token_service import token_service
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -76,6 +79,7 @@ class AuthService:
             await db.rollback()
             # This can happen if two requests try to register the same email simultaneously
             # Database unique constraint caught it
+            logger.warning("Duplicate email registration attempt (IntegrityError): %s", user_data.email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
@@ -86,9 +90,10 @@ class AuthService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Unexpected error during registration for %s: %s", user_data.email, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to register user: {str(e)}"
+                detail="Failed to register user. Please try again later."
             )
     
     @staticmethod
@@ -116,6 +121,13 @@ class AuthService:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Incorrect email or password"
+                )
+            
+            # Prevent Google-only users from logging in with email/password
+            if user.auth_provider == AuthProvider.GOOGLE and not user.hashed_password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This account uses Google Sign-In. Please login with Google.",
                 )
             
             # Verify password
@@ -169,9 +181,10 @@ class AuthService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Unexpected error during login for %s: %s", email, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Login failed: {str(e)}"
+                detail="Login failed. Please try again later."
             )
     
     @staticmethod
@@ -270,9 +283,10 @@ class AuthService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Unexpected error during token refresh: %s", e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to refresh token: {str(e)}"
+                detail="Failed to refresh token. Please try again later."
             )
 
 

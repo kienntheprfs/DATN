@@ -10,6 +10,28 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class GoogleLoginRequest(BaseModel):
+    """Google OAuth2 login request.
+    
+    Frontend sends the Google ID token (credential) received
+    from Google Sign-In SDK.
+    """
+    credential: str = Field(
+        ..., 
+        min_length=1, 
+        description="Google ID token from frontend Google Sign-In SDK",
+    )
+
+
+class GoogleUserInfo(BaseModel):
+    """Parsed Google user info from verified ID token."""
+    google_id: str
+    email: str
+    name: Optional[str] = None
+    picture: Optional[str] = None
+    email_verified: bool = False
+
+
 class TokenResponse(BaseModel):
     """Token response schema."""
     access_token: str

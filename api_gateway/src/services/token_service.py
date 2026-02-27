@@ -1,4 +1,5 @@
 """Token service for refresh token management."""
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,8 @@ from fastapi import HTTPException, status
 
 from src.models import RefreshToken
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class TokenService:
@@ -68,15 +71,17 @@ class TokenService:
         except IntegrityError as e:
             await db.rollback()
             # Token already exists (unique constraint violation)
+            logger.error("Duplicate refresh token generated: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Duplicate token generated. Please try again."
             )
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to store refresh token: %s", e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to store refresh token: {str(e)}"
+                detail="Failed to store refresh token. Please try again later."
             )
     
     @staticmethod
@@ -156,7 +161,7 @@ class TokenService:
         return refresh_token
     
     @staticmethod
-    async def revoke_user_refresh_token(
+    async def revoke_own_refresh_token(
         token: str,
         user_id: str,
         db: AsyncSession
@@ -210,13 +215,14 @@ class TokenService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to revoke token (user): %s", e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to revoke token: {str(e)}"
+                detail="Failed to revoke token. Please try again later."
             )
     
     @staticmethod
-    async def revoke_refresh_token(
+    async def revoke_arbitrary_refresh_token(
         token: str,
         db: AsyncSession
     ) -> RefreshToken:
@@ -260,9 +266,10 @@ class TokenService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to revoke token (admin): %s", e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to revoke token: {str(e)}"
+                detail="Failed to revoke token. Please try again later."
             )
     
     @staticmethod
@@ -308,9 +315,10 @@ class TokenService:
             return count
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to revoke all user tokens for user_id=%s: %s", user_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to revoke user tokens: {str(e)}"
+                detail="Failed to revoke user tokens. Please try again later."
             )
     
     @staticmethod
@@ -347,9 +355,10 @@ class TokenService:
             return count
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to cleanup expired tokens: %s", e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to cleanup expired tokens: {str(e)}"
+                detail="Failed to cleanup expired tokens. Please try again later."
             )
 
 

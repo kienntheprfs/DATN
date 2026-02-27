@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.dependencies import get_db, get_current_user
 from src.shared.auth.fastapiDI import require_roles
 from src.schemas import (
-    LoginRequest, 
+    LoginRequest,
+    GoogleLoginRequest,
     TokenResponse, 
     RefreshTokenRequest, 
     RevokeTokenRequest,
@@ -20,6 +21,7 @@ from src.schemas import (
     UserRead
 )
 from src.services.auth_service import auth_service
+from src.services.google_auth_service import google_auth_service
 from src.services.token_service import token_service
 from src.models import User
 
@@ -66,6 +68,40 @@ async def login(
     return tokens
 
 
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+    google_data: GoogleLoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Login with Google OAuth2.
+
+    Frontend sends the Google ID token (credential) received
+    from Google Sign-In SDK. Backend verifies it and returns
+    JWT access/refresh tokens.
+    """
+    user_agent, ip_address = get_client_info(request)
+    tokens: TokenResponse = await google_auth_service.google_login(
+        credential=google_data.credential,
+        db=db,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+    return tokens
+
+
+@router.get("/me", response_model=UserRead)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user),
+):
+    """Get current authenticated user information.
+    
+    Requires valid JWT access token in Authorization header.
+    Returns full user profile including Google OAuth fields.
+    """
+    return current_user
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
@@ -96,7 +132,7 @@ async def logout(
     
     User can only logout their own refresh tokens.
     """
-    revoked_token = await token_service.revoke_user_refresh_token(
+    revoked_token = await token_service.revoke_own_refresh_token(
         logout_data.refresh_token,
         current_user.id,
         db
@@ -136,7 +172,7 @@ async def revoke_token(
     This invalidates the refresh token, preventing it from being used to get new access tokens.
     **Requires admin role.**
     """
-    revoked_token = await token_service.revoke_refresh_token(
+    revoked_token = await token_service.revoke_arbitrary_refresh_token(
         revoke_data.refresh_token,
         db
     )

@@ -17,8 +17,18 @@ class UserRoleLink(SQLModel, table=True):
     role_id: str = Field(foreign_key="roles.id", primary_key=True, max_length=36)
 
 
+class AuthProvider:
+    """Constants for authentication providers."""
+    LOCAL: str = "local"
+    GOOGLE: str = "google"
+
+
 class User(SQLModel, table=True):
-    """User model combining SQLAlchemy ORM + Pydantic validation."""
+    """User model combining SQLAlchemy ORM + Pydantic validation.
+    
+    Unified model for all auth methods (local email/password, Google OAuth, etc.).
+    OAuth users may have nullable hashed_password.
+    """
     __tablename__ = "users"
     
     id: str = Field(
@@ -31,13 +41,38 @@ class User(SQLModel, table=True):
         index=True,
         max_length=255,
     )
-    hashed_password: str = Field(
+    hashed_password: Optional[str] = Field(
+        default=None,
         max_length=255,
     )
     is_active: bool = Field(default=True)
     is_superuser: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # OAuth fields
+    auth_provider: str = Field(
+        default=AuthProvider.LOCAL,
+        max_length=20,
+        description="Authentication provider: 'local' | 'google'",
+    )
+    google_id: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        index=True,
+        sa_column_kwargs={"unique": True},
+        description="Google OAuth subject ID",
+    )
+    avatar_url: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="User avatar URL from OAuth provider",
+    )
+    display_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        description="Display name from OAuth provider",
+    )
     
     # Relationships
     roles: List["Role"] = Relationship(
@@ -180,6 +215,7 @@ class RefreshToken(SQLModel, table=True):
 __all__ = [
     "Base",
     "SQLModel",
+    "AuthProvider",
     "User",
     "Role",
     "UserRoleLink",

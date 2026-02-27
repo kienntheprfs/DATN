@@ -31,11 +31,14 @@ class UserCreate(UserBase):
 
 
 class UserRead(UserBase):
-    """User read schema."""
+    """User read schema (public representation)."""
     id: str
     is_active: bool
     is_superuser: bool
     created_at: datetime
+    auth_provider: str = "local"
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
     roles: list[RoleRead] = []
     
     class Config:

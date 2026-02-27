@@ -97,8 +97,11 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+# Add authentication middleware (JWT validation)
+app.add_middleware(AuthMiddleware)
 
 # Add CORS middleware
+logger.debug(f"CORS origins: {settings.cors_origins_list}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -107,8 +110,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add authentication middleware (JWT validation)
-app.add_middleware(AuthMiddleware)
+
 
 
 # Global Exception Handlers

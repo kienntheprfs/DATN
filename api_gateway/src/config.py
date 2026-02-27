@@ -44,8 +44,12 @@ class Settings(BaseSettings):
     # Internal Security
     internal_secret: str = "your-internal-secret-for-service-to-service-auth"
     
+    # Google OAuth2
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    
     # CORS
-    cors_origins: str = "http://localhost:8501,http://localhost:3000"
+    cors_origins: str = "*"
     
     @property
     def cors_origins_list(self) -> List[str]:

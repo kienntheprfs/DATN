@@ -1,6 +1,8 @@
 """Schemas package."""
 from src.schemas.auth import (
     LoginRequest, 
+    GoogleLoginRequest,
+    GoogleUserInfo,
     TokenResponse, 
     RefreshTokenRequest, 
     RevokeTokenRequest,
@@ -16,6 +18,8 @@ from src.schemas.user import UserCreate, UserRead, RoleRead
 
 __all__ = [
     "LoginRequest",
+    "GoogleLoginRequest",
+    "GoogleUserInfo",
     "TokenResponse", 
     "RefreshTokenRequest",
     "RevokeTokenRequest",

@@ -19,6 +19,7 @@ from enum import Enum
 from dataclasses import dataclass
 from uuid import uuid4
 from test_token_features import run_token_tests
+from test_google_oauth import run_google_oauth_tests
 
 
 class Role(Enum):
@@ -67,6 +68,38 @@ class TestRunner:
         }
         self.test_thread_id: Optional[str] = None
         
+    async def register(self, client: httpx.AsyncClient, role: Role) -> bool:
+        """Register a new account for specific role. Returns True if successful or already exists."""
+        if role == Role.GUEST:
+            return True
+
+        credentials = {
+            Role.USER: {"email": "user@gmail.com", "password": "user@gmail.com"},
+            Role.ADMIN: {"email": "admin@gmail.com", "password": "admin@gmail.com", "roles": ["admin"]},
+        }
+
+        cred = credentials.get(role)
+        if not cred:
+            return False
+
+        try:
+            response = await client.post(
+                f"{self.base_url}/auth/register",
+                json=cred
+            )
+            if response.status_code in [200, 201]:
+                print(f"   ✅ Registered {role.value:10} → {cred['email']}")
+                return True
+            elif response.status_code == 409:
+                print(f"   ℹ️  {role.value:10} already registered → {cred['email']}")
+                return True
+            else:
+                print(f"   ⚠️  Failed to register {role.value}: {response.status_code} {response.text[:100]}")
+                return False
+        except Exception as e:
+            print(f"   ⚠️  Register error for {role.value}: {e}")
+            return False
+
     async def login(self, client: httpx.AsyncClient, role: Role) -> Optional[str]:
         """Login and get token for specific role."""
         if role == Role.GUEST:
@@ -240,6 +273,8 @@ def define_all_endpoints() -> List[EndpointTest]:
                  body={}),
         EndpointTest("POST", "/auth/login", ExpectedAccess.PUBLIC, "Login",
                      body={"email": "admin@gmail.com", "password": "admin@gmail.com"}),
+        EndpointTest("POST", "/auth/google", ExpectedAccess.PUBLIC, "Google OAuth login",
+                     body={"credential": "fake-google-token"}),
         EndpointTest("POST", "/auth/refresh", ExpectedAccess.AUTH, "Refresh token"),
         EndpointTest("POST", "/auth/logout", ExpectedAccess.AUTH, "Logout (user/admin)"),
         EndpointTest("POST", "/auth/logout-all", ExpectedAccess.AUTH, "Logout all devices (user/admin)"),
@@ -282,10 +317,15 @@ async def run_endpoint_tests():
     endpoints = define_all_endpoints()
     
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        # Step 1: Login as different roles
+        # Step 1: Register & Login as different roles
         print("\n1️⃣ AUTHENTICATION SETUP")
         print("-" * 80)
         
+        print("\n   📝 Registering accounts...")
+        for role in [Role.USER, Role.ADMIN]:
+            await runner.register(client, role)
+        
+        print("\n   🔑 Logging in...")
         for role in [Role.USER, Role.ADMIN]:
             token = await runner.login(client, role)
             if token:
@@ -382,6 +422,7 @@ async def run_endpoint_tests():
 async def run_all_tests():
     await run_endpoint_tests()
     await run_token_tests()
+    await run_google_oauth_tests()
 
 if __name__ == "__main__":
     try:

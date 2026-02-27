@@ -45,6 +45,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/auth/login",
         "/auth/register",
         "/auth/refresh",
+        "/auth/google",
     ]
     
     # Guest-allowed paths - authentication optional
@@ -56,6 +57,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         """Process request through JWT authentication."""
         path = request.url.path
+        method = request.method
+        
+        # Allow OPTIONS requests (CORS preflight) without authentication
+        if method == "OPTIONS":
+            return await call_next(request)
         
         # Public paths: skip auth, no user info
         # Check exact match first

@@ -7,6 +7,7 @@ Implements Service Layer pattern following SOLID principles:
 - Interface Segregation: Minimal, focused methods
 - Dependency Inversion: Depends on SQLModel abstractions, not concrete DB
 """
+import logging
 from typing import List, Optional
 from uuid import uuid4
 from datetime import datetime
@@ -16,6 +17,8 @@ from sqlmodel import select, func, delete
 from fastapi import HTTPException, status
 
 from src.models import Thread
+
+logger = logging.getLogger(__name__)
 
 
 class ThreadService:
@@ -68,9 +71,10 @@ class ThreadService:
             return thread
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to create thread for user %s: %s", user_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create thread: {str(e)}"
+                detail="Failed to create thread. Please try again later."
             )
     
     @staticmethod
@@ -165,9 +169,10 @@ class ThreadService:
             result = await db.execute(stmt)
             return list(result.scalars().all())
         except Exception as e:
+            logger.error("Failed to list threads for user %s: %s", user_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to list threads: {str(e)}"
+                detail="Failed to list threads. Please try again later."
             )
     
     @staticmethod
@@ -195,9 +200,10 @@ class ThreadService:
             result = await db.execute(stmt)
             return result.scalar_one()
         except Exception as e:
+            logger.error("Failed to count threads for user %s: %s", user_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to count threads: {str(e)}"
+                detail="Failed to count threads. Please try again later."
             )
     
     @staticmethod
@@ -246,9 +252,10 @@ class ThreadService:
             raise
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to update thread %s: %s", thread_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to update thread: {str(e)}"
+                detail="Failed to update thread. Please try again later."
             )
     
     @staticmethod
@@ -276,9 +283,10 @@ class ThreadService:
             return result.rowcount > 0
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to delete thread %s: %s", thread_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete thread: {str(e)}"
+                detail="Failed to delete thread. Please try again later."
             )
     
     @staticmethod
@@ -309,7 +317,8 @@ class ThreadService:
             return result.rowcount
         except Exception as e:
             await db.rollback()
+            logger.error("Failed to delete threads for user %s: %s", user_id, e, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete user threads: {str(e)}"
+                detail="Failed to delete user threads. Please try again later."
             )
