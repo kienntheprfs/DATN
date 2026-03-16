@@ -4,7 +4,6 @@
 
 ### Yêu cầu
 - Node.js >= 18
-- Yarn package manager
 
 ### Bắt đầu
 
@@ -16,7 +15,7 @@
 
 2. **Cài đặt dependencies**
    ```bash
-   yarn install
+   npm install
    ```
 
 3. **Tạo file môi trường**
@@ -26,7 +25,7 @@
 
 4. **Chạy development server**
    ```bash
-   yarn dev
+   npm run dev
    ```
 
 ### Cấu hình biến môi trường cơ bản
@@ -421,8 +420,8 @@ Sử dụng MCP system để AI tương tác với các dịch vụ
 
 Để phát triển local:
 ```bash
-yarn install
-yarn dev
+npm install
+npm run dev
 ```
 
 Wiki pages you might want to explore:
