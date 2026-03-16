@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List
 import os
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -22,56 +22,77 @@ class ClearMapIn(BaseModel):
     delete_upload: bool = False  # nếu True: xóa luôn file ảnh map trên đĩa
 
 
-@router.post("/clear-map", response_model=dict)
-def clear_map(payload: ClearMapIn, session: Session = Depends(get_session)):
+@router.post("/clear-map")
+def clear_map_data(payload: ClearMapIn, session: Session = Depends(get_session)):
     m = session.get(Map, payload.map_id)
     if not m:
         raise HTTPException(status_code=404, detail="Map không tồn tại.")
 
-    # lấy danh sách node_id thuộc map
-    nodes = session.exec(select(Node).where(Node.map_id == m.id)).all()
-    node_ids = [n.id for n in nodes]
+    # 1. Tìm tất cả node_id thuộc map này
+    node_ids = session.exec(select(Node.id).where(Node.map_id == m.id)).all()
 
-    # 1) delete aliases theo node_ids (nếu có)
-    deleted_aliases = 0
+    # 2. Xóa các quan hệ phụ thuộc trước
     if node_ids:
-        res = session.exec(sa_delete(Alias).where(Alias.node_id.in_(node_ids)))
-        deleted_aliases = res.rowcount or 0
+        # Xóa Alias
+        session.exec(sa_delete(Alias).where(Alias.node_id.in_(node_ids)))
+        # Xóa Edge (Dựa trên start_node hoặc end_node đều thuộc map này)
+        session.exec(sa_delete(Edge).where(Edge.start_node_id.in_(node_ids)))
+        # Xóa Node
+        session.exec(sa_delete(Node).where(Node.map_id == m.id))
 
-    # 2) delete edges theo map_id
-    res_e = session.exec(sa_delete(Edge).where(Edge.map_id == m.id))
-    deleted_edges = res_e.rowcount or 0
-
-    # 3) delete nodes theo map_id
-    res_n = session.exec(sa_delete(Node).where(Node.map_id == m.id))
-    deleted_nodes = res_n.rowcount or 0
-
-    deleted_map = False
-    removed_file = False
-
-    # 4) xóa map (tùy chọn)
+    # 3. Xóa Map và File (nếu yêu cầu)
+    img_path = m.image_link
     if payload.delete_map:
-        # lưu đường dẫn trước khi xóa để có thể remove file
-        img_path = m.image_path
-        session.exec(sa_delete(Map).where(Map.id == m.id))
-        deleted_map = True
-        # xóa file (tùy chọn)
+        session.delete(m)
         if payload.delete_upload and img_path and os.path.exists(img_path):
             try:
                 os.remove(img_path)
-                removed_file = True
-            except Exception:
-                removed_file = False
+            except:
+                pass
 
     session.commit()
+    return {"ok": True, "detail": f"Đã dọn dẹp dữ liệu cho map {payload.map_id}"}
+
+
+class FullMapResponse(BaseModel):
+    id: int
+    name: str
+    floor_level: int
+    scale: float
+    nodes: List[dict]
+    edges: List[dict]
+
+
+@router.get("/{map_id}/full", response_model=FullMapResponse)
+def get_full_map_details(map_id: int, session: Session = Depends(get_session)):
+    # 1. Lấy thông tin Map
+    m = session.get(Map, map_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Map không tồn tại.")
+
+    # 2. Lấy Nodes kèm theo Aliases (SQLModel tự handle relationship nếu đã config)
+    nodes = session.exec(select(Node).where(Node.map_id == map_id)).all()
+
+    # Chuyển node sang dict và kèm aliases
+    node_list = []
+    node_ids = []
+    for n in nodes:
+        node_ids.append(n.id)
+        n_dict = n.dict()
+        n_dict["aliases"] = [a.name for a in n.aliases]
+        node_list.append(n_dict)
+
+    # 3. Lấy Edges thuộc về các node này
+    edge_list = []
+    if node_ids:
+        edges = session.exec(select(Edge).where(Edge.start_node_id.in_(node_ids))).all()
+        edge_list = [e.dict() for e in edges]
 
     return {
-        "ok": True,
-        "deleted": {
-            "aliases": deleted_aliases,
-            "edges": deleted_edges,
-            "nodes": deleted_nodes,
-            "map": deleted_map,
-            "upload_removed": removed_file,
-        },
+        "id": m.id,
+        "name": m.name,
+        "floor_level": m.floor_level,
+        "scale": m.scale_ratio,
+        "nodes": node_list,
+        "edges": edge_list,
     }

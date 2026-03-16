@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Campus Pathfinding &amp; Directions</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .map-gradient {
+            background: radial-gradient(circle at center, #1a2a3a 0%, #101922 100%);
+        }
+    </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark font-display text-white">
+    <div class="flex flex-col h-screen overflow-hidden">
+        <!-- Top Navigation Bar -->
+        <header
+            class="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#233648] px-6 py-3 bg-background-light dark:bg-background-dark z-20">
+            <div class="flex items-center gap-4 text-white">
+                <div class="size-8 bg-primary rounded-lg flex items-center justify-center">
+                    <span class="material-symbols-outlined text-white">map</span>
+                </div>
+                <h2 class="text-black dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Campus
+                    Pathfinding</h2>
+            </div>
+            <div class="flex flex-1 justify-end gap-8">
+                <div class="hidden md:flex items-center gap-9">
+                    <a class="text-gray-600 dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors"
+                        href="#">Map</a>
+                    <a class="text-gray-600 dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors"
+                        href="#">Buildings</a>
+                    <a class="text-gray-600 dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors"
+                        href="#">Schedules</a>
+                    <a class="text-gray-600 dark:text-white text-sm font-medium leading-normal hover:text-primary transition-colors"
+                        href="#">Settings</a>
+                </div>
+                <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary"
+                    data-alt="User profile avatar"
+                    style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAnMDsvjMFf7EF8S-nY_sqzt6KwK4tLmOCfdUlsJ_BuG2HJUXTfKrFr3WCx3EJs7A6OKkgt6cQf3CPQ_IM0JTjwrUccoOIoO-eA7aqN6b2ysTDCgd0h6aYI0Cr9E-noID9gjivs9zboLtdzIP_B2ScWMsoUnb3kmX4979NQHhIITLeDL1sNJjN4seFibh1f0u2mKPgmma3ZmXeB8iPt3eoMSinHWr1MocISWBBarttWc0nGM3wyO1VbG7iGd16RgB6HCzIO4HtqC39A");'>
+                </div>
+            </div>
+        </header>
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Sidebar Navigation & Search -->
+            <aside
+                class="w-[420px] border-r border-[#233648] flex flex-col bg-background-light dark:bg-background-dark overflow-y-auto z-10">
+                <div class="p-4 space-y-4">
+                    <!-- Search Bar Component -->
+                    <div class="flex flex-col gap-2">
+                        <label class="flex flex-col min-w-40 h-12 w-full">
+                            <div class="flex w-full flex-1 items-stretch rounded-lg h-full border border-[#324d67]">
+                                <div
+                                    class="text-[#92adc9] flex bg-[#233648] items-center justify-center pl-4 rounded-l-lg">
+                                    <span class="material-symbols-outlined">my_location</span>
+                                </div>
+                                <input
+                                    class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-white focus:outline-0 focus:ring-0 border-none bg-[#233648] h-full placeholder:text-[#92adc9] px-4 text-base font-normal"
+                                    value="Tòa A" />
+                            </div>
+                        </label>
+                        <div class="flex justify-center -my-2 relative z-10">
+                            <button class="bg-primary p-1 rounded-full text-white shadow-lg">
+                                <span class="material-symbols-outlined">swap_vert</span>
+                            </button>
+                        </div>
+                        <label class="flex flex-col min-w-40 h-12 w-full">
+                            <div class="flex w-full flex-1 items-stretch rounded-lg h-full border border-primary">
+                                <div
+                                    class="text-[#92adc9] flex bg-[#233648] items-center justify-center pl-4 rounded-l-lg">
+                                    <span class="material-symbols-outlined text-primary">location_on</span>
+                                </div>
+                                <input
+                                    class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-white focus:outline-0 focus:ring-0 border-none bg-[#233648] h-full placeholder:text-[#92adc9] px-4 text-base font-normal"
+                                    value="Phòng 202" />
+                                <div
+                                    class="flex items-center justify-center rounded-r-lg border-none bg-[#233648] pr-4">
+                                    <button class="flex items-center justify-center bg-transparent text-white">
+                                        <span class="material-symbols-outlined text-[#92adc9]">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    <!-- Action Panel / Suggestion -->
+                    <div
+                        class="flex flex-col items-start justify-between gap-4 rounded-lg border border-primary/40 bg-primary/10 p-4">
+                        <div class="flex flex-col gap-1">
+                            <p class="text-white text-sm font-bold leading-tight">Did you mean...?</p>
+                            <p class="text-[#92adc9] text-sm font-normal leading-normal">Tòa A (Cơ sở 1 - Đào tạo chính)
+                            </p>
+                        </div>
+                        <a class="text-sm font-bold leading-normal tracking-[0.015em] flex items-center gap-2 text-primary hover:underline"
+                            href="#">
+                            Select this location
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                        </a>
+                    </div>
+                    <hr class="border-[#233648] my-2" />
+                    <!-- Directions List -->
+                    <div class="flex flex-col">
+                        <div class="flex items-center justify-between px-2 pb-4">
+                            <h3 class="text-white text-lg font-bold leading-tight">Directions</h3>
+                            <span class="text-xs text-[#92adc9]">Est. 3 mins • 120m</span>
+                        </div>
+                        <div class="space-y-1">
+                            <!-- Step 1 -->
+                            <div class="flex gap-4 p-3 rounded-lg bg-primary/20 border-l-4 border-primary">
+                                <div class="flex flex-col items-center">
+                                    <div class="bg-primary/30 p-2 rounded-full">
+                                        <span class="material-symbols-outlined text-primary">straight</span>
+                                    </div>
+                                    <div class="w-0.5 h-full bg-primary/30 my-1"></div>
+                                </div>
+                                <div class="flex flex-col justify-center">
+                                    <p class="text-white text-sm font-medium">Go straight 50m</p>
+                                    <p class="text-[#92adc9] text-xs">Towards Main Square</p>
+                                </div>
+                            </div>
+                            <!-- Step 2 -->
+                            <div class="flex gap-4 p-3 rounded-lg hover:bg-[#233648] transition-colors">
+                                <div class="flex flex-col items-center">
+                                    <div class="bg-[#233648] p-2 rounded-full">
+                                        <span class="material-symbols-outlined text-[#92adc9]">turn_right</span>
+                                    </div>
+                                    <div class="w-0.5 h-full bg-[#233648] my-1"></div>
+                                </div>
+                                <div class="flex flex-col justify-center">
+                                    <p class="text-white text-sm font-medium">Turn right at Node C</p>
+                                    <p class="text-[#92adc9] text-xs">Entrance of Building A</p>
+                                </div>
+                            </div>
+                            <!-- Step 3 -->
+                            <div class="flex gap-4 p-3 rounded-lg hover:bg-[#233648] transition-colors">
+                                <div class="flex flex-col items-center">
+                                    <div class="bg-[#233648] p-2 rounded-full">
+                                        <span class="material-symbols-outlined text-[#92adc9]">stairs</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col justify-center">
+                                    <p class="text-white text-sm font-medium">Go up to Floor 2 via Staircase 1</p>
+                                    <p class="text-[#92adc9] text-xs">Room 202 is on the left</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Footer of Sidebar -->
+                <div class="mt-auto p-4 bg-[#0a1118]">
+                    <div class="flex items-center justify-around text-[#92adc9]">
+                        <button class="flex flex-col items-center gap-1 hover:text-white">
+                            <span class="material-symbols-outlined">directions_walk</span>
+                            <span class="text-[10px]">Walk</span>
+                        </button>
+                        <button class="flex flex-col items-center gap-1 hover:text-white">
+                            <span class="material-symbols-outlined">accessible</span>
+                            <span class="text-[10px]">Accessible</span>
+                        </button>
+                        <button class="flex flex-col items-center gap-1 hover:text-white">
+                            <span class="material-symbols-outlined">share</span>
+                            <span class="text-[10px]">Share</span>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+            <!-- Main Map Area -->
+            <main class="flex-1 relative map-gradient">
+                <!-- Placeholder for Map Visualization -->
+                <div class="absolute inset-0 flex items-center justify-center overflow-hidden">
+                    <!-- Representing a 3D campus view with a stylized path -->
+                    <div class="relative w-full h-full opacity-60 pointer-events-none" data-location="University Campus"
+                        style="">
+                        <div
+                            class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1541339907198-e08759dfc3f3?auto=format&amp;fit=crop&amp;w=1600&amp;q=80')] bg-cover bg-center mix-blend-overlay">
+                        </div>
+                    </div>
+                    <!-- SVG Overlay for Route -->
+                    <svg class="absolute inset-0 w-full h-full pointer-events-none" viewbox="0 0 800 600">
+                        <path class="drop-shadow-[0_0_10px_rgba(19,127,236,0.8)]"
+                            d="M 200,500 L 400,450 L 500,300 L 550,250" fill="none" stroke="#137fec"
+                            stroke-linecap="round" stroke-linejoin="round" stroke-width="6"></path>
+                        <!-- Start Pin -->
+                        <circle cx="200" cy="500" fill="#137fec" r="8"></circle>
+                        <text fill="white" font-size="14" font-weight="bold" x="180" y="480">START: Tòa A</text>
+                        <!-- End Pin -->
+                        <circle cx="550" cy="250" fill="#ff4d4d" r="8"></circle>
+                        <text fill="white" font-size="14" font-weight="bold" x="565" y="245">END: P. 202</text>
+                    </svg>
+                    <!-- Exploded View / Floor Detail Overlay -->
+                    <div class="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col gap-4">
+                        <div
+                            class="bg-[#111a22]/80 backdrop-blur-md border border-[#233648] p-4 rounded-xl shadow-2xl w-48">
+                            <p class="text-xs font-bold text-primary uppercase mb-3">Building A - Floor View</p>
+                            <div class="space-y-2">
+                                <div
+                                    class="h-10 w-full bg-[#233648] rounded flex items-center px-3 justify-between border border-transparent hover:border-primary cursor-pointer">
+                                    <span class="text-xs">Floor 3</span>
+                                    <span class="material-symbols-outlined text-sm">lock</span>
+                                </div>
+                                <div
+                                    class="h-10 w-full bg-primary rounded flex items-center px-3 justify-between border border-primary shadow-[0_0_15px_rgba(19,127,236,0.3)]">
+                                    <span class="text-xs font-bold">Floor 2</span>
+                                    <span class="material-symbols-outlined text-sm">check_circle</span>
+                                </div>
+                                <div
+                                    class="h-10 w-full bg-[#233648] rounded flex items-center px-3 justify-between border border-transparent">
+                                    <span class="text-xs">Floor 1</span>
+                                    <span class="material-symbols-outlined text-sm">history</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Map Controls -->
+                <div class="absolute bottom-6 right-6 flex flex-col gap-2">
+                    <button class="bg-[#111a22] p-3 rounded-lg border border-[#233648] text-white hover:bg-[#233648]">
+                        <span class="material-symbols-outlined">add</span>
+                    </button>
+                    <button class="bg-[#111a22] p-3 rounded-lg border border-[#233648] text-white hover:bg-[#233648]">
+                        <span class="material-symbols-outlined">remove</span>
+                    </button>
+                    <button
+                        class="bg-[#111a22] p-3 rounded-lg border border-[#233648] text-white hover:bg-[#233648] mt-4">
+                        <span class="material-symbols-outlined">layers</span>
+                    </button>
+                    <button class="bg-primary p-3 rounded-lg text-white shadow-xl">
+                        <span class="material-symbols-outlined">navigation</span>
+                    </button>
+                </div>
+                <!-- Floor Legend -->
+                <div
+                    class="absolute top-6 left-6 flex items-center gap-3 bg-[#111a22]/60 backdrop-blur px-4 py-2 rounded-full border border-[#233648]">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 bg-primary rounded-full"></div>
+                        <span class="text-xs">Indoor Route</span>
+                    </div>
+                    <div class="w-px h-4 bg-[#233648]"></div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 bg-gray-400 rounded-full"></div>
+                        <span class="text-xs">Outdoor Walk</span>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+
+</html>

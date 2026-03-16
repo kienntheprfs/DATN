@@ -14,6 +14,7 @@ from agents.langgraph_supervisor_hierarchy_agent import langgraph_supervisor_hie
 from agents.lazy_agent import LazyLoadingAgent
 from agents.rag_assistant import rag_assistant
 from agents.research_assistant import research_assistant
+from agents.agent_map import map_assistant
 from schema import AgentInfo
 
 DEFAULT_AGENT = "research-assistant"
@@ -36,6 +37,10 @@ agents: dict[str, Agent] = {
     "research-assistant": Agent(
         description="A research assistant with web search and calculator.",
         graph_like=research_assistant,
+    ),
+    "map-assistant": Agent(
+        description="A map navigation assistant with route finding and location search capabilities.",
+        graph_like=map_assistant,
     ),
     "rag-assistant": Agent(
         description="A RAG assistant with access to information in a database.",

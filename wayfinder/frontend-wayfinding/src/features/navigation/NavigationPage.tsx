@@ -1,0 +1,928 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { wayfindingApi } from '@/features/wayfinding/api/wayfindingApi';
+import { mapApi } from './api/mapApi';
+import { buildingApi } from '@/features/editor/api/buildingApi';
+import { RouteResponse, MapData, MapNode, MapEdge, Building } from '@/shared/types';
+import { LocationDropdown } from './components/LocationDropdown';
+import { getFullImageUrl } from '@/shared/api/client';
+
+const ACTION_ICONS: Record<string, string> = {
+  start: 'trip_origin',
+  straight: 'straight',
+  slight_left: 'turn_slight_left',
+  slight_right: 'turn_slight_right',
+  turn_left: 'turn_left',
+  turn_right: 'turn_right',
+  use_elevator: 'elevator',
+  use_stairs: 'stairs',
+  enter_elevator: 'elevator',
+  enter_stairs: 'stairs',
+  arrive: 'flag',
+};
+
+const NODE_COLORS: Record<string, string> = {
+  path: '#6b7280',
+  room: '#8b5cf6',
+  entrance: '#22c55e',
+  stairs: '#f59e0b',
+  elevator: '#3b82f6',
+};
+
+const MAP_WIDTH = 800;
+const MAP_HEIGHT = 600;
+
+interface FloorMap {
+  map: MapData;
+  nodes: MapNode[];
+  edges: MapEdge[];
+  isCampus?: boolean;
+}
+
+interface FloorSegment {
+  floorIndex: number;
+  pathCoords: number[][];
+  instructions: any[];
+  floorChangeNode?: { x: number; y: number; type: string };
+}
+
+export default function NavigationPage() {
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
+  const [floorMaps, setFloorMaps] = useState<FloorMap[]>([]);
+  const [currentFloorIndex, setCurrentFloorIndex] = useState(0);
+  const [currentMap, setCurrentMap] = useState<MapData | null>(null);
+  const [nodes, setNodes] = useState<MapNode[]>([]);
+  const [edges, setEdges] = useState<MapEdge[]>([]);
+  const [allNodes, setAllNodes] = useState<MapNode[]>([]);
+  const [allEdges, setAllEdges] = useState<MapEdge[]>([]);
+  const [startLocation, setStartLocation] = useState('');
+  const [startNodeId, setStartNodeId] = useState<number | undefined>();
+  const [endLocation, setEndLocation] = useState('');
+  const [endNodeId, setEndNodeId] = useState<number | undefined>();
+  const [route, setRoute] = useState<RouteResponse | null>(null);
+  const [floorSegments, setFloorSegments] = useState<FloorSegment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [floorChangeNotice, setFloorChangeNotice] = useState<{ show: boolean; text: string }>({ show: false, text: '' });
+  const [highlightedCoord, setHighlightedCoord] = useState<{ x: number; y: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const lastMousePos = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const loadBuildings = async () => {
+      try {
+        const data = await buildingApi.getAll();
+        setBuildings(data);
+        if (data.length > 0) {
+          setSelectedBuildingId(data[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load buildings:', err);
+      }
+    };
+    loadBuildings();
+  }, []);
+
+  useEffect(() => {
+    const loadMaps = async () => {
+      if (!selectedBuildingId) return;
+      try {
+        setMapLoading(true);
+
+        const campusData = await mapApi.getMapWithData(1);
+        const campusFloor: FloorMap = {
+          map: campusData.map,
+          nodes: campusData.nodes,
+          edges: campusData.edges,
+          isCampus: true,
+        };
+
+        const maps = await mapApi.getMapsByBuilding(selectedBuildingId);
+        
+        const floorData: FloorMap[] = await Promise.all(
+          maps.map(async (m) => {
+            const data = await mapApi.getMapWithData(m.id);
+            return {
+              map: data.map,
+              nodes: data.nodes,
+              edges: data.edges,
+            };
+          })
+        );
+
+        floorData.sort((a, b) => (a.map.floor_level || 0) - (b.map.floor_level || 0));
+
+        const allFloors = [campusFloor, ...floorData];
+        setFloorMaps(allFloors);
+        
+        setCurrentFloorIndex(0);
+        setCurrentMap(allFloors[0].map);
+        setNodes(allFloors[0].nodes);
+        setEdges(allFloors[0].edges);
+
+        const allNodesCombined = allFloors.flatMap(f => f.nodes);
+        const allEdgesCombined = allFloors.flatMap(f => f.edges);
+        setAllNodes(allNodesCombined);
+        setAllEdges(allEdgesCombined);
+      } catch (err) {
+        console.error('Failed to load maps:', err);
+      } finally {
+        setMapLoading(false);
+      }
+    };
+    loadMaps();
+  }, [selectedBuildingId]);
+
+  useEffect(() => {
+    if (floorMaps.length > 0 && currentFloorIndex < floorMaps.length) {
+      setCurrentMap(floorMaps[currentFloorIndex].map);
+      setNodes(floorMaps[currentFloorIndex].nodes);
+      setEdges(floorMaps[currentFloorIndex].edges);
+    }
+  }, [currentFloorIndex, floorMaps]);
+
+  useEffect(() => {
+    if (currentMap && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      setPosition({
+        x: (rect.width - MAP_WIDTH) / 2,
+        y: (rect.height - MAP_HEIGHT) / 2,
+      });
+    }
+  }, [currentMap]);
+
+  const handleFindRoute = async () => {
+    if (!startNodeId || !endNodeId) {
+      setError('Please select both start and destination');
+      return;
+    }
+
+    const mapId = 1;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await wayfindingApi.findRoute({
+        map_id: mapId,
+        start_node_id: startNodeId,
+        end_node_id: endNodeId,
+      });
+      setRoute(result);
+
+      // Group path_coords by floor based on transition points (entrance/stairs/elevator)
+      const floorPathMap = new Map<number, number[][]>();
+      
+      // Determine initial floor from first coordinate
+      let currentFloorIdx = 0;
+      if (result.path_coords.length > 0) {
+        const firstCoord = result.path_coords[0];
+        const firstNode = allNodes.find(n => 
+          Math.abs(n.x - firstCoord[0]) < 2 && Math.abs(n.y - firstCoord[1]) < 2
+        );
+        if (firstNode) {
+          const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
+          if (initialFloorIdx !== -1) {
+            currentFloorIdx = initialFloorIdx;
+          }
+        }
+      }
+      let lastTransitionFloorIdx = -1;
+      
+      for (let i = 0; i < result.path_coords.length; i++) {
+        const coord = result.path_coords[i];
+        
+        // Check if this coord is at a transition node (entrance/stairs/elevator)
+        const transitionNode = allNodes.find(n => 
+          (n.type === 'entrance' || n.type === 'stairs' || n.type === 'elevator') &&
+          Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2
+        );
+        
+        if (transitionNode) {
+          // Found a transition node - switch to its floor
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === transitionNode.map_id);
+          if (newFloorIdx !== -1) {
+            currentFloorIdx = newFloorIdx;
+            lastTransitionFloorIdx = newFloorIdx;
+          }
+        }
+        
+        // If we've just transitioned, use the new floor
+        // Otherwise, stay on the current floor unless we find a new transition
+        if (lastTransitionFloorIdx !== -1 && lastTransitionFloorIdx !== currentFloorIdx) {
+          currentFloorIdx = lastTransitionFloorIdx;
+        }
+        
+        if (!floorPathMap.has(currentFloorIdx)) {
+          floorPathMap.set(currentFloorIdx, []);
+        }
+        floorPathMap.get(currentFloorIdx)!.push(coord);
+      }
+      
+      // Convert to segments
+      const segments: FloorSegment[] = [];
+      floorPathMap.forEach((pathCoords, floorIdx) => {
+        // Find floor change node for this floor
+        let floorChangeNode: { x: number; y: number; type: string } | undefined;
+        const firstCoord = pathCoords[0];
+        const transitionNode = allNodes.find(n => 
+          Math.abs(n.x - firstCoord[0]) < 1 && Math.abs(n.y - firstCoord[1]) < 1 &&
+          (n.type === 'stairs' || n.type === 'elevator')
+        );
+        if (transitionNode) {
+          floorChangeNode = { x: transitionNode.x, y: transitionNode.y, type: transitionNode.type };
+        }
+        
+        segments.push({
+          floorIndex: floorIdx,
+          pathCoords,
+          instructions: [],
+          floorChangeNode,
+        });
+      });
+      
+      // Sort segments by floor index
+      segments.sort((a, b) => a.floorIndex - b.floorIndex);
+
+      // Add instructions to appropriate segments based on floor transition logic
+      let instrFloorIdx = 0;
+      for (const instr of result.instructions) {
+        const coord = instr.coordinate;
+        
+        // Check if this instruction is at a transition node
+        const transitionNode = allNodes.find(n => 
+          (n.type === 'entrance' || n.type === 'stairs' || n.type === 'elevator') &&
+          Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2
+        );
+        
+        if (transitionNode) {
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === transitionNode.map_id);
+          if (newFloorIdx !== -1) {
+            instrFloorIdx = newFloorIdx;
+          }
+        }
+
+        const seg = segments.find(s => s.floorIndex === instrFloorIdx);
+        if (seg) {
+          seg.instructions.push(instr);
+        }
+      }
+
+      setFloorSegments(segments);
+
+      if (segments.length > 0) {
+        setCurrentFloorIndex(segments[0].floorIndex);
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || 'Could not find route. Please try different locations.';
+      setError(errorMsg);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInstructionClick = (coord: number[]) => {
+    const node = allNodes.find(n => 
+      Math.abs(n.x - coord[0]) < 1 && Math.abs(n.y - coord[1]) < 1
+    );
+    
+    if (node) {
+      const floorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+      if (floorIdx !== -1 && floorIdx !== currentFloorIndex) {
+        setCurrentFloorIndex(floorIdx);
+      }
+      
+      setHighlightedCoord({ x: node.x, y: node.y });
+      
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        const mapCenterX = MAP_WIDTH / 2;
+        const mapCenterY = MAP_HEIGHT / 2;
+        setPosition({
+          x: rect.width / 2 - node.x * scale,
+          y: rect.height / 2 - node.y * scale,
+        });
+      }
+    } else {
+      setHighlightedCoord({ x: coord[0], y: coord[1] });
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setPosition({
+          x: rect.width / 2 - coord[0] * scale,
+          y: rect.height / 2 - coord[1] * scale,
+        });
+      }
+    }
+  };
+
+  const handleFloorSwitch = (floorIndex: number) => {
+    setHighlightedCoord(null);
+    const currentFloor = floorMaps[currentFloorIndex];
+    const targetFloor = floorMaps[floorIndex];
+    const targetFloorLevel = targetFloor?.map.floor_level;
+    const currentFloorLevel = currentFloor?.map.floor_level;
+    
+    let noticeText = '';
+    if (targetFloor?.isCampus) {
+      noticeText = 'Chuyển qua Campus';
+    } else if (targetFloorLevel !== undefined && currentFloorLevel !== undefined) {
+      if (targetFloorLevel > currentFloorLevel) {
+        noticeText = `Chuyển lên tầng ${targetFloorLevel}`;
+      } else if (targetFloorLevel < currentFloorLevel) {
+        noticeText = `Chuyển xuống tầng ${Math.abs(targetFloorLevel)}`;
+      }
+    }
+    
+    if (noticeText) {
+      setFloorChangeNotice({ show: true, text: noticeText });
+      setTimeout(() => setFloorChangeNotice({ show: false, text: '' }), 2000);
+    }
+    
+    setCurrentFloorIndex(floorIndex);
+  };
+
+  const handleSwap = () => {
+    const tempLocation = startLocation;
+    const tempNodeId = startNodeId;
+    setStartLocation(endLocation);
+    setStartNodeId(endNodeId);
+    setEndLocation(tempLocation);
+    setEndNodeId(tempNodeId);
+  };
+
+  // Map pan/zoom handlers
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setScale((s) => Math.min(Math.max(s * delta, 0.5), 3));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastMousePos.current.x;
+    const dy = e.clientY - lastMousePos.current.y;
+    setPosition((p) => ({ x: p.x + dx, y: p.y + dy }));
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Get path d string for edge (matching editor style)
+  const getEdgePath = (edge: MapEdge) => {
+    const startNode = nodes.find((n) => n.id === edge.start_node_id);
+    const endNode = nodes.find((n) => n.id === edge.end_node_id);
+    if (!startNode || !endNode) return '';
+
+    let d = `M ${startNode.x} ${startNode.y}`;
+    
+    if (edge.polyline && edge.polyline.length > 0) {
+      edge.polyline.forEach((p) => {
+        if (Array.isArray(p) && p.length >= 2) {
+          d += ` L ${p[0]} ${p[1]}`;
+        }
+      });
+    }
+    
+    d += ` L ${endNode.x} ${endNode.y}`;
+    return d;
+  };
+
+  const getFloorName = (index: number) => {
+    const map = floorMaps[index]?.map;
+    if (!map) return '';
+    return map.floor_level !== null && map.floor_level !== undefined 
+      ? (map.floor_level >= 0 ? `Tầng ${map.floor_level}` : `B${Math.abs(map.floor_level)}`)
+      : map.name;
+  };
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+      {/* Top Navigation Bar */}
+      <header className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 bg-white px-6 py-3 z-20 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="size-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="material-symbols-outlined text-white">map</span>
+          </div>
+          <h2 className="text-gray-900 text-lg font-bold leading-tight">
+            {currentMap?.name || 'Campus Pathfinding'}
+          </h2>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <aside className="w-105 border-r border-gray-200 flex flex-col bg-white overflow-y-visible z-10 shadow-lg relative">
+          <div className="p-4 space-y-4">
+            {/* Search */}
+            <div className="flex flex-col gap-2">
+              <LocationDropdown
+                value={startLocation}
+                onChange={(val, nodeId) => {
+                  setStartLocation(val);
+                  setStartNodeId(nodeId);
+                }}
+                placeholder="Start location..."
+                icon="origin"
+              />
+              
+              <div className="flex justify-center -my-2 relative z-10">
+                <button 
+                  onClick={handleSwap}
+                  className="bg-blue-600 p-1 rounded-full text-white shadow-lg hover:bg-blue-700 transition-colors"
+                >
+                  <span className="material-symbols-outlined">swap_vert</span>
+                </button>
+              </div>
+              
+              <LocationDropdown
+                value={endLocation}
+                onChange={(val, nodeId) => {
+                  setEndLocation(val);
+                  setEndNodeId(nodeId);
+                }}
+                placeholder="Destination..."
+                icon="destination"
+              />
+            </div>
+
+            {/* Find Route Button */}
+            <button
+              onClick={handleFindRoute}
+              disabled={loading || !startNodeId || !endNodeId}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <span className="material-symbols-outlined animate-spin">sync</span>
+                  Finding route...
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined">navigation</span>
+                  Find Route
+                </>
+              )}
+            </button>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <hr className="border-gray-200 my-2" />
+
+            {/* Directions */}
+            {route && (
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between px-2 pb-4">
+                  <h3 className="text-gray-900 text-lg font-bold leading-tight">Hướng dẫn</h3>
+                  <span className="text-xs text-gray-500">~{Math.ceil(route.total_distance_m / 80)} phút • {Math.round(route.total_distance_m)}m</span>
+                </div>
+
+                {/* Floor Change Notice */}
+                {floorSegments.length > 1 && (
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-800">
+                      <span className="material-symbols-outlined text-amber-600">layers</span>
+                      <span className="text-sm font-medium">
+                        Đường đi qua {floorSegments.length} tầng • Click mũi tên ⬅️ ➡️ để xem từng tầng
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1 overflow-y-auto max-h-96 pr-2 custom-scrollbar">
+                  {route.instructions.map((instruction, idx) => {
+                    const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
+                    
+                    return (
+                    <div 
+                      key={idx}
+                      onClick={() => handleInstructionClick(instruction.coordinate)}
+                      className={`flex gap-4 p-3 rounded-lg cursor-pointer ${
+                        instruction.action === 'start' || instruction.action === 'arrive'
+                          ? 'bg-blue-50 border-l-4 border-blue-600'
+                          : isFloorChange
+                            ? 'bg-amber-50 border-l-4 border-amber-500'
+                            : 'hover:bg-gray-50 border-l-4 border-transparent'
+                      } transition-colors`}
+                    >
+                      <div className="flex flex-col items-center">
+                        <div className={`p-2 rounded-full ${
+                          instruction.action === 'start' || instruction.action === 'arrive'
+                            ? 'bg-blue-100'
+                            : isFloorChange
+                              ? 'bg-amber-100'
+                              : 'bg-gray-100'
+                        }`}>
+                          <span className={`material-symbols-outlined ${
+                            instruction.action === 'start' || instruction.action === 'arrive'
+                              ? 'text-blue-600'
+                              : isFloorChange
+                                ? 'text-amber-600'
+                                : 'text-gray-500'
+                          }`}>
+                            {ACTION_ICONS[instruction.action] || 'straight'}
+                          </span>
+                        </div>
+                        {idx < route.instructions.length - 1 && (
+                          <div className="w-0.5 h-full bg-gray-200 my-1"></div>
+                        )}
+                      </div>
+                      <div className="flex flex-col justify-center flex-1">
+                        <p className={`text-sm font-medium ${
+                          isFloorChange ? 'text-amber-800' : 'text-gray-900'
+                        }`}>{instruction.text}</p>
+                        {instruction.distance_m > 0 && (
+                          <p className="text-gray-500 text-xs">{instruction.distance_m}m</p>
+                        )}
+                      </div>
+                      <div className="flex items-center">
+                        <span className="material-symbols-outlined text-gray-400 text-sm">near_me</span>
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              </div>
+            )}
+
+            {!route && !loading && !error && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <span className="material-symbols-outlined text-gray-300 text-6xl mb-4">directions</span>
+                <p className="text-gray-500 text-sm">Enter start and destination to find a route</p>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Main Map Area */}
+        <main className="flex-1 relative bg-gray-200">
+          {/* Floor Tabs */}
+          {floorMaps.length > 0 && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex gap-1 bg-white rounded-lg shadow-lg p-1">
+              {floorMaps.map((fm, idx) => {
+                const isActive = idx === currentFloorIndex;
+                const floorLabel = fm.isCampus 
+                  ? 'Campus' 
+                  : fm.map.floor_level !== undefined
+                    ? (fm.map.floor_level >= 0 ? `Tầng ${fm.map.floor_level}` : `B${Math.abs(fm.map.floor_level)}`)
+                    : fm.map.name;
+                return (
+                  <button
+                    key={fm.map.id}
+                    onClick={() => {
+                      setHighlightedCoord(null);
+                      setCurrentFloorIndex(idx);
+                    }}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {floorLabel}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {mapLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <span className="material-symbols-outlined text-4xl animate-spin text-gray-400">sync</span>
+            </div>
+          ) : floorMaps.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-gray-500">
+                <span className="material-symbols-outlined text-6xl mb-4">domain</span>
+                <p>No buildings found. Please create a building first.</p>
+              </div>
+            </div>
+          ) : (
+            <svg
+              ref={svgRef}
+              className={`w-full h-full ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+              viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <g
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transformOrigin: '0 0',
+                }}
+              >
+                {/* Background Map Image */}
+                {currentMap && (
+                  <image
+                    href={getFullImageUrl(currentMap.image_url)}
+                    x="0"
+                    y="0"
+                    width={MAP_WIDTH}
+                    height={MAP_HEIGHT}
+                    preserveAspectRatio="xMidYMid meet"
+                    className="opacity-90"
+                  />
+                )}
+
+                {/* Edges - matching editor style */}
+                {edges.map((edge) => {
+                  const pathData = getEdgePath(edge);
+                  if (!pathData) return null;
+                  return (
+                    <g key={edge.id}>
+                      {/* White halo */}
+                      <path
+                        d={pathData}
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-90"
+                      />
+                      {/* Main edge - dashed */}
+                      <path
+                        d={pathData}
+                        fill="none"
+                        stroke="#1C4D8D"
+                        strokeWidth="3"
+                        strokeDasharray="6 4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                  );
+                })}
+
+                {/* 1. Chỉ vẽ Route Path của tầng/map hiện tại */}
+                {route && floorSegments.filter(seg => seg.floorIndex === currentFloorIndex).map((segment, idx) => {
+                  const pathData = `M ${segment.pathCoords.map(c => `${c[0]} ${c[1]}`).join(' L ')}`;
+                  return (
+                    <path
+                      key={`route-seg-${idx}`}
+                      d={pathData}
+                      fill="none"
+                      stroke="#2563eb"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="drop-shadow-lg"
+                    />
+                  );
+                })}
+
+                {/* Nodes (Giữ nguyên của bạn) */}
+                {nodes.map((node) => (
+                  <g key={node.id}>
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={node.type === 'room' ? 12 : 8}
+                      fill={NODE_COLORS[node.type] || NODE_COLORS.path}
+                      stroke="white"
+                      strokeWidth={2}
+                    />
+                    {node.name && (
+                      <text
+                        x={node.x}
+                        y={node.y - 15}
+                        textAnchor="middle"
+                        fill="#1f2937"
+                        fontSize="10"
+                        fontWeight="500"
+                      >
+                        {node.name}
+                      </text>
+                    )}
+                  </g>
+                ))}
+
+                {/* 2. Start/End Markers - Hiển thị tại vị trí thực của điểm đầu và cuối */}
+                {route && (
+                  <>
+                    {/* START - Lấy từ tọa độ đầu tiên của toàn bộ route */}
+                    {(() => {
+                      const startCoord = route.path_coords[0];
+                      const startNode = allNodes.find(n => 
+                        Math.abs(n.x - startCoord[0]) < 2 && Math.abs(n.y - startCoord[1]) < 2
+                      );
+                      const startFloorIdx = startNode 
+                        ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
+                        : -1;
+                      
+                      if (startFloorIdx === currentFloorIndex || startFloorIdx === -1) {
+                        return (
+                          <g>
+                            <circle cx={startCoord[0]} cy={startCoord[1]} r="14" fill="#2563eb" />
+                            <circle cx={startCoord[0]} cy={startCoord[1]} r="8" fill="white" />
+                            <text x={startCoord[0] + 20} y={startCoord[1] + 5} fill="#1e40af" fontSize="12" fontWeight="bold">
+                              BẮT ĐẦU
+                            </text>
+                          </g>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* END - Lấy từ tọa độ cuối cùng của toàn bộ route */}
+                    {(() => {
+                      const endCoord = route.path_coords[route.path_coords.length - 1];
+                      const endNode = allNodes.find(n => 
+                        Math.abs(n.x - endCoord[0]) < 2 && Math.abs(n.y - endCoord[1]) < 2
+                      );
+                      const endFloorIdx = endNode 
+                        ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
+                        : -1;
+                      
+                      if (endFloorIdx === currentFloorIndex || endFloorIdx === -1) {
+                        return (
+                          <g>
+                            <circle cx={endCoord[0]} cy={endCoord[1]} r="14" fill="#dc2626" />
+                            <circle cx={endCoord[0]} cy={endCoord[1]} r="8" fill="white" />
+                            <text x={endCoord[0] + 20} y={endCoord[1] + 5} fill="#991b1b" fontSize="12" fontWeight="bold">
+                              ĐÍCH ĐẾN
+                            </text>
+                          </g>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </>
+                )}
+
+                {/* Highlighted instruction marker */}
+                {highlightedCoord && (
+                  <g>
+                    <circle 
+                      cx={highlightedCoord.x} 
+                      cy={highlightedCoord.y} 
+                      r="20" 
+                      fill="#10b981" 
+                      fillOpacity="0.3"
+                    />
+                    <circle 
+                      cx={highlightedCoord.x} 
+                      cy={highlightedCoord.y} 
+                      r="12" 
+                      fill="#10b981" 
+                      stroke="white" 
+                      strokeWidth="3"
+                    />
+                    <circle 
+                      cx={highlightedCoord.x} 
+                      cy={highlightedCoord.y} 
+                      r="5" 
+                      fill="white" 
+                    />
+                  </g>
+                )}
+
+                {/* 3. TRANSITION BUTTONS - Positioned at stairs/elevator nodes */}
+                {route && floorSegments.length > 1 && (() => {
+                  const currentSeg = floorSegments.find(s => s.floorIndex === currentFloorIndex);
+                  const currentFloor = floorMaps[currentFloorIndex];
+                  const currentFloorNodes = currentFloor?.nodes || [];
+                  
+                  const transitionNodes = currentFloorNodes.filter(n => 
+                    (n.type === 'stairs' || n.type === 'elevator') &&
+                    currentSeg?.pathCoords.some(coord => 
+                      Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2
+                    )
+                  );
+                  
+                  return transitionNodes.map((node, idx) => {
+                    const firstCoord = currentSeg?.pathCoords[0];
+                    const lastCoord = currentSeg?.pathCoords[currentSeg.pathCoords.length - 1];
+                    const isEntryPoint = firstCoord && Math.abs(node.x - firstCoord[0]) < 2 && Math.abs(node.y - firstCoord[1]) < 2;
+                    const isExitPoint = lastCoord && Math.abs(node.x - lastCoord[0]) < 2 && Math.abs(node.y - lastCoord[1]) < 2;
+                    
+                    let nextFloorIdx = -1;
+                    let prevFloorIdx = -1;
+                    
+                    const currentSegIdx = floorSegments.findIndex(s => s.floorIndex === currentFloorIndex);
+                    if (currentSegIdx < floorSegments.length - 1) {
+                      nextFloorIdx = floorSegments[currentSegIdx + 1].floorIndex;
+                    }
+                    if (currentSegIdx > 0) {
+                      prevFloorIdx = floorSegments[currentSegIdx - 1].floorIndex;
+                    }
+                    
+                    const nodeX = node.x;
+                    const nodeY = node.y;
+                    const isStairs = node.type === 'stairs';
+                    
+                    return (
+                      <g key={`trans-${currentFloorIndex}-${idx}`}>
+                        {isEntryPoint && prevFloorIdx !== -1 && (
+                          <g 
+                            onClick={(e) => { e.stopPropagation(); handleFloorSwitch(prevFloorIdx); }}
+                            className="cursor-pointer"
+                          >
+                            <circle cx={nodeX - 50} cy={nodeY} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
+                            <path d={`M${nodeX - 40},${nodeY - 6} L${nodeX - 58},${nodeY} L${nodeX - 40},${nodeY + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                            <text x={nodeX - 50} y={nodeY + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
+                              {floorMaps[prevFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[prevFloorIdx]?.map.floor_level}`}
+                            </text>
+                          </g>
+                        )}
+                        
+                        {isExitPoint && nextFloorIdx !== -1 && (
+                          <g 
+                            onClick={(e) => { e.stopPropagation(); handleFloorSwitch(nextFloorIdx); }}
+                            className="cursor-pointer"
+                          >
+                            <circle cx={nodeX + 50} cy={nodeY} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
+                            <path d={`M${nodeX + 40},${nodeY - 6} L${nodeX + 58},${nodeY} L${nodeX + 40},${nodeY + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                            <text x={nodeX + 50} y={nodeY + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
+                              {floorMaps[nextFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[nextFloorIdx]?.map.floor_level}`}
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    );
+                  });
+                })()}
+              </g>
+            </svg>
+          )}
+
+          {/* Floor Change Notice Overlay */}
+          {floorChangeNotice.show && (
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
+              <div className="bg-blue-600 text-white px-8 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
+                <span className="material-symbols-outlined text-2xl">floor</span>
+                <span className="text-lg font-semibold">{floorChangeNotice.text}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Map Controls */}
+          <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+            <button 
+              onClick={() => setScale((s) => Math.min(s * 1.2, 3))}
+              className="bg-white p-3 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-md"
+            >
+              <span className="material-symbols-outlined">add</span>
+            </button>
+            <button 
+              onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
+              className="bg-white p-3 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-md"
+            >
+              <span className="material-symbols-outlined">remove</span>
+            </button>
+            <button 
+              onClick={() => {
+                setScale(1);
+                if (svgRef.current) {
+                  const rect = svgRef.current.getBoundingClientRect();
+                  setPosition({ x: (rect.width - MAP_WIDTH) / 2, y: (rect.height - MAP_HEIGHT) / 2 });
+                }
+              }}
+              className="bg-white p-3 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-md mt-4"
+            >
+              <span className="material-symbols-outlined">fit_screen</span>
+            </button>
+          </div>
+
+          {/* Legend */}
+          <div className="absolute top-6 left-6 flex items-center gap-3 bg-white/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-200 shadow-md">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+              <span className="text-xs text-gray-600">Route</span>
+            </div>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+              <span className="text-xs text-gray-600">Path</span>
+            </div>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+              <span className="text-xs text-gray-600">Stairs</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

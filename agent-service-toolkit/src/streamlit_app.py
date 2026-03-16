@@ -12,6 +12,7 @@ from client import AgentClient, AgentClientError
 from schema import ChatHistory, ChatMessage
 from schema.task_data import TaskData, TaskDataStatus
 from voice import VoiceManager
+from streamlit_map_component import render_map_interface
 
 # A Streamlit app for interacting with the langgraph agent via a simple chat interface.
 # The app has three main functions which are all run async:
@@ -196,6 +197,9 @@ async def main() -> None:
         if st.button(":material/upload: Share/resume chat", use_container_width=True):
             share_chat_dialog()
 
+        # Add map interface
+        render_map_interface()
+
         "[View the source code](https://github.com/JoshuaC215/agent-service-toolkit)"
         st.caption(
             "Made with :material/favorite: by [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) in Oakland"
@@ -212,6 +216,8 @@ async def main() -> None:
                 WELCOME = "Hello! I'm an interrupt agent. Tell me your birthday and I will predict your personality!"
             case "research-assistant":
                 WELCOME = "Hello! I'm an AI-powered research assistant with web search and a calculator. Ask me anything!"
+            case "map-assistant":
+                WELCOME = "Xin chào! Tôi là trợ lý bản đồ AI có thể giúp bạn tìm đường và định vị. Hỏi tôi bất cứ điều gì về bản đồ!"
             case "rag-assistant":
                 WELCOME = """Hello! I'm an AI-powered Company Policy & HR assistant with access to AcmeTech's Employee Handbook.
                 I can help you find information about benefits, remote work, time-off policies, company values, and more. Ask me anything!"""
