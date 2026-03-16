@@ -17,7 +17,7 @@ from agents.research_assistant import research_assistant
 from agents.agent_map import map_assistant
 from schema import AgentInfo
 
-DEFAULT_AGENT = "research-assistant"
+DEFAULT_AGENT = "knowledge-base-agent"
 
 # Type alias to handle LangGraph's different agent patterns
 # - @entrypoint functions return Pregel

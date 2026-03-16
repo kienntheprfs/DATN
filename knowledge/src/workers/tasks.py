@@ -11,6 +11,7 @@ from src.models.models import Chunk, ProcessingStatus, DocumentVersion
 from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 from src.repositories.document_repository import DocumentRepository
+from src.services.file_storage import get_storage # CHECK: Co nen import o day khong (hay o main/...), worker dung chung co sao khong
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ async def background_index_document(version_id: int):
     # =========================
     async with AsyncSessionLocal() as session:
         repo = DocumentRepository(session)
+        storage = get_storage()
         version = await repo.get_version_with_details(version_id)
         if not version:
             logger.error(f"Version {version_id} not found")
@@ -134,12 +136,14 @@ async def background_index_document(version_id: int):
         # ---- Extract & Chunk ----
         logger.info(f"[Version {version_id}] Extracting...")
 
-        # Tránh blocking
-        raw_text = await asyncio.to_thread(
-            ingestion.extract_text,
-            file_path=version.file_path,
-            doc_type=version.document_type
-        )
+        async with storage.download_stream(version.file_path) as file_stream:
+            # Tránh blocking
+            raw_text = await asyncio.to_thread(
+                ingestion.extract_text,
+                file_stream=file_stream,  # <--- Truyền stream
+                doc_type=version.document_type,
+                filename=version.file_path
+            )
 
         # Validate kết quả
         if not raw_text or len(raw_text.strip()) == 0:

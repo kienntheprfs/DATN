@@ -1,3 +1,4 @@
+# dup
 from __future__ import annotations
 
 from datetime import datetime
@@ -183,7 +184,6 @@ class DocumentVersion(Base, TimestampMixin):
     chunks: Mapped[List["Chunk"]] = relationship(back_populates="document_version", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("document_id", "version", name="uq_document_version"),
         Index("idx_doc_ver_status", "processing_status"),
     )
 
@@ -221,7 +221,7 @@ class FAQ(Base, TimestampMixin):
     __tablename__ = "faqs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    document_version_id: Mapped[int] = mapped_column(ForeignKey("document_versions.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
     
     answer: Mapped[str] = mapped_column(Text)
     

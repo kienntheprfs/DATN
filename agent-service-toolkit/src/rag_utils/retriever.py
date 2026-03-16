@@ -15,6 +15,7 @@ class RetrievedChunk(BaseModel):
     score: float       # Độ liên quan
     doc_id: int        # ID file gốc (để trích dẫn nếu cần)
     source_type: str   # 'pdf', 'docx', etc.
+    answer: Optional[str]
     metadata: Dict[str, Any]
 
 class QdrantHybridRetriever:
@@ -103,7 +104,8 @@ class QdrantHybridRetriever:
                     # Bên KM lưu: "document_id"
                     doc_id=payload.get("document_id", 0),
                     source_type=payload.get("doc_type", "unknown"), # Nếu bạn có lưu doc_type
-                    metadata=payload.get("metadata", {})
+                    answer=payload.get("answer_preview", None),
+                    metadata=payload.get("metadata", {}),
                 )
                 retrieved_data.append(item)
 

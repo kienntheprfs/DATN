@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from src.api import documents, document_storage
 from src.core.sql_db_setup import engine
+from src.core.logging import setup_logging
 from .models.models import Base
+
+setup_logging()
 
 app = FastAPI(title="Knowledge Base Service")
 
