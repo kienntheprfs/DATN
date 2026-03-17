@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID, uuid4
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -39,6 +40,10 @@ from service.utils import (
     langchain_to_chat_message,
     remove_tool_calls,
 )
+from service.chat_service import ChatService
+from repositories.chat_repo import ChatRepository
+from service.dependencies import get_chat_service
+from core.database import engine
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -97,6 +102,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Error during database/store/agents initialization: {e}")
         raise
+    finally:
+        await engine.dispose()
+        logger.info("Safely closed SQLAlchemy Engine.")
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -115,14 +123,19 @@ async def info() -> ServiceMetadata:
     )
 
 
-async def _handle_input(user_input: UserInput, agent: AgentGraph) -> tuple[dict[str, Any], UUID]:
+async def _handle_input(
+        user_input: UserInput, 
+        agent: AgentGraph, 
+        user_id: str,
+        thread_id: str
+        ) -> tuple[dict[str, Any], UUID]:
     """
     Parse user input and handle any required interrupt resumption.
     Returns kwargs for agent invocation and the run_id.
     """
     run_id = uuid4()
-    thread_id = user_input.thread_id or str(uuid4())
-    user_id = user_input.user_id or str(uuid4())
+    # thread_id = user_input.thread_id or str(uuid4())
+    # user_id = user_input.user_id or str(uuid4())
 
     configurable = {"thread_id": thread_id, "user_id": user_id}
     if user_input.model is not None:
@@ -174,7 +187,11 @@ async def _handle_input(user_input: UserInput, agent: AgentGraph) -> tuple[dict[
 
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
-async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMessage:
+async def invoke(
+    user_input: UserInput, 
+    agent_id: str = DEFAULT_AGENT,
+    chat_service: ChatService = Depends(get_chat_service),           
+    ) -> ChatMessage:
     """
     Invoke an agent with user input to retrieve a final response.
 
@@ -189,7 +206,10 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
     # you'd want to include it. You could update the API to return a list of ChatMessages
     # in that case.
     agent: AgentGraph = get_agent(agent_id)
-    kwargs, run_id = await _handle_input(user_input, agent)
+
+    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
+
+    kwargs, run_id = await _handle_input(user_input, agent, chat_service.user_id, valid_thread_id)
 
     try:
         response_events: list[tuple[str, Any]] = await agent.ainvoke(**kwargs, stream_mode=["updates", "values"])  # type: ignore # fmt: skip
@@ -214,7 +234,10 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
 
 
 async def message_generator(
-    user_input: StreamInput, agent_id: str = DEFAULT_AGENT
+    user_input: StreamInput, 
+    user_id: str,    
+    thread_id: str,
+    agent_id: str = DEFAULT_AGENT,
 ) -> AsyncGenerator[str, None]:
     """
     Generate a stream of messages from the agent.
@@ -222,7 +245,7 @@ async def message_generator(
     This is the workhorse method for the /stream endpoint.
     """
     agent: AgentGraph = get_agent(agent_id)
-    kwargs, run_id = await _handle_input(user_input, agent)
+    kwargs, run_id = await _handle_input(user_input, agent, user_id, thread_id)
 
     try:
         # Process streamed events from the graph and yield messages over the SSE stream.
@@ -354,7 +377,11 @@ def _sse_response_example() -> dict[int | str, Any]:
     operation_id="stream_with_agent_id",
 )
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
-async def stream(user_input: StreamInput, agent_id: str = DEFAULT_AGENT) -> StreamingResponse:
+async def stream(
+    user_input: StreamInput, 
+    chat_service: ChatService = Depends(get_chat_service),
+    agent_id: str = DEFAULT_AGENT
+    ) -> StreamingResponse:
     """
     Stream an agent's response to a user input, including intermediate messages and tokens.
 
@@ -365,8 +392,10 @@ async def stream(user_input: StreamInput, agent_id: str = DEFAULT_AGENT) -> Stre
 
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
+    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
+
     return StreamingResponse(
-        message_generator(user_input, agent_id),
+        message_generator(user_input, chat_service.user_id, valid_thread_id, agent_id),
         media_type="text/event-stream",
     )
 
@@ -390,19 +419,25 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
     )
     return FeedbackResponse()
 
-
+# TODO: cải thiện bảo mật, hiện giờ đưa thread_id cái là được coi
 @router.post("/history")
-async def history(input: ChatHistoryInput) -> ChatHistory:
+async def history(
+    input: ChatHistoryInput,
+    chat_service: ChatService = Depends(get_chat_service)
+) -> ChatHistory:
     """
     Get chat history.
     """
-    # TODO: Hard-coding DEFAULT_AGENT here is wonky
+    # Ép buộc phải có thread_id hợp lệ, sai ID là ăn 404 ngay
+    logger.info(f"USER_ID: {chat_service.user_id}")
+    await chat_service.get_thread_strictly(input.thread_id)
+
     agent: AgentGraph = get_agent(DEFAULT_AGENT)
     try:
         state_snapshot = await agent.aget_state(
             config=RunnableConfig(configurable={"thread_id": input.thread_id})
         )
-        messages: list[AnyMessage] = state_snapshot.values["messages"]
+        messages: list[AnyMessage] = state_snapshot.values.get("messages", [])
         chat_messages: list[ChatMessage] = [langchain_to_chat_message(m) for m in messages]
         return ChatHistory(messages=chat_messages)
     except Exception as e:

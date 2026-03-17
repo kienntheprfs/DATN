@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     REDIS_BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_BACKEND_URL: str = "redis://localhost:6379/1"
 
+    LLAMA_CLOUD_API_KEY: str | None = None
+
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
