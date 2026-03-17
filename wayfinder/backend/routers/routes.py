@@ -40,9 +40,7 @@ class RouteResponse(BaseModel):
 # --- MATH & GEO HELPERS ---
 
 
-def calculate_angle(
-    p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]
-) -> float:
+def calculate_angle(p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]) -> float:
     """
     Tính góc tạo bởi 3 điểm p1 -> p2 -> p3.
     Trả về độ (degrees). Dương là rẽ phải, Âm là rẽ trái (trong hệ tọa độ màn hình y hướng xuống).
@@ -93,37 +91,24 @@ def get_node_name(session: Session, node_id: int) -> Optional[str]:
     return node.name if node else None
 
 
-def build_graph(session: Session, map_id: int) -> Tuple[nx.Graph, Dict]:
+def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
     """Tạo đồ thị NetworkX từ DB, bao gồm cả nodes liên kết qua các tầng"""
     G = nx.Graph()
     node_pos = {}
     node_map_info = {}  # Store map_id and floor info for each node
 
-    # 1. Load all maps that are related (same building or campus)
-    # First get the base map to find related maps
-    base_map = session.get(Map, map_id)
-    if not base_map:
-        raise HTTPException(status_code=404, detail="Map not found")
+    # Load all maps
+    all_maps = session.exec(select(Map)).all()
+    related_map_ids = [m.id for m in all_maps]
 
-    # Get all maps in the same building, or all maps if this is a campus map
-    if base_map.building_id:
-        related_maps = session.exec(
-            select(Map).where(Map.building_id == base_map.building_id)
-        ).all()
-    else:
-        # Campus map - get all maps
-        related_maps = session.exec(select(Map)).all()
-
-    related_map_ids = [m.id for m in related_maps]
-
-    # 2. Load all nodes from related maps
+    # Load all nodes
     nodes = session.exec(select(Node).where(Node.map_id.in_(related_map_ids))).all()
 
     if not nodes:
         raise HTTPException(status_code=404, detail="No nodes found.")
 
     # Create map_id -> floor_level lookup
-    map_floor = {m.id: m.floor_level for m in related_maps}
+    map_floor = {m.id: m.floor_level for m in all_maps}
 
     for n in nodes:
         G.add_node(n.id)
@@ -136,11 +121,7 @@ def build_graph(session: Session, map_id: int) -> Tuple[nx.Graph, Dict]:
         node_map_info[n.id] = {"map_id": n.map_id, "floor": map_floor.get(n.map_id)}
 
     # 3. Load Edges from related maps
-    edges = session.exec(
-        select(Edge)
-        .join(Node, Edge.start_node_id == Node.id)
-        .where(Node.map_id.in_(related_map_ids))
-    ).all()
+    edges = session.exec(select(Edge).join(Node, Edge.start_node_id == Node.id).where(Node.map_id.in_(related_map_ids))).all()
 
     for e in edges:
         attr = {
@@ -156,14 +137,8 @@ def build_graph(session: Session, map_id: int) -> Tuple[nx.Graph, Dict]:
             for linked_id in n.linked_node_ids:
                 if linked_id in G.nodes:
                     # Determine connection type based on node types
-                    if n.type in ["stairs", "elevator"] or G.nodes[linked_id].get(
-                        "type"
-                    ) in ["stairs", "elevator"]:
-                        conn_type = (
-                            n.type
-                            if n.type in ["stairs", "elevator"]
-                            else G.nodes[linked_id].get("type", "stairs")
-                        )
+                    if n.type in ["stairs", "elevator"] or G.nodes[linked_id].get("type") in ["stairs", "elevator"]:
+                        conn_type = n.type if n.type in ["stairs", "elevator"] else G.nodes[linked_id].get("type", "stairs")
                     else:
                         conn_type = "stairs"  # Default for floor transitions
 
@@ -180,180 +155,187 @@ def get_distance(p1, p2):
     return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
 
 
-def generate_human_instructions(
-    G: nx.Graph, path_nodes: List[int], node_pos: Dict, scale: float
-) -> Tuple[List[Instruction], float]:
+def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Dict, scale: float) -> Tuple[List[Instruction], float]:
     instructions = []
     total_dist_px = 0.0
 
     if len(path_nodes) < 2:
         return [], 0.0
 
-    # Build full path with all intermediate points from polylines
-    full_path_points = []  # List of [x, y] coordinates
-
+    # Calculate total distance along the path
     for i in range(len(path_nodes) - 1):
         u = path_nodes[i]
         v = path_nodes[i + 1]
-
-        # Add start node (only for first segment)
-        if i == 0:
-            full_path_points.append(node_pos[u])
-
-        # Get edge data with correct direction
-        edge_data = G.get_edge_data(u, v)
         polyline = get_edge_polyline(G, u, v, node_pos)
 
-        # Add intermediate polyline points (skip first/last if same as current end)
+        # Add distance from u to first polyline point
         if polyline:
-            for idx, p in enumerate(polyline):
-                if isinstance(p, list) and len(p) >= 2:
-                    # Skip if same as last added point
-                    if full_path_points and (
-                        abs(full_path_points[-1][0] - p[0]) < 0.1
-                        and abs(full_path_points[-1][1] - p[1]) < 0.1
-                    ):
-                        continue
-                    full_path_points.append([p[0], p[1]])
+            total_dist_px += get_distance(node_pos[u], polyline[0])
+            # Add distances between polyline points
+            for j in range(len(polyline) - 1):
+                total_dist_px += get_distance(polyline[j], polyline[j + 1])
+            # Add distance from last polyline point to v
+            total_dist_px += get_distance(polyline[-1], node_pos[v])
+        else:
+            total_dist_px += get_distance(node_pos[u], node_pos[v])
 
-        # Add end node if not duplicate
-        if not full_path_points or (
-            abs(full_path_points[-1][0] - node_pos[v][0]) >= 0.1
-            or abs(full_path_points[-1][1] - node_pos[v][1]) >= 0.1
-        ):
-            full_path_points.append(node_pos[v])
-
-    # Calculate total distance
-    for i in range(len(full_path_points) - 1):
-        total_dist_px += get_distance(full_path_points[i], full_path_points[i + 1])
-
-    # Generate instructions based on full path points (detailed)
+    # Start instruction
+    start_node = path_nodes[0]
     instructions.append(
         Instruction(
             step=1,
-            text=f"Bắt đầu từ {G.nodes[path_nodes[0]]['name'] or 'điểm xuất phát'}",
+            text=f"Bắt đầu từ {G.nodes[start_node]['name'] or 'điểm xuất phát'}",
             action="start",
             distance_m=0,
-            coordinate=full_path_points[0],
+            coordinate=node_pos[start_node],
         )
     )
 
-    # Generate detailed instructions by iterating over full_path_points
-    for i in range(1, len(full_path_points) - 1):
-        p1 = full_path_points[i - 1]
-        p2 = full_path_points[i]
-        p3 = full_path_points[i + 1]
+    # Iterate over path_nodes and generate instructions at each node
+    cumulative_dist = 0.0
+    last_building_name = None  # Track building name for exit/entrance
 
-        # Find which edge this point belongs to by checking coordinates
-        edge_idx = 0
-        point_count = 0
-        for ei in range(len(path_nodes) - 1):
-            u = path_nodes[ei]
-            v = path_nodes[ei + 1]
-            polyline = get_edge_polyline(G, u, v, node_pos)
+    for i in range(1, len(path_nodes) - 1):
+        current_node = path_nodes[i]
+        prev_node = path_nodes[i - 1]
+        next_node = path_nodes[i + 1]
 
-            # Count: start node + polyline points + end node
-            count = 1 + len(polyline) + 1
-            if point_count + count > i:
-                edge_idx = ei
-                break
-            point_count += count - 1  # overlap at nodes
+        current_floor = G.nodes[current_node].get("floor")
+        next_floor = G.nodes[next_node].get("floor")
+        current_type = G.nodes[current_node].get("type")
+        current_map_id = G.nodes[current_node].get("map_id")
 
-        # Check for floor transition at the NEXT edge (when we arrive at a node that transitions to a different floor)
-        # This happens when p2 (current point) is a node that has floor transition
-        current_node = None
-        for ni, node_id in enumerate(path_nodes):
-            if (
-                abs(node_pos[node_id][0] - p2[0]) < 1
-                and abs(node_pos[node_id][1] - p2[1]) < 1
-            ):
-                current_node = node_id
-                break
+        # Calculate distance from previous node to current
+        polyline = get_edge_polyline(G, prev_node, current_node, node_pos)
+        if polyline:
+            segment_dist = get_distance(node_pos[prev_node], polyline[0])
+            for j in range(len(polyline) - 1):
+                segment_dist += get_distance(polyline[j], polyline[j + 1])
+            segment_dist += get_distance(polyline[-1], node_pos[current_node])
+        else:
+            segment_dist = get_distance(node_pos[prev_node], node_pos[current_node])
+        cumulative_dist += segment_dist
 
-        # Check if current node is an entrance and transitions to/from campus
-        is_exit = False
-        is_entrance = False
-        if current_node:
-            current_floor = G.nodes[current_node].get("floor")
-            current_type = G.nodes[current_node].get("type")
-
-            # Look for next edge from this node
-            if edge_idx < len(path_nodes) - 1:
-                next_v = path_nodes[edge_idx + 1]
-                next_floor = G.nodes[next_v].get("floor")
-                next_type = G.nodes[next_v].get("type")
-
-                # Exit: current is building floor, next is campus (None)
-                if (
-                    current_floor is not None
-                    and next_floor is None
-                    and current_type == "entrance"
-                ):
-                    is_exit = True
-                # Entrance: current is campus (None), next is building floor
-                elif (
-                    current_floor is None
-                    and next_floor is not None
-                    and next_type == "entrance"
-                ):
-                    is_entrance = True
-
-        # Check for floor change within building (not campus)
-        u = path_nodes[edge_idx]
-        v = path_nodes[edge_idx + 1]
-        current_floor = G.nodes[u].get("floor")
-        next_floor = G.nodes[v].get("floor")
-
+        # Check for floor change
         is_floor_change = current_floor and next_floor and current_floor != next_floor
 
+        # Check for exit (building -> campus)
+        is_exit = False
+        if current_type == "entrance" and current_floor is not None and next_floor is None:
+            is_exit = True
+
+        # Check for entrance (campus -> building)
+        is_entrance = False
+        prev_floor = G.nodes[prev_node].get("floor")
+        if current_type == "entrance" and prev_floor is None and next_floor is not None:
+            is_entrance = True
+
+        # Get node name, hide "New Node"
+        node_name = G.nodes[current_node].get("name")
+        if node_name and node_name.lower() == "new node":
+            node_name = None
+
+        dist_m = round(cumulative_dist * scale, 1)
+
+        # Check if just exited to campus (prev was building floor, now at campus)
+        just_exited_to_campus = prev_floor is not None and current_floor is None
+
+        # Check if just changed floor within building (prev floor != current floor)
+        just_changed_floor = prev_floor is not None and current_floor is not None and prev_floor != current_floor
+
         if is_floor_change:
-            direction = "lên" if next_floor and next_floor > current_floor else "xuống"
-            floor_text = f"Tầng {next_floor}" if next_floor else "tầng mới"
-            edge_data = G.get_edge_data(u, v)
+            direction = "lên" if next_floor > current_floor else "xuống"
+            floor_text = f"Tầng {next_floor}"
+            edge_data = G.get_edge_data(current_node, next_node)
             edge_type = edge_data.get("type", "walk") if edge_data else "walk"
 
             if edge_type == "elevator":
-                text = f"Đi thang máy {direction} {floor_text}"
+                text = f"Đi {dist_m}m. Đi thang máy {direction} {floor_text}"
                 step_action = "use_elevator"
             else:
-                text = f"Đi cầu thang {direction} {floor_text}"
+                text = f"Đi {dist_m}m. Đi cầu thang {direction} {floor_text}"
                 step_action = "use_stairs"
 
-            dist_px = get_distance(p1, p2)
-            dist_m = round(dist_px * scale, 1)
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
+                )
+            )
+            cumulative_dist = 0.0
+
+        elif just_changed_floor:
+            # After floor change, just say we're at this node
+            text = f"Tại {node_name or 'tòa'}"
+            step_action = "straight"
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
+                )
+            )
+            cumulative_dist = 0.0
+
         elif is_exit:
-            node_name = (
-                G.nodes[current_node].get("name", "cửa ra")
-                if current_node
-                else "cửa ra"
-            )
-            text = f"Ra {node_name}"
+            building_name = node_name if node_name else "Tòa"
+            text = f"Ra {building_name}"
             step_action = "exit"
-            dist_px = get_distance(p1, p2)
-            dist_m = round(dist_px * scale, 1)
-        elif is_entrance:
-            node_name = (
-                G.nodes[current_node].get("name", "cửa vào")
-                if current_node
-                else "cửa vào"
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
+                )
             )
-            # Find next floor
-            next_v = path_nodes[edge_idx + 1]
-            target = G.nodes[next_v].get("floor")
-            if target:
-                text = f"Vào {node_name}, Tầng {target}"
-            else:
-                text = f"Vào {node_name}"
+            cumulative_dist = 0.0
+
+        elif just_exited_to_campus:
+            # At first campus node after exiting building
+            text = "Ra khỏi tòa nhà"
+            step_action = "straight"
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
+                )
+            )
+            cumulative_dist = 0.0
+
+        elif is_entrance:
+            # Get building name from current node
+            building_name = node_name if node_name else "Tòa"
+            text = f"Đi {dist_m}m. Vào {building_name}"
             step_action = "entrance"
-            dist_px = get_distance(p1, p2)
-            dist_m = round(dist_px * scale, 1)
+            last_building_name = building_name
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
+                )
+            )
+            cumulative_dist = 0.0
+
         else:
-            # Normal turn detection
+            # Normal turn direction
+            p1 = node_pos[prev_node]
+            p2 = node_pos[current_node]
+            p3 = node_pos[next_node]
             angle = calculate_angle(p1, p2, p3)
             turn_action = get_turn_action(angle)
-
-            dist_px = get_distance(p1, p2)
-            dist_m = round(dist_px * scale, 1)
 
             if turn_action == "left":
                 text = f"Đi bộ {dist_m}m. Rẽ trái"
@@ -368,80 +350,46 @@ def generate_human_instructions(
                 text = f"Đi bộ {dist_m}m. Đi chếch phải"
                 step_action = "slight_right"
             else:
-                text = f"Đi bộ {dist_m}m"
+                text = f"Đi bộ {dist_m}m. Đi thẳng"
                 step_action = "straight"
 
-        instructions.append(
-            Instruction(
-                step=len(instructions) + 1,
-                text=text,
-                action=step_action,
-                distance_m=dist_m,
-                coordinate=p2,
-            )
-        )
-
-    # Handle special case: direct floor change (only 2 nodes in path)
-    if len(full_path_points) == 2 and len(path_nodes) == 2:
-        u = path_nodes[0]
-        v = path_nodes[1]
-        current_floor = G.nodes[u].get("floor")
-        next_floor = G.nodes[v].get("floor")
-
-        if current_floor and next_floor and current_floor != next_floor:
-            edge_data = G.get_edge_data(u, v)
-            edge_type = edge_data.get("type", "walk") if edge_data else "walk"
-            direction = "lên" if next_floor > current_floor else "xuống"
-            floor_text = f"Tầng {next_floor}"
-
-            if edge_type == "elevator":
-                text = f"Đi thang máy {direction} {floor_text}"
-                step_action = "use_elevator"
-            else:
-                text = f"Đi cầu thang {direction} {floor_text}"
-                step_action = "use_stairs"
-
-            # Replace the arrive instruction with floor change
-            instructions[-1] = Instruction(
-                step=len(instructions),
-                text=text,
-                action=step_action,
-                distance_m=round(total_dist_px * scale, 1),
-                coordinate=full_path_points[-1],
-            )
-
-            # Prepend start instruction
-            start_instr = Instruction(
-                step=1,
-                text=f"Bắt đầu từ {G.nodes[path_nodes[0]]['name'] or 'điểm xuất phát'}",
-                action="start",
-                distance_m=0,
-                coordinate=full_path_points[0],
-            )
-            # Re-number all instructions
-            new_instructions = [start_instr]
-            for idx, instr in enumerate(instructions):
-                new_instructions.append(
-                    Instruction(
-                        step=idx + 2,
-                        text=instr.text,
-                        action=instr.action,
-                        distance_m=instr.distance_m,
-                        coordinate=instr.coordinate,
-                    )
+            instructions.append(
+                Instruction(
+                    step=len(instructions) + 1,
+                    text=text,
+                    action=step_action,
+                    distance_m=dist_m,
+                    coordinate=node_pos[current_node],
                 )
-            instructions = new_instructions
+            )
+            cumulative_dist = 0.0
 
-    # Final instruction
+    # Destination instruction
     end_node = path_nodes[-1]
     end_name = G.nodes[end_node].get("name", "điểm đến")
+
+    # Calculate final distance
+    if len(path_nodes) >= 2:
+        last_prev = path_nodes[-2]
+        polyline = get_edge_polyline(G, last_prev, end_node, node_pos)
+        if polyline:
+            final_dist = get_distance(node_pos[last_prev], polyline[0])
+            for j in range(len(polyline) - 1):
+                final_dist += get_distance(polyline[j], polyline[j + 1])
+            final_dist += get_distance(polyline[-1], node_pos[end_node])
+        else:
+            final_dist = get_distance(node_pos[last_prev], node_pos[end_node])
+        cumulative_dist += final_dist
+
+    final_dist_m = round(cumulative_dist * scale, 1)
+
     instructions.append(
         Instruction(
             step=len(instructions) + 1,
-            text=f"Đã đến {end_name}",
+            text=f"Đi {dist_m}m. Đã đến {end_name}",
             action="arrive",
-            distance_m=0,
-            coordinate=full_path_points[-1],
+            distance_m=final_dist_m,
+            coordinate=node_pos[end_node],
         )
     )
 
@@ -462,11 +410,7 @@ def find_best_alias_node(
     norm_q = normalize_name(query)
 
     # Lấy tất cả Alias của map này
-    aliases = session.exec(
-        select(Alias, Node)
-        .join(Node, Alias.node_id == Node.id)
-        .where(Node.map_id == map_id)
-    ).all()
+    aliases = session.exec(select(Alias, Node).join(Node, Alias.node_id == Node.id).where(Node.map_id == map_id)).all()
 
     if not aliases:
         return None
@@ -476,9 +420,7 @@ def find_best_alias_node(
 
     # Tìm top 5 kết quả giống nhất
     # process.extract trả về list [(name, score, key), ...]
-    best_matches = process.extract(
-        norm_q, choices, scorer=fuzz.token_set_ratio, limit=5
-    )
+    best_matches = process.extract(norm_q, choices, scorer=fuzz.token_set_ratio, limit=5)
 
     candidates = []
     # aliases_by_id = {a.id: (a, n) for a, n in aliases} # Map nhanh
@@ -513,29 +455,29 @@ def find_best_alias_node(
 
 @router.get("/find", response_model=RouteResponse)
 def find_route(
-    map_id: int,
     start_node_id: int,
     end_node_id: int,
     session: Session = Depends(get_session),
 ):
-    # 1. Lấy thông tin Map để có scale
-    m = session.get(Map, map_id)
+    # Get start node to determine scale
+    start_node = session.get(Node, start_node_id)
+    if not start_node:
+        raise HTTPException(status_code=400, detail="Start node không tồn tại")
+
+    # 1. Lấy thông tin Map để có scale (dùng map của start node)
+    m = session.get(Map, start_node.map_id)
     if not m:
         raise HTTPException(status_code=404, detail="Map không tồn tại")
     scale = m.scale_ratio if m.scale_ratio else 1.0  # mét / pixel
 
     # 2. Build Graph & Tìm đường ngắn nhất (Dijkstra)
-    G, node_pos = build_graph(session, map_id)
+    G, node_pos = build_graph(session)
 
     if start_node_id not in G or end_node_id not in G:
-        raise HTTPException(
-            status_code=400, detail="Start/End node không thuộc map này"
-        )
+        raise HTTPException(status_code=400, detail="Start/End node không thuộc map này")
 
     try:
-        path_nodes = nx.shortest_path(
-            G, source=start_node_id, target=end_node_id, weight="weight"
-        )
+        path_nodes = nx.shortest_path(G, source=start_node_id, target=end_node_id, weight="weight")
     except nx.NetworkXNoPath:
         raise HTTPException(status_code=404, detail="Không tìm thấy đường đi")
 
@@ -543,7 +485,7 @@ def find_route(
     instrs, total_px = generate_human_instructions(G, path_nodes, node_pos, scale)
 
     return RouteResponse(
-        map_id=map_id,
+        map_id=start_node.map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
         total_distance_m=round(total_px * scale, 2),
         instructions=instrs,
@@ -583,10 +525,7 @@ def build_full_polyline(G, path_nodes: List[int], node_pos: Dict) -> List[List[f
     full_polyline = []
     for i, node_id in enumerate(path_nodes):
         # Add node if not duplicate
-        if not full_polyline or (
-            abs(full_polyline[-1][0] - node_pos[node_id][0]) >= 0.1
-            or abs(full_polyline[-1][1] - node_pos[node_id][1]) >= 0.1
-        ):
+        if not full_polyline or (abs(full_polyline[-1][0] - node_pos[node_id][0]) >= 0.1 or abs(full_polyline[-1][1] - node_pos[node_id][1]) >= 0.1):
             full_polyline.append([node_pos[node_id][0], node_pos[node_id][1]])
 
         if i < len(path_nodes) - 1:
@@ -595,10 +534,7 @@ def build_full_polyline(G, path_nodes: List[int], node_pos: Dict) -> List[List[f
             for p in polyline:
                 if isinstance(p, list) and len(p) >= 2:
                     # Skip if duplicate with last point
-                    if full_polyline and (
-                        abs(full_polyline[-1][0] - p[0]) < 0.1
-                        and abs(full_polyline[-1][1] - p[1]) < 0.1
-                    ):
+                    if full_polyline and (abs(full_polyline[-1][0] - p[0]) < 0.1 and abs(full_polyline[-1][1] - p[1]) < 0.1):
                         continue
                     full_polyline.append([p[0], p[1]])
 
@@ -655,16 +591,12 @@ def route_by_query(
     m = session.get(Map, map_id)
     scale = m.scale_ratio if m and m.scale_ratio else 1.0
 
-    G, node_pos = build_graph(session, map_id)
+    G, node_pos = build_graph(session)
 
     try:
-        path_nodes = nx.shortest_path(
-            G, source=start_id, target=end_id, weight="weight"
-        )
+        path_nodes = nx.shortest_path(G, source=start_id, target=end_id, weight="weight")
     except nx.NetworkXNoPath:
-        raise HTTPException(
-            status_code=404, detail="Không có đường đi giữa hai điểm này."
-        )
+        raise HTTPException(status_code=404, detail="Không có đường đi giữa hai điểm này.")
     except nx.NodeNotFound:
         raise HTTPException(status_code=400, detail="Lỗi dữ liệu đồ thị.")
 

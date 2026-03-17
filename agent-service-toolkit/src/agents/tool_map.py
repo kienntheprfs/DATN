@@ -1,132 +1,138 @@
-import json
-import math
-from typing import List, Dict, Any, Optional
+from typing import Optional, Any
 
 import requests
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import tool
 
 
-def get_maps_func() -> str:
-    """Lấy danh sách tất cả các bản đồ có sẵn."""
+WAYFINDER_API = "http://127.0.0.1:8000/api"
+
+
+def find_route_func(
+    from_location: str,
+    to_location: str,
+) -> str:
+    """Tìm đường đi từ địa điểm xuất phát đến địa điểm đến (đa tầng). Tự động tìm kiếm và xử lý nếu có nhiều kết quả."""
     try:
-        response = requests.get("http://127.0.0.1:8000/maps")
-        response.raise_for_status()
-        data = response.json()
+        # Search start location (all floors)
+        start_response = requests.get(
+            f"{WAYFINDER_API}/search",
+            params={"q": from_location, "limit": 5},
+            timeout=10,
+        )
+        start_response.raise_for_status()
+        start_results = start_response.json()
 
-        if not data.get("items"):
-            return "Không có bản đồ nào có sẵn."
+        # Search end location (all floors)
+        end_response = requests.get(
+            f"{WAYFINDER_API}/search",
+            params={"q": to_location, "limit": 5},
+            timeout=10,
+        )
+        end_response.raise_for_status()
+        end_results = end_response.json()
 
-        maps_info = []
-        for map_item in data["items"]:
-            maps_info.append(f"ID: {map_item['id']}, Tên: {map_item['name']}")
+        # Validate results
+        if not start_results:
+            return f"Không tìm thấy địa điểm xuất phát '{from_location}'."
 
-        return "Danh sách bản đồ:\n" + "\n".join(maps_info)
+        if not end_results:
+            return f"Không tìm thấy địa điểm đến '{to_location}'."
 
-    except Exception as e:
-        return f"Lỗi khi lấy danh sách bản đồ: {str(e)}"
+        # Get node_ids
+        start_node_id = start_results[0]["node_id"]
+        end_node_id = end_results[0]["node_id"]
 
+        # Group by name to detect duplicates in different buildings
+        def group_by_name(results):
+            groups = {}
+            for r in results:
+                name = r["name"]
+                if name not in groups:
+                    groups[name] = []
+                groups[name].append(r)
+            return groups
 
-def get_map_nodes_func(map_id: int) -> str:
-    """Lấy danh sách các node (điểm) trên một bản đồ cụ thể."""
-    try:
-        response = requests.get(f"http://127.0.0.1:8000/nodes/map/{map_id}/with-aliases")
-        response.raise_for_status()
-        nodes = response.json()
+        start_groups = group_by_name(start_results)
+        end_groups = group_by_name(end_results)
 
-        if not nodes:
-            return f"Không có node nào trên bản đồ ID {map_id}."
+        # Check if any name has multiple buildings
+        def has_multi_building(groups):
+            for name, items in groups.items():
+                if len(items) > 1:
+                    return True
+            return False
 
-        nodes_info = []
-        for node in nodes:
-            aliases = [alias["name"] for alias in node.get("aliases", [])]
-            alias_str = f" (Biệt danh: {', '.join(aliases)})" if aliases else ""
-            landmark_str = " [Landmark]" if node.get("is_landmark") else ""
-            nodes_info.append(f"Node #{node['id']}: ({node['x']}, {node['y']}){landmark_str}{alias_str}")
+        # If multiple matches in different buildings, ask for clarification
+        if has_multi_building(start_groups) or has_multi_building(end_groups):
+            start_opts = []
+            for name, items in start_groups.items():
+                if len(items) > 1:
+                    for item in items:
+                        location_info = []
+                        if item.get("building_name"):
+                            location_info.append(item["building_name"])
+                        if item.get("floor"):
+                            location_info.append(f"Tầng {item['floor']}")
+                        location_str = " - ".join(location_info) if location_info else "Campus"
+                        start_opts.append(f"- {name} ({location_str})")
+                else:
+                    start_opts.append(f"- {items[0]['name']}")
 
-        return f"Các node trên bản đồ ID {map_id}:\n" + "\n".join(nodes_info)
+            end_opts = []
+            for name, items in end_groups.items():
+                if len(items) > 1:
+                    for item in items:
+                        location_info = []
+                        if item.get("building_name"):
+                            location_info.append(item["building_name"])
+                        if item.get("floor"):
+                            location_info.append(f"Tầng {item['floor']}")
+                        location_str = " - ".join(location_info) if location_info else "Campus"
+                        end_opts.append(f"- {name} ({location_str})")
+                else:
+                    end_opts.append(f"- {items[0]['name']}")
 
-    except Exception as e:
-        return f"Lỗi khi lấy nodes của bản đồ {map_id}: {str(e)}"
+            confirm_msg = f"""Có nhiều địa điểm trùng tên ở các tòa/tầng khác nhau, vui lòng xác nhận:
 
+Điểm xuất phát '{from_location}':
+{chr(10).join(start_opts)}
 
-def search_route_func(map_id: int, query: str, current_x: Optional[float] = None, current_y: Optional[float] = None) -> str:
-    """Tìm đường đi dựa trên câu truy vấn."""
-    try:
-        payload = {"map_id": map_id, "q": query}
-        if current_x is not None and current_y is not None:
-            payload["cx"] = current_x
-            payload["cy"] = current_y
+Điểm đến '{to_location}':
+{chr(10).join(end_opts)}
 
-        response = requests.post("http://127.0.0.1:8000/route", json=payload, headers={"Content-Type": "application/json"})
-        response.raise_for_status()
-        result = response.json()
+Hãy cho biết TÊN và VỊ TRÍ (ví dụ: "Tòa A3" hoặc "Nhà vệ sinh Tòa B4 Tầng 1")"""
 
-        # Format instructions
-        instructions = []
-        for idx, ins in enumerate(result.get("instructions", []), 1):
-            distance_m = ins.get("distance_px", 0) / 100  # Assuming 100px = 1m
-            instructions.append(f"{idx}. {ins['text']} (~{distance_m:.1f}m)")
+            return confirm_msg
 
-        # Format route info
-        route_info = f"""
-Tìm đường thành công!
-Tổng độ dài: ~{result.get('length_px', 0) / 100:.1f}m
+        # Find route (multi-floor)
+        route_response = requests.get(
+            f"{WAYFINDER_API}/find",
+            params={"start_node_id": start_node_id, "end_node_id": end_node_id},
+            timeout=30,
+        )
+
+        if route_response.status_code == 404:
+            return f"Không tìm được đường từ '{start_results[0]['name']}' đến '{end_results[0]['name']}'."
+        if route_response.status_code == 400:
+            return f"Lỗi: {route_response.json().get('detail', 'Node không hợp lệ')}"
+
+        route_response.raise_for_status()
+        result = route_response.json()
+
+        instructions = [f"{ins['step']}. {ins['text']}" for ins in result.get("instructions", [])]
+        instructions_text = "\n".join(instructions)
+
+        return f"""Tìm đường từ '{start_results[0]["name"]}' đến '{end_results[0]["name"]}'
+Tổng khoảng cách: {result.get("total_distance_m", 0):.1f}m
+
 Hướng dẫn:
-{chr(10).join(instructions)}
+{instructions_text}"""
 
-Tọa độ đường đi: {result.get('polyline', [])}
-        """.strip()
-
-        return route_info
-
-    except Exception as e:
-        return f"Lỗi khi tìm đường: {str(e)}"
+    except requests.RequestException as e:
+        return f"Lỗi tìm đường: {str(e)}"
 
 
-def search_nodes_func(map_id: int, query: str) -> str:
-    """Tìm kiếm node theo tên hoặc biệt danh."""
-    try:
-        response = requests.get(f"http://127.0.0.1:8000/nodes/search", params={"map_id": map_id, "q": query})
-        response.raise_for_status()
-        results = response.json()
+find_route: Any = tool(find_route_func)
+find_route.name = "FindRoute"
 
-        if not results:
-            return f"Không tìm thấy node nào khớp với '{query}' trên bản đồ ID {map_id}."
-
-        search_results = []
-        for node in results:
-            aliases = [alias["name"] for alias in node.get("matching_aliases", [])]
-            alias_str = f" (Khớp với: {', '.join(aliases)})" if aliases else ""
-            search_results.append(f"Node #{node['id']}: ({node['x']}, node['y']){alias_str}")
-
-        return f"Kết quả tìm kiếm cho '{query}':\n" + "\n".join(search_results)
-
-    except Exception as e:
-        return f"Lỗi khi tìm kiếm node: {str(e)}"
-
-
-def calculate_distance_func(x1: float, y1: float, x2: float, y2: float) -> str:
-    """Tính khoảng cách giữa hai điểm."""
-    distance_px = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-    distance_m = distance_px / 100  # Assuming 100px = 1m
-    return f"Khoảng cách: {distance_px:.1f}px (~{distance_m:.1f}m)"
-
-
-# Create tools
-get_maps: BaseTool = tool(get_maps_func)
-get_maps.name = "GetMaps"
-
-get_map_nodes: BaseTool = tool(get_map_nodes_func)
-get_map_nodes.name = "GetMapNodes"
-
-search_route: BaseTool = tool(search_route_func)
-search_route.name = "SearchRoute"
-
-search_nodes: BaseTool = tool(search_nodes_func)
-search_nodes.name = "SearchNodes"
-
-calculate_distance: BaseTool = tool(calculate_distance_func)
-calculate_distance.name = "CalculateDistance"
-
-# List of all map tools
-map_tools = [get_maps, get_map_nodes, search_route, search_nodes, calculate_distance]
+map_tools = [find_route]

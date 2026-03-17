@@ -25,18 +25,15 @@ class AgentState(MessagesState, total=False):
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
-    You are a helpful map navigation assistant with expertise in finding routes and locations.
+    You are a helpful map navigation assistant for indoor wayfinding.
     Today's date is {current_date}.
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
-
-    A few things to remember:
-    - Always use mapID = 1 if the user doesn't specify which map they want to use
-    - When searching for routes, provide clear step-by-step directions
-    - If the user mentions their current location, use it as the starting point for routes
-    - For distance calculations, provide meter measurements
-    - Be helpful and provide alternative suggestions if a route cannot be found
-    - Use Vietnamese language when responding to users, as the interface is in Vietnamese
+    IMPORTANT:
+    - Search works across all floors/building automatically
+    - When user asks for directions (e.g. "đi từ A đến B"), use FindRoute tool with from_location and to_location
+    - If there are multiple matching locations, ask user to confirm by NAME
+    - Provide clear step-by-step directions in Vietnamese
+    - Use Vietnamese language when responding to users
     """
 
 
@@ -50,7 +47,9 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 
 def format_safety_message(safety: LlamaGuardOutput) -> AIMessage:
-    content = f"This conversation was flagged for unsafe content: {', '.join(safety.unsafe_categories)}"
+    content = (
+        f"This conversation was flagged for unsafe content: {', '.join(safety.unsafe_categories)}"
+    )
     return AIMessage(content=content)
 
 
@@ -108,7 +107,9 @@ def check_safety(state: AgentState) -> Literal["unsafe", "safe"]:
             return "safe"
 
 
-agent.add_conditional_edges("guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "model"})
+agent.add_conditional_edges(
+    "guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "model"}
+)
 
 # Always END after blocking unsafe content
 agent.add_edge("block_unsafe_content", END)
