@@ -16,6 +16,7 @@ from langchain_tavily import TavilySearch
 # --- Project imports ---
 from core import get_model, settings
 from rag_utils.retriever import QdrantHybridRetriever
+from rag_utils.reranker import BaseReranker, JinaReranker
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -31,6 +32,7 @@ MAX_TURNS = 6  # Số lượt hội thoại tối đa để ngắt mạch
 # INIT SERVICES
 # ==============================================================================
 retriever_service = QdrantHybridRetriever()
+reranker_service: BaseReranker = JinaReranker()
 
 # ==============================================================================
 # DEFINING TOOLS
@@ -56,17 +58,24 @@ async def lookup_hcmut_info(query: str):
             query=query, collection_name=collection_faq, top_k=2, score_threshold=0.5
         )
         
-        docs_result, faq_result = await asyncio.gather(task_doc, task_faq)
+        initial_docs, faq_result = await asyncio.gather(task_doc, task_faq)
 
         # Xử lý kết quả trả về cho Agent đọc
         output_lines = []
 
         # 1. Ưu tiên FAQ nếu điểm rất cao
-        if faq_result and faq_result[0].score > 0.90:
-             return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
+        # CHECK: Tạm tắt do chất lượng hoạt động kém
+        # if faq_result and faq_result[0].score > 0.98:
+        #      return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
 
         # 2. Format Documents kèm Score
-        if docs_result:
+        if initial_docs:
+            docs_result = await reranker_service.rerank(
+                query=query, 
+                documents=initial_docs, 
+                top_n=5
+            )
+
             output_lines.append(f"Tìm thấy {len(docs_result)} tài liệu liên quan:")
             for doc in docs_result:
                 output_lines.append(

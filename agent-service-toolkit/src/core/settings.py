@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     EMBEDDING_DEPLOYMENT_NAME: str | None = None
     EMBEDDING_API_VERSION: str | None = None
 
+    # Reranker
+    JINA_API_KEY: str | None = None
+    JINA_API_URL: str | None = None
+
     # If DEFAULT_MODEL is None, it will be set in model_post_init
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
@@ -133,7 +137,7 @@ class Settings(BaseSettings):
 
     # Database Configuration
     DATABASE_TYPE: DatabaseType = (
-        DatabaseType.SQLITE
+        DatabaseType.POSTGRES
     )  # Options: DatabaseType.SQLITE or DatabaseType.POSTGRES
     SQLITE_DB_PATH: str = "checkpoints.db"
 

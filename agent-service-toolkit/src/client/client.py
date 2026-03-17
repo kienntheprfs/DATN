@@ -57,6 +57,15 @@ class AgentClient:
             headers["Authorization"] = f"Bearer {self.auth_secret}"
         return headers
 
+    # [CHỈNH SỬA]: Thêm hàm helper để chèn X-User-Id giả lập API Gateway
+    def _build_headers(self, user_id: str | None = None) -> dict[str, str]:
+        headers = self._headers.copy()
+        if user_id:
+            headers["X-User-Id"] = user_id
+        else:
+            headers["X-User-Id"] = "dev-user-123" # Fallback để test không bị lỗi 401
+        return headers
+
     def retrieve_info(self) -> None:
         try:
             response = httpx.get(
@@ -113,14 +122,18 @@ class AgentClient:
             request.model = model  # type: ignore[assignment]
         if agent_config:
             request.agent_config = agent_config
-        if user_id:
-            request.user_id = user_id
+            
+        # [CHỈNH SỬA]: Comment dòng gán request.user_id vì API đã chuyển sang đọc từ Header
+        # if user_id:
+        #     request.user_id = user_id
+            
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/{self.agent}/invoke",
                     json=request.model_dump(),
-                    headers=self._headers,
+                    # [CHỈNH SỬA]: Đổi self._headers thành self._build_headers(user_id)
+                    headers=self._build_headers(user_id),
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
@@ -159,13 +172,17 @@ class AgentClient:
             request.model = model  # type: ignore[assignment]
         if agent_config:
             request.agent_config = agent_config
-        if user_id:
-            request.user_id = user_id
+            
+        # [CHỈNH SỬA]: Comment dòng gán request.user_id
+        # if user_id:
+        #     request.user_id = user_id
+            
         try:
             response = httpx.post(
                 f"{self.base_url}/{self.agent}/invoke",
                 json=request.model_dump(),
-                headers=self._headers,
+                # [CHỈNH SỬA]: Đổi self._headers thành self._build_headers(user_id)
+                headers=self._build_headers(user_id),
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -232,8 +249,11 @@ class AgentClient:
         request = StreamInput(message=message, stream_tokens=stream_tokens)
         if thread_id:
             request.thread_id = thread_id
-        if user_id:
-            request.user_id = user_id
+            
+        # [CHỈNH SỬA]: Comment dòng gán request.user_id
+        # if user_id:
+        #     request.user_id = user_id
+            
         if model:
             request.model = model  # type: ignore[assignment]
         if agent_config:
@@ -243,7 +263,8 @@ class AgentClient:
                 "POST",
                 f"{self.base_url}/{self.agent}/stream",
                 json=request.model_dump(),
-                headers=self._headers,
+                # [CHỈNH SỬA]: Đổi self._headers thành self._build_headers(user_id)
+                headers=self._build_headers(user_id),
                 timeout=self.timeout,
             ) as response:
                 response.raise_for_status()
@@ -293,15 +314,19 @@ class AgentClient:
             request.model = model  # type: ignore[assignment]
         if agent_config:
             request.agent_config = agent_config
-        if user_id:
-            request.user_id = user_id
+            
+        # [CHỈNH SỬA]: Comment dòng gán request.user_id
+        # if user_id:
+        #     request.user_id = user_id
+            
         async with httpx.AsyncClient() as client:
             try:
                 async with client.stream(
                     "POST",
                     f"{self.base_url}/{self.agent}/stream",
                     json=request.model_dump(),
-                    headers=self._headers,
+                    # [CHỈNH SỬA]: Đổi self._headers thành self._build_headers(user_id)
+                    headers=self._build_headers(user_id),
                     timeout=self.timeout,
                 ) as response:
                     response.raise_for_status()
@@ -340,7 +365,8 @@ class AgentClient:
             except httpx.HTTPError as e:
                 raise AgentClientError(f"Error: {e}")
 
-    def get_history(self, thread_id: str) -> ChatHistory:
+    # [CHỈNH SỬA]: Thêm tham số user_id để hỗ trợ truyền qua header
+    def get_history(self, thread_id: str, user_id: str | None = None) -> ChatHistory:
         """
         Get chat history.
 
@@ -352,7 +378,8 @@ class AgentClient:
             response = httpx.post(
                 f"{self.base_url}/history",
                 json=request.model_dump(),
-                headers=self._headers,
+                # [CHỈNH SỬA]: Đổi self._headers thành self._build_headers(user_id)
+                headers=self._build_headers(user_id),
                 timeout=self.timeout,
             )
             response.raise_for_status()
