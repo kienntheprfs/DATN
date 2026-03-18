@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select, delete, Relationship
@@ -77,6 +77,8 @@ class NodeOut(BaseModel):
 
 # 2. Update cho phép sửa cả name, type và danh sách aliases
 class NodeUpdate(BaseModel):
+    model_config = {"extra": "ignore"}  # Ignore extra fields from frontend
+
     name: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
@@ -84,7 +86,7 @@ class NodeUpdate(BaseModel):
     linked_node_ids: Optional[List[int]] = None
     linked_campus_node_id: Optional[int] = None
     building_id: Optional[int] = None
-    aliases: Optional[List[str]] = None  # Cho phép gửi list alias mới để thay thế
+    aliases: Optional[Any] = None  # Accept any format
 
 
 # --- ENDPOINTS ---
@@ -162,7 +164,9 @@ def update_node(
         raise HTTPException(status_code=404, detail="Node không tồn tại.")
 
     # 1. Update thông tin cơ bản
-    data = payload.model_dump(exclude_unset=True, exclude={"aliases"})
+    data = payload.model_dump(
+        exclude_unset=True, exclude={"aliases", "map", "building", "flags"}
+    )
 
     # Auto-set building_id từ map nếu map có building và không truyền building_id
     if "building_id" not in data or data["building_id"] is None:
@@ -223,10 +227,18 @@ def update_node(
         # Xóa alias cũ
         session.exec(delete(Alias).where(Alias.node_id == node_id))
 
-        # Thêm alias mới
-        for name in payload.aliases:
-            new_alias = Alias(node_id=node_id, name=name)
-            session.add(new_alias)
+        # Thêm alias mới - xử lý cả list of strings và list of objects
+        for alias_item in payload.aliases:
+            if isinstance(alias_item, str):
+                name = alias_item
+            elif isinstance(alias_item, dict):
+                name = alias_item.get("name", "")
+            else:
+                name = str(alias_item)
+
+            if name:
+                new_alias = Alias(node_id=node_id, name=name)
+                session.add(new_alias)
 
     session.add(n)
     session.commit()

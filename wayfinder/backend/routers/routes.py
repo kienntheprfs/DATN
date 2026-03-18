@@ -1,4 +1,6 @@
 import math
+import json
+import os
 from typing import List, Optional, Tuple, Dict
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
@@ -11,8 +13,104 @@ from backend.models.entities import Map, Node, Edge, Alias
 from backend.services.nlp import normalize_name, extract_a_b
 from rapidfuzz import process, fuzz
 import math
+import time
 
 router = APIRouter()
+
+# --- GLOBAL GRAPH CACHE ---
+_global_graph: Optional[nx.Graph] = None
+_global_node_pos: Optional[Dict] = None
+_graph_file = "data/graph_cache.json"
+
+
+def _load_graph_from_cache() -> Tuple[Optional[nx.Graph], Optional[Dict]]:
+    """Load graph from JSON file if exists"""
+    if not os.path.exists(_graph_file):
+        return None, None
+
+    try:
+        with open(_graph_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        G = nx.Graph()
+        node_pos = {}
+
+        # Load nodes
+        for node_id, node_data in data["nodes"].items():
+            G.add_node(int(node_id))
+            for key, val in node_data.items():
+                G.nodes[int(node_id)][key] = val
+            node_pos[int(node_id)] = tuple(node_data["pos"])
+
+        # Load edges
+        for u, edges in data["edges"].items():
+            for v, edge_data in edges.items():
+                G.add_edge(int(u), int(v), **edge_data)
+
+        return G, node_pos
+    except Exception:
+        return None, None
+
+
+def _save_graph_to_cache(G: nx.Graph, node_pos: Dict):
+    """Save graph to JSON file"""
+    os.makedirs(os.path.dirname(_graph_file), exist_ok=True)
+
+    nodes_data = {}
+    for node_id in G.nodes:
+        nodes_data[str(node_id)] = {
+            "name": G.nodes[node_id].get("name"),
+            "map_id": G.nodes[node_id].get("map_id"),
+            "floor": G.nodes[node_id].get("floor"),
+            "type": G.nodes[node_id].get("type"),
+            "linked_node_ids": G.nodes[node_id].get("linked_node_ids"),
+            "pos": list(node_pos[node_id]),
+        }
+
+    edges_data = {}
+    for u, v in G.edges:
+        edge_data = G.get_edge_data(u, v)
+        if str(u) not in edges_data:
+            edges_data[str(u)] = {}
+        edges_data[str(u)][str(v)] = edge_data
+
+    data = {"nodes": nodes_data, "edges": edges_data}
+
+    with open(_graph_file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+def _get_global_graph(session: Session) -> Tuple[nx.Graph, Dict]:
+    """Get or build global graph for all floors"""
+    global _global_graph, _global_node_pos
+
+    if _global_graph is not None and _global_node_pos is not None:
+        return _global_graph, _global_node_pos
+
+    # Try load from cache file first
+    _global_graph, _global_node_pos = _load_graph_from_cache()
+    if _global_graph is not None and _global_node_pos is not None:
+        return _global_graph, _global_node_pos
+
+    # Build new graph
+    _global_graph, _global_node_pos = build_graph(session)
+
+    # Save to cache file
+    _save_graph_to_cache(_global_graph, _global_node_pos)
+
+    return _global_graph, _global_node_pos
+
+
+def _clear_graph_cache():
+    """Clear in-memory graph cache and delete cache file"""
+    global _global_graph, _global_node_pos
+    _global_graph = None
+    _global_node_pos = None
+
+    if os.path.exists(_graph_file):
+        os.remove(_graph_file)
+
+    return {"message": "Graph cache cleared"}
 
 
 # --- DEPENDENCY ---
@@ -33,6 +131,7 @@ class Instruction(BaseModel):
 class RouteResponse(BaseModel):
     map_id: int
     path_coords: List[List[float]]  # Polyline tổng để vẽ lên bản đồ
+    path_node_ids: List[int]  # Danh sách node IDs theo thứ tự đường đi
     total_distance_m: float
     instructions: List[Instruction]
 
@@ -40,7 +139,9 @@ class RouteResponse(BaseModel):
 # --- MATH & GEO HELPERS ---
 
 
-def calculate_angle(p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]) -> float:
+def calculate_angle(
+    p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]
+) -> float:
     """
     Tính góc tạo bởi 3 điểm p1 -> p2 -> p3.
     Trả về độ (degrees). Dương là rẽ phải, Âm là rẽ trái (trong hệ tọa độ màn hình y hướng xuống).
@@ -92,7 +193,7 @@ def get_node_name(session: Session, node_id: int) -> Optional[str]:
 
 
 def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
-    """Tạo đồ thị NetworkX từ DB, bao gồm cả nodes liên kết qua các tầng"""
+    """Tạo đồ thị NetworkX từ DB cho tất cả các tầng"""
     G = nx.Graph()
     node_pos = {}
     node_map_info = {}  # Store map_id and floor info for each node
@@ -121,7 +222,11 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
         node_map_info[n.id] = {"map_id": n.map_id, "floor": map_floor.get(n.map_id)}
 
     # 3. Load Edges from related maps
-    edges = session.exec(select(Edge).join(Node, Edge.start_node_id == Node.id).where(Node.map_id.in_(related_map_ids))).all()
+    edges = session.exec(
+        select(Edge)
+        .join(Node, Edge.start_node_id == Node.id)
+        .where(Node.map_id.in_(related_map_ids))
+    ).all()
 
     for e in edges:
         attr = {
@@ -137,13 +242,38 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
             for linked_id in n.linked_node_ids:
                 if linked_id in G.nodes:
                     # Determine connection type based on node types
-                    if n.type in ["stairs", "elevator"] or G.nodes[linked_id].get("type") in ["stairs", "elevator"]:
-                        conn_type = n.type if n.type in ["stairs", "elevator"] else G.nodes[linked_id].get("type", "stairs")
+                    if n.type in ["stairs", "elevator"] or G.nodes[linked_id].get(
+                        "type"
+                    ) in ["stairs", "elevator"]:
+                        conn_type = (
+                            n.type
+                            if n.type in ["stairs", "elevator"]
+                            else G.nodes[linked_id].get("type", "stairs")
+                        )
                     else:
                         conn_type = "stairs"  # Default for floor transitions
 
                     # Add edge with high weight (stairs/elevator takes longer)
-                    G.add_edge(n.id, linked_id, weight=50, type=conn_type, polyline=[])
+                    # Only add if edge doesn't exist (avoid duplicate with DB edges)
+                    if not G.has_edge(n.id, linked_id):
+                        G.add_edge(
+                            n.id, linked_id, weight=50, type=conn_type, polyline=[]
+                        )
+
+    # 5. Add edges for linked_campus_node_id (entrance <-> campus connection)
+    for n in nodes:
+        campus_node_id = n.linked_campus_node_id
+        if campus_node_id and campus_node_id in G.nodes:
+            # Add edge from building entrance to campus
+            if not G.has_edge(n.id, campus_node_id):
+                G.add_edge(
+                    n.id, campus_node_id, weight=10, type="entrance", polyline=[]
+                )
+            # Also add reverse edge from campus to building entrance
+            if not G.has_edge(campus_node_id, n.id):
+                G.add_edge(
+                    campus_node_id, n.id, weight=10, type="entrance", polyline=[]
+                )
 
     return G, node_pos
 
@@ -155,7 +285,9 @@ def get_distance(p1, p2):
     return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
 
 
-def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Dict, scale: float) -> Tuple[List[Instruction], float]:
+def generate_human_instructions(
+    G: nx.Graph, path_nodes: List[int], node_pos: Dict, scale: float
+) -> Tuple[List[Instruction], float]:
     instructions = []
     total_dist_px = 0.0
 
@@ -221,7 +353,11 @@ def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Di
 
         # Check for exit (building -> campus)
         is_exit = False
-        if current_type == "entrance" and current_floor is not None and next_floor is None:
+        if (
+            current_type == "entrance"
+            and current_floor is not None
+            and next_floor is None
+        ):
             is_exit = True
 
         # Check for entrance (campus -> building)
@@ -241,7 +377,11 @@ def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Di
         just_exited_to_campus = prev_floor is not None and current_floor is None
 
         # Check if just changed floor within building (prev floor != current floor)
-        just_changed_floor = prev_floor is not None and current_floor is not None and prev_floor != current_floor
+        just_changed_floor = (
+            prev_floor is not None
+            and current_floor is not None
+            and prev_floor != current_floor
+        )
 
         if is_floor_change:
             direction = "lên" if next_floor > current_floor else "xuống"
@@ -367,6 +507,7 @@ def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Di
     # Destination instruction
     end_node = path_nodes[-1]
     end_name = G.nodes[end_node].get("name", "điểm đến")
+    end_type = G.nodes[end_node].get("type")
 
     # Calculate final distance
     if len(path_nodes) >= 2:
@@ -383,15 +524,31 @@ def generate_human_instructions(G: nx.Graph, path_nodes: List[int], node_pos: Di
 
     final_dist_m = round(cumulative_dist * scale, 1)
 
-    instructions.append(
-        Instruction(
-            step=len(instructions) + 1,
-            text=f"Đi {dist_m}m. Đã đến {end_name}",
-            action="arrive",
-            distance_m=final_dist_m,
-            coordinate=node_pos[end_node],
+    # Check if last instruction was a floor change (stairs/elevator) and destination is stairs/elevator
+    last_action = instructions[-1].action if instructions else None
+    skip_arrival = False
+
+    if end_type in ["stairs", "elevator"] and last_action in [
+        "use_stairs",
+        "use_elevator",
+    ]:
+        skip_arrival = True
+
+    if skip_arrival:
+        # Just update the last floor change instruction to indicate arrival
+        last_instr = instructions[-1]
+        direction = "lên" if "lên" in last_instr.text else "xuống"
+        last_instr.text = f"Đã đến {end_name} ({direction})"
+    else:
+        instructions.append(
+            Instruction(
+                step=len(instructions) + 1,
+                text=f"Đi {final_dist_m}m. Đã đến {end_name}",
+                action="arrive",
+                distance_m=final_dist_m,
+                coordinate=node_pos[end_node],
+            )
         )
-    )
 
     return instructions, total_dist_px
 
@@ -410,7 +567,11 @@ def find_best_alias_node(
     norm_q = normalize_name(query)
 
     # Lấy tất cả Alias của map này
-    aliases = session.exec(select(Alias, Node).join(Node, Alias.node_id == Node.id).where(Node.map_id == map_id)).all()
+    aliases = session.exec(
+        select(Alias, Node)
+        .join(Node, Alias.node_id == Node.id)
+        .where(Node.map_id == map_id)
+    ).all()
 
     if not aliases:
         return None
@@ -420,7 +581,9 @@ def find_best_alias_node(
 
     # Tìm top 5 kết quả giống nhất
     # process.extract trả về list [(name, score, key), ...]
-    best_matches = process.extract(norm_q, choices, scorer=fuzz.token_set_ratio, limit=5)
+    best_matches = process.extract(
+        norm_q, choices, scorer=fuzz.token_set_ratio, limit=5
+    )
 
     candidates = []
     # aliases_by_id = {a.id: (a, n) for a, n in aliases} # Map nhanh
@@ -471,13 +634,17 @@ def find_route(
     scale = m.scale_ratio if m.scale_ratio else 1.0  # mét / pixel
 
     # 2. Build Graph & Tìm đường ngắn nhất (Dijkstra)
-    G, node_pos = build_graph(session)
+    G, node_pos = _get_global_graph(session)
 
     if start_node_id not in G or end_node_id not in G:
-        raise HTTPException(status_code=400, detail="Start/End node không thuộc map này")
+        raise HTTPException(
+            status_code=400, detail="Start/End node không thuộc map này"
+        )
 
     try:
-        path_nodes = nx.shortest_path(G, source=start_node_id, target=end_node_id, weight="weight")
+        path_nodes = nx.shortest_path(
+            G, source=start_node_id, target=end_node_id, weight="weight"
+        )
     except nx.NetworkXNoPath:
         raise HTTPException(status_code=404, detail="Không tìm thấy đường đi")
 
@@ -487,6 +654,7 @@ def find_route(
     return RouteResponse(
         map_id=start_node.map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
+        path_node_ids=path_nodes,
         total_distance_m=round(total_px * scale, 2),
         instructions=instrs,
     )
@@ -525,16 +693,39 @@ def build_full_polyline(G, path_nodes: List[int], node_pos: Dict) -> List[List[f
     full_polyline = []
     for i, node_id in enumerate(path_nodes):
         # Add node if not duplicate
-        if not full_polyline or (abs(full_polyline[-1][0] - node_pos[node_id][0]) >= 0.1 or abs(full_polyline[-1][1] - node_pos[node_id][1]) >= 0.1):
+        if not full_polyline or (
+            abs(full_polyline[-1][0] - node_pos[node_id][0]) >= 0.1
+            or abs(full_polyline[-1][1] - node_pos[node_id][1]) >= 0.1
+        ):
             full_polyline.append([node_pos[node_id][0], node_pos[node_id][1]])
 
         if i < len(path_nodes) - 1:
             next_node_id = path_nodes[i + 1]
+            edge_data = G.get_edge_data(node_id, next_node_id)
+            edge_type = edge_data.get("type") if edge_data else None
+
+            # Get floor info for both nodes
+            current_floor = G.nodes[node_id].get("floor")
+            next_floor = G.nodes[next_node_id].get("floor")
+            is_cross_floor = (
+                current_floor is not None
+                and next_floor is not None
+                and current_floor != next_floor
+            )
+
+            # Skip polyline only for cross-floor edges (stairs/elevator between floors)
+            # For same-floor edges to stairs/elevator, still include polyline
+            if edge_type in ["stairs", "elevator"] and is_cross_floor:
+                continue
+
             polyline = get_edge_polyline(G, node_id, next_node_id, node_pos)
             for p in polyline:
                 if isinstance(p, list) and len(p) >= 2:
                     # Skip if duplicate with last point
-                    if full_polyline and (abs(full_polyline[-1][0] - p[0]) < 0.1 and abs(full_polyline[-1][1] - p[1]) < 0.1):
+                    if full_polyline and (
+                        abs(full_polyline[-1][0] - p[0]) < 0.1
+                        and abs(full_polyline[-1][1] - p[1]) < 0.1
+                    ):
                         continue
                     full_polyline.append([p[0], p[1]])
 
@@ -591,12 +782,16 @@ def route_by_query(
     m = session.get(Map, map_id)
     scale = m.scale_ratio if m and m.scale_ratio else 1.0
 
-    G, node_pos = build_graph(session)
+    G, node_pos = _get_global_graph(session)
 
     try:
-        path_nodes = nx.shortest_path(G, source=start_id, target=end_id, weight="weight")
+        path_nodes = nx.shortest_path(
+            G, source=start_id, target=end_id, weight="weight"
+        )
     except nx.NetworkXNoPath:
-        raise HTTPException(status_code=404, detail="Không có đường đi giữa hai điểm này.")
+        raise HTTPException(
+            status_code=404, detail="Không có đường đi giữa hai điểm này."
+        )
     except nx.NodeNotFound:
         raise HTTPException(status_code=400, detail="Lỗi dữ liệu đồ thị.")
 
@@ -606,6 +801,19 @@ def route_by_query(
     return RouteResponse(
         map_id=map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
+        path_node_ids=path_nodes,
         total_distance_m=round(total_px * scale, 2),
         instructions=instrs,
     )
+
+
+@router.post("/refresh-cache")
+def refresh_graph_cache(session: Session = Depends(get_session)):
+    """Xóa cache và rebuild graph mới từ database"""
+    _clear_graph_cache()
+    # Rebuild and cache
+    G, node_pos = _get_global_graph(session)
+    return {
+        "message": "Graph cache đã được cập nhật",
+        "node_count": G.number_of_nodes(),
+    }

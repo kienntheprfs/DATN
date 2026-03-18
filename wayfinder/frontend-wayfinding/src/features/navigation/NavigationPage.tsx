@@ -158,6 +158,15 @@ export default function NavigationPage() {
     }
   }, [currentMap]);
 
+  const handleRefreshCache = async () => {
+    try {
+      const result = await wayfindingApi.refreshCache();
+      alert(`Đã cập nhật cache: ${result.node_count} nodes`);
+    } catch (err) {
+      alert('Lỗi khi refresh cache');
+    }
+  };
+
   const handleFindRoute = async () => {
     if (!startNodeId || !endNodeId) {
       setError('Please select both start and destination');
@@ -177,16 +186,14 @@ export default function NavigationPage() {
       });
       setRoute(result);
 
-      // Group path_coords by floor based on transition points (entrance/stairs/elevator)
-      const floorPathMap = new Map<number, number[][]>();
+      // Group path_coords by floor based on path_node_ids (more accurate than coords)
+      const floorPathMap = new Map<number, { coords: number[][], nodes: number[] }>();
       
-      // Determine initial floor from first coordinate
+      // Determine initial floor from first node ID
       let currentFloorIdx = 0;
-      if (result.path_coords.length > 0) {
-        const firstCoord = result.path_coords[0];
-        const firstNode = allNodes.find(n => 
-          Math.abs(n.x - firstCoord[0]) < 2 && Math.abs(n.y - firstCoord[1]) < 2
-        );
+      if (result.path_node_ids.length > 0) {
+        const firstNodeId = result.path_node_ids[0];
+        const firstNode = allNodes.find(n => n.id === firstNodeId);
         if (firstNode) {
           const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
           if (initialFloorIdx !== -1) {
@@ -194,55 +201,72 @@ export default function NavigationPage() {
           }
         }
       }
-      let lastTransitionFloorIdx = -1;
       
-      for (let i = 0; i < result.path_coords.length; i++) {
+      // Build map from node ID to node
+      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+      
+      // Process each node in path to determine floor
+      let currentCoords: number[][] = [];
+      let currentNodes: number[] = [];
+      
+      for (let i = 0; i < result.path_node_ids.length; i++) {
+        const nodeId = result.path_node_ids[i];
         const coord = result.path_coords[i];
+        const node = nodeMap.get(nodeId);
         
-        // Check if this coord is at a transition node (entrance/stairs/elevator)
-        const transitionNode = allNodes.find(n => 
-          (n.type === 'entrance' || n.type === 'stairs' || n.type === 'elevator') &&
-          Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2
-        );
+        if (!node) {
+          currentCoords.push(coord);
+          continue;
+        }
         
-        if (transitionNode) {
-          // Found a transition node - switch to its floor
-          const newFloorIdx = floorMaps.findIndex(f => f.map.id === transitionNode.map_id);
-          if (newFloorIdx !== -1) {
+        // Check if this is a transition node (entrance/stairs/elevator)
+        const isTransitionNode = node.type === 'entrance' || node.type === 'stairs' || node.type === 'elevator';
+        
+        if (isTransitionNode && currentNodes.length > 0) {
+          // Find new floor
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+          
+          // Only switch floor if it's actually a different floor
+          if (newFloorIdx !== -1 && newFloorIdx !== currentFloorIdx) {
+            // Save current segment before switching floor
+            if (!floorPathMap.has(currentFloorIdx)) {
+              floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
+            }
             currentFloorIdx = newFloorIdx;
-            lastTransitionFloorIdx = newFloorIdx;
+            currentCoords = [];
+            currentNodes = [];
           }
         }
         
-        // If we've just transitioned, use the new floor
-        // Otherwise, stay on the current floor unless we find a new transition
-        if (lastTransitionFloorIdx !== -1 && lastTransitionFloorIdx !== currentFloorIdx) {
-          currentFloorIdx = lastTransitionFloorIdx;
-        }
-        
+        // Add to current segment
+        currentCoords.push(coord);
+        currentNodes.push(nodeId);
+      }
+      
+      // Save last segment
+      if (currentCoords.length > 0) {
         if (!floorPathMap.has(currentFloorIdx)) {
-          floorPathMap.set(currentFloorIdx, []);
+          floorPathMap.set(currentFloorIdx, { coords: currentCoords, nodes: currentNodes });
         }
-        floorPathMap.get(currentFloorIdx)!.push(coord);
       }
       
       // Convert to segments
       const segments: FloorSegment[] = [];
-      floorPathMap.forEach((pathCoords, floorIdx) => {
-        // Find floor change node for this floor
+      floorPathMap.forEach((data, floorIdx) => {
+        // Find floor change node for this floor (first stairs/elevator in path)
         let floorChangeNode: { x: number; y: number; type: string } | undefined;
-        const firstCoord = pathCoords[0];
-        const transitionNode = allNodes.find(n => 
-          Math.abs(n.x - firstCoord[0]) < 1 && Math.abs(n.y - firstCoord[1]) < 1 &&
-          (n.type === 'stairs' || n.type === 'elevator')
-        );
-        if (transitionNode) {
-          floorChangeNode = { x: transitionNode.x, y: transitionNode.y, type: transitionNode.type };
+        
+        for (const nodeId of data.nodes) {
+          const node = nodeMap.get(nodeId);
+          if (node && (node.type === 'stairs' || node.type === 'elevator')) {
+            floorChangeNode = { x: node.x, y: node.y, type: node.type };
+            break;
+          }
         }
         
         segments.push({
           floorIndex: floorIdx,
-          pathCoords,
+          pathCoords: data.coords,
           instructions: [],
           floorChangeNode,
         });
@@ -477,6 +501,15 @@ export default function NavigationPage() {
                   Find Route
                 </>
               )}
+            </button>
+
+            {/* Refresh Cache Button */}
+            <button
+              onClick={handleRefreshCache}
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <span className="material-symbols-outlined">refresh</span>
+              Refresh Map Cache
             </button>
 
             {error && (

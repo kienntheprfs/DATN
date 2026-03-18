@@ -1,4 +1,4 @@
-import { apiClient } from "@/shared/api/client";
+import { apiClient, getFullImageUrl } from "@/shared/api/client";
 import { MapData, MapNode, MapEdge } from "@/shared/types";
 
 export interface MapWithData {
@@ -25,7 +25,7 @@ export const mapApi = {
     const res = await apiClient.get<MapData[]>("/api/maps", { 
       params: { building_id: buildingId } 
     });
-    return res.data;
+    return res.data.map(m => ({ ...m, image_url: getFullImageUrl(m.image_url) }));
   },
 
   getAllMaps: async (): Promise<MapData[]> => {
