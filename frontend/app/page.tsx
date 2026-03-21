@@ -1,18 +1,18 @@
-import { Analytics } from "@vercel/analytics/react";
-import { Home } from "./components/home";
-import { getServerSideConfig } from "./config/server";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import { Search } from "lucide-react"
 
-const serverConfig = getServerSideConfig();
-
-export default async function App() {
+export default function Home() {
   return (
-    <>
-      <Home />
-      {serverConfig?.isVercel && (
-        <>
-          <Analytics />
-        </>
-      )}
-    </>
-  );
+    <InputGroup className="max-w-xs">
+      <InputGroupInput placeholder="Search..." />
+      <InputGroupAddon>
+        <Search />
+      </InputGroupAddon>
+      <InputGroupAddon align="inline-end">12 results</InputGroupAddon>
+    </InputGroup>
+  )
 }
