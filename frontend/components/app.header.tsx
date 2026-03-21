@@ -20,7 +20,8 @@ const routeDictionary: Record<string, string> = {
   "history": "Lịch sử tra cứu",
   "settings": "Cấu hình hệ thống",
   "knowledge": "Kho văn bản",
-  "navigation": "Tìm đường"
+  "navigation": "Tìm đường",
+  "chat": "Trò chuyện với Al",
 };
 
 export function AppHeader() {

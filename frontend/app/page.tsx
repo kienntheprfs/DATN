@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Button } from "@/components/ui/button";
 
 import SuggestionSection from "@/components/page.suggest";
+import { ChatInput } from "@/components/page.chatinput";
 
 export default function Home() {
 	return (
@@ -25,68 +26,14 @@ export default function Home() {
 					</p>
 				</div>
 
-				{/* --- PHẦN KHUNG NHẬP LIỆU (CHAT BOX) --- */}
-				{/* Bọc toàn bộ Input và Button vào 1 cái viền to, có bóng mờ */}
-				<div className="flex w-full flex-col overflow-hidden border bg-background shadow-md transition-all focus-within:ring-2 focus-within:ring-primary/50">
-					{/* Hàng 1: Ô nhập text và Icon Voice */}
-					<InputGroupTextarea id="block-end-textarea" placeholder="Write a comment..." />
-
-					{/* Hàng 2: Các công cụ (Đính kèm, Cài đặt) và Nút Gửi */}
-					<div className="flex items-center justify-between bg-muted/20 px-3 pb-3 pt-1">
-						<div className="flex items-center gap-1">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="size-9 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-									>
-										<Paperclip className="size-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>Đính kèm tài liệu</TooltipContent>
-							</Tooltip>
-
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="size-9 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-									>
-										<SlidersHorizontal className="size-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>Cấu hình tra cứu</TooltipContent>
-							</Tooltip>
-						</div>
-
-						<div className="flex items-center gap-1">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									{/* TooltipTrigger giờ bọc trực tiếp Button, hoàn toàn không bị lỗi Hydration */}
-									<Button variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10">
-										<AudioLinesIcon className="size-5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>Tìm kiếm bằng giọng nói</TooltipContent>
-							</Tooltip>
-
-							{/* Nút Tra cứu*/}
-							<Button variant="default">
-								<Send className="mr-2 size-4" />
-								Tra cứu
-							</Button>
-						</div>
-					</div>
-				</div>
+				<ChatInput />
 
 				<SuggestionSection />
 
-				<div className="max-w-2xl text-sm text-center text-muted-foreground mb-3">
+				<footer className="max-w-2xl text-sm text-center text-muted-foreground mb-3">
 					<p>Hệ thống sử dụng Al để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp dụng.</p>
 					<p>@ 2026 Nhóm đồ án HTK.</p>
-				</div>
+				</footer>
 			</div>
 		</div>
 	);
