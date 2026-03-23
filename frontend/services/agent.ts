@@ -64,7 +64,8 @@ class AgentClient {
 			agent?: string;
 			threadId?: string;
 			streamTokens?: boolean;
-		} = {}
+		} = {},
+		signal?: AbortSignal
 	): AsyncGenerator<StreamChunk, void, unknown> {
 		const { model, agent = "chatbot", threadId, streamTokens = true } = options;
 
@@ -83,6 +84,7 @@ class AgentClient {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(requestBody),
+			signal,
 		});
 
 		if (!response.ok) {

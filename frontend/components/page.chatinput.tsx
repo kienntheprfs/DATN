@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, SlidersHorizontal, AudioLinesIcon, Send } from "lucide-react";
+import { Paperclip, SlidersHorizontal, AudioLinesIcon, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group"; 
@@ -84,14 +84,23 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
               <TooltipContent>Tìm kiếm bằng giọng nói</TooltipContent>
             </Tooltip>
 
-            <Button 
-              variant="default" 
+            <Button
+              variant={isLoading ? "destructive" : "default"}
               className="rounded-none font-bold"
               onClick={handleSend}
               disabled={isLoading}
             >
-              <Send className="mr-2 size-4" />
-              {isLoading ? "Đang xử lý..." : "Tra cứu"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Đang xử lý...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 size-4" />
+                  Tra cứu
+                </>
+              )}
             </Button>
           </div>
         </div>

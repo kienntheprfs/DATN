@@ -12,6 +12,7 @@ interface UseChatOptions {
 interface UseChatReturn {
 	messages: ChatMessage[];
 	sendMessage: (message: string) => Promise<void>;
+	stop: () => void;
 	isLoading: boolean;
 	error: string | null;
 	threadId: string;
@@ -27,6 +28,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const processingRef = useRef(false);
+
+	const stop = useCallback(() => {
+		if (abortControllerRef.current) {
+			abortControllerRef.current.abort();
+		}
+	}, []);
 
 	const sendMessage = useCallback(
 		async (message: string) => {
@@ -60,7 +67,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					agent,
 					threadId: threadId,
 					streamTokens: true,
-				})) {
+				}, abortControllerRef.current.signal)) {
 					if (abortControllerRef.current?.signal.aborted) {
 						break;
 					}
@@ -94,6 +101,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	return {
 		messages,
 		sendMessage,
+		stop,
 		isLoading,
 		error,
 		threadId,

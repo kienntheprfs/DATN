@@ -25,7 +25,7 @@ function ChatContent() {
 		}
 	}, [agent, model]);
 
-	const { messages, sendMessage, isLoading, error } = useChat({
+	const { messages, sendMessage, stop, isLoading, error } = useChat({
 		model: currentModel,
 		agent: currentAgent,
 	});
@@ -39,7 +39,7 @@ function ChatContent() {
 
 	return (
 		<div className="flex h-screen w-full flex-col bg-background">
-			<ChatWindow messages={messages} error={error} />
+			<ChatWindow messages={messages} error={error} isStreaming={isLoading} onStop={stop} />
 
 			<div className="border-t border-border bg-background p-4">
 				<div className="mx-auto w-full max-w-4xl">
