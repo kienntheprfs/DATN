@@ -88,7 +88,7 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
               variant="default" 
               className="rounded-none font-bold"
               onClick={handleSend}
-              disabled={!message.trim() || isLoading}
+              disabled={isLoading}
             >
               <Send className="mr-2 size-4" />
               {isLoading ? "Đang xử lý..." : "Tra cứu"}
