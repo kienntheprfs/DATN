@@ -2,18 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, SlidersHorizontal, AudioLinesIcon, Send, Loader2 } from "lucide-react";
+import { Paperclip, SlidersHorizontal, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { InputGroupTextarea } from "@/components/ui/input-group"; 
+import { InputGroupTextarea } from "@/components/ui/input-group";
+import { VoiceButton } from "@/components/voice-button";
 
 interface ChatInputProps {
-  // Hàm này sẽ được gọi ở trang /chat khi bấm gửi
   onSubmitMessage?: (message: string) => void;
   isLoading?: boolean;
+  voiceServerUrl?: string;
+  voiceAgentId?: string;
+  voiceModel?: string;
+  onVoiceTranscript?: (text: string) => void;
 }
 
-export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps) {
+export function ChatInput({
+  onSubmitMessage,
+  isLoading = false,
+  voiceServerUrl = "http://localhost:7860",
+  voiceAgentId = "chatbot",
+  voiceModel,
+  onVoiceTranscript,
+}: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
 
@@ -21,18 +32,15 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
     if (!message.trim() || isLoading) return;
 
     if (onSubmitMessage) {
-      // Đang ở trang Chat: Truyền text lên cho useChat xử lý, rồi xóa ô input
       onSubmitMessage(message);
       setMessage(""); 
     } else {
-      // Đang ở trang Chủ: Gom câu hỏi vào URL và chuyển trang
       const params = new URLSearchParams({ q: message });
       router.push(`/chat?${params.toString()}`);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Nhấn Enter để gửi (Nhấn Shift+Enter để xuống dòng)
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -43,7 +51,6 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
     <TooltipProvider>
       <div className="flex w-full flex-col overflow-hidden border border-border bg-background shadow-md transition-all focus-within:ring-2 focus-within:ring-primary/50 rounded-none">
         
-        {/* Hàng 1: Textarea */}
         <InputGroupTextarea 
           id="chat-textarea" 
           placeholder="Nhập câu hỏi hoặc yêu cầu tra cứu..." 
@@ -52,7 +59,6 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
           onKeyDown={handleKeyDown}
         />
 
-        {/* Hàng 2: Toolbar */}
         <div className="flex items-center justify-between bg-muted/20 px-3 pb-3 pt-1">
           <div className="flex items-center gap-1">
             <Tooltip>
@@ -75,14 +81,12 @@ export function ChatInput({ onSubmitMessage, isLoading = false }: ChatInputProps
           </div>
 
           <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-9 rounded-none text-muted-foreground hover:bg-primary/10 hover:text-primary">
-                  <AudioLinesIcon className="size-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Tìm kiếm bằng giọng nói</TooltipContent>
-            </Tooltip>
+            <VoiceButton
+              voiceServerUrl={voiceServerUrl}
+              agentId={voiceAgentId}
+              model={voiceModel}
+              onTranscript={onVoiceTranscript}
+            />
 
             <Button
               variant={isLoading ? "destructive" : "default"}

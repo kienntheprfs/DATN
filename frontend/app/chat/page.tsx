@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import { useAgent } from "@/contexts/agent-context";
@@ -13,29 +13,23 @@ function ChatContent() {
 	const hasAppended = useRef(false);
 	const { model, agent } = useAgent();
 
-	const [isReady, setIsReady] = useState(false);
-	const [currentAgent, setCurrentAgent] = useState("chatbot");
-	const [currentModel, setCurrentModel] = useState("gpt-5-nano");
-
-	useEffect(() => {
-		if (agent && model) {
-			setCurrentAgent(agent);
-			setCurrentModel(model);
-			setIsReady(true);
-		}
-	}, [agent, model]);
-
 	const { messages, sendMessage, stop, isLoading, error } = useChat({
-		model: currentModel,
-		agent: currentAgent,
+		model: model || "gpt-5-nano",
+		agent: agent || "chatbot",
 	});
 
+	const handleVoiceTranscript = (text: string) => {
+		if (text.trim()) {
+			sendMessage(text);
+		}
+	};
+
 	useEffect(() => {
-		if (initialQuery && !hasAppended.current && isReady) {
+		if (initialQuery && !hasAppended.current && model && agent) {
 			hasAppended.current = true;
 			sendMessage(initialQuery);
 		}
-	}, [initialQuery, sendMessage, isReady]);
+	}, [initialQuery, sendMessage, model, agent]);
 
 	return (
 		<div className="flex h-screen w-full flex-col bg-background">
@@ -43,7 +37,14 @@ function ChatContent() {
 
 			<div className="border-t border-border bg-background p-4">
 				<div className="mx-auto w-full max-w-4xl">
-					<ChatInput isLoading={isLoading} onSubmitMessage={sendMessage} />
+					<ChatInput
+						isLoading={isLoading}
+						onSubmitMessage={sendMessage}
+						voiceServerUrl="http://localhost:7860"
+						voiceAgentId={agent || "chatbot"}
+						voiceModel={model}
+						onVoiceTranscript={handleVoiceTranscript}
+					/>
 				</div>
 			</div>
 		</div>
