@@ -25,12 +25,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {/* flex-1: Chiếm hết khoảng trống còn lại */}
               {/* w-full: Rộng 100% phần không gian được chia */}
               {/* flex flex-col: Xếp Header ở trên, Nội dung ở dưới */}
-              <main className="flex flex-1 flex-col w-full min-w-0">
+              <main className="flex flex-col flex-1 w-full min-w-0">
                 
                 <AppHeader />
                 
                 {/* Vùng chứa các trang con */}
-                <div className="flex-1 flex flex-col">
+                <div className="flex flex-1 overflow-hidden">
                   {children}
                 </div>
                 

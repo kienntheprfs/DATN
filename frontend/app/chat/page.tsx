@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import { useAgent } from "@/contexts/agent-context";
 import { useVoice } from "@/hooks/use-voice";
+import { useSidebar } from "@/components/ui/sidebar";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput } from "@/components/page.chatinput";
 
@@ -15,6 +16,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const hasAppended = useRef(false);
 	const voiceStarted = useRef(false);
 	const { model, agent } = useAgent();
+	const { state } = useSidebar();
 
 	const { messages, sendMessage, addUserMessage, addBotMessage, updateLastBotMessage, stop, isLoading, isTyping, currentTools, error } = useChat({
 		model: model || "gpt-5-nano",
@@ -67,19 +69,20 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	}, [shouldStartVoice, voice.state]);
 
 	return (
-		<div className="flex flex-1 flex-col overflow-hidden bg-background">
-			<ChatWindow 
-				messages={messages} 
-				error={error} 
-				isStreaming={isLoading} 
-				isTyping={isTyping}
-				isVoiceMode={voice.state === "connected"}
-				isListening={voice.isListening}
-				currentTools={currentTools}
-				partialText={voice.partialText}
-			/>
-
-			<div className="shrink-0 border-t border-border bg-background p-4">
+		<>
+			<div className="flex flex-1 flex-col overflow-hidden bg-background pb-32">
+				<ChatWindow 
+					messages={messages} 
+					error={error} 
+					isStreaming={isLoading} 
+					isTyping={isTyping}
+					isVoiceMode={voice.state === "connected"}
+					isListening={voice.isListening}
+					currentTools={currentTools}
+					partialText={voice.partialText}
+				/>
+			</div>
+			<div className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${state === "collapsed" ? "left-0" : "left-64"} right-0`}>
 				<div className="mx-auto w-full max-w-4xl">
 					<ChatInput
 						isLoading={isLoading}
@@ -96,7 +99,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 					/>
 				</div>
 			</div>
-		</div>
+		</>
 	);
 }
 

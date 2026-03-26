@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Mic, MicOff, Loader2 } from "lucide-react";
+import { Mic, MicOff, Loader2, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVoice, VoiceConnectionState } from "@/hooks/use-voice";
@@ -63,11 +63,8 @@ export function VoiceButton({
     if (state === "connecting") {
       return <Loader2 className="size-5 animate-spin" />;
     }
-    if (isSpeaking) {
-      return <Mic className="size-5 text-red-500 animate-pulse" />;
-    }
-    if (isListening) {
-      return <Mic className="size-5 text-green-500" />;
+    if (state === "connected") {
+      return <PhoneOff className="size-5" />;
     }
     if (state === "error") {
       return <MicOff className="size-5 text-red-500" />;
@@ -80,9 +77,7 @@ export function VoiceButton({
       case "connecting":
         return "Đang kết nối...";
       case "connected":
-        if (isSpeaking) return "Bot đang nói...";
-        if (isListening) return "Đang nghe... Nhấn để dừng";
-        return "Đã kết nối";
+        return "Kết thúc cuộc gọi";
       case "error":
         return `Lỗi: ${error || "Không thể kết nối"}. Nhấn để thử lại`;
       default:
@@ -90,18 +85,19 @@ export function VoiceButton({
     }
   };
 
-  const isActive = state === "connected" || state === "connecting";
+  const isConnecting = state === "connecting";
+  const isConnected = state === "connected";
   const isDisabled = state === "connecting";
 
   return (
     <Tooltip open={showTooltip} onOpenChange={setShowTooltip}>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
+          variant={isConnected ? "destructive" : "ghost"}
           size="icon"
           className={`size-9 rounded-none transition-all ${
-            isActive
-              ? "bg-primary/20 text-primary hover:bg-primary/30"
+            isConnected
+              ? "bg-red-500 hover:bg-red-600 text-white"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
           } ${className || ""}`}
           onClick={handleClick}

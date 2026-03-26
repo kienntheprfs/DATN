@@ -186,7 +186,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 		if (scrollRef.current) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [visibleMessages]);
+	}, [visibleMessages, currentTools.length]);
 
 	const groupedMessages = useMemo(() => {
 		const groups: GroupedMessages[] = [];
@@ -253,7 +253,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 									<Bot className="size-6" />
 								</div>
-								<div className="flex-1 max-w-[85%] space-y-2">
+								<div className="flex-1 max-w-[85%]">
 									{currentTools.map((tool) => (
 										<ToolCollapsible key={tool.id} tool={tool} />
 									))}
@@ -268,6 +268,9 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								<Bot className="size-6" />
 							</div>
 							<div className="group relative max-w-[85%] space-y-2">
+								{showToolsForThisGroup && currentTools.map((tool) => (
+									<ToolCollapsible key={tool.id} tool={tool} />
+								))}
 								{combinedContent && (
 									<div className="p-4 text-sm rounded-none shadow-sm transition-all duration-200 border bg-background border-border">
 										<div className="prose prose-sm dark:prose-invert max-w-none">
@@ -277,9 +280,6 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 										</div>
 									</div>
 								)}
-								{showToolsForThisGroup && currentTools.map((tool) => (
-									<ToolCollapsible key={tool.id} tool={tool} />
-								))}
 							</div>
 						</div>
 					);
@@ -307,16 +307,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 							</div>
 						</div>
 						<div className="flex-1 max-w-[85%]">
-							{displayText ? (
-								<div className="p-4 text-sm rounded-none shadow-sm transition-all duration-200 border border-border bg-background">
-									<p className="whitespace-pre-wrap">
-										{displayText}
-										<ThinkingText />
-									</p>
-								</div>
-							) : (
-								<VoiceLoadingIndicator isListening={isListening || false} />
-							)}
+							<VoiceLoadingIndicator isListening={isListening || false} />
 						</div>
 					</div>
 				)}
