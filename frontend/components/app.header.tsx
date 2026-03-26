@@ -108,7 +108,7 @@ export function AppHeader() {
 	const pathSegments = pathname === "/" ? [] : pathname.split("/").filter((segment) => segment);
 
 	return (
-		<header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-4">
+		<header className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
 			<SidebarTrigger className="-ml-3" />
 
 			<div className="mr-2 h-4 w-px bg-border" />

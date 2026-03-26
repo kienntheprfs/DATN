@@ -17,8 +17,16 @@ export interface ChatHistory {
 }
 
 export interface StreamChunk {
-	type: "token" | "message" | "error" | "done";
+	type: string;
 	content?: string;
+	msgType?: "ai" | "tool" | "human";
+	toolCalls?: Array<{
+		id: string;
+		name: string;
+		args: Record<string, unknown>;
+	}>;
+	toolCallId?: string;
+	raw?: unknown;
 }
 
 export class AgentClientError extends Error {
@@ -125,15 +133,40 @@ class AgentClient {
 
 					try {
 						const parsed = JSON.parse(data);
-						if (parsed.type === "message" && typeof parsed.content === "object" && parsed.content !== null) {
+						console.log("Parsed:", parsed);
+						
+						// Check if content is an object with type field (ChatMessage format)
+						if (parsed.type === "message" && parsed.content && typeof parsed.content === "object") {
+							const content = parsed.content;
+							// content has: type, content (string), tool_calls?, tool_call_id?
+							if (content.type === "ai" || content.type === "tool") {
+								yield {
+									type: "message" as const,
+									msgType: content.type,
+									content: content.content || "",
+									toolCalls: content.tool_calls || null,
+									toolCallId: content.tool_call_id || null,
+								};
+							} else {
+								yield {
+									type: "message" as const,
+									content: JSON.stringify(content),
+								};
+							}
+						} else if (parsed.type === "token") {
 							yield {
-								type: "message" as const,
-								content: parsed.content.content ?? JSON.stringify(parsed.content),
+								type: "token" as const,
+								content: parsed.content,
+							};
+						} else if (parsed.type === "error") {
+							yield {
+								type: "error" as const,
+								content: parsed.content,
 							};
 						} else {
 							yield {
-								type: parsed.type as StreamChunk["type"],
-								content: parsed.content ?? parsed.content?.content,
+								type: "unknown" as const,
+								raw: parsed,
 							};
 						}
 					} catch {

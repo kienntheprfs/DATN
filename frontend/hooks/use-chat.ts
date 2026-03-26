@@ -9,6 +9,13 @@ interface UseChatOptions {
 	threadId?: string;
 }
 
+interface ToolCall {
+	id: string;
+	name: string;
+	status: "executing" | "done";
+	content: string | null;
+}
+
 interface UseChatReturn {
 	messages: ChatMessage[];
 	sendMessage: (message: string) => Promise<void>;
@@ -18,8 +25,20 @@ interface UseChatReturn {
 	stop: () => void;
 	isLoading: boolean;
 	isTyping: boolean;
+	currentTools: ToolCall[];
 	error: string | null;
 	threadId: string;
+}
+
+interface BackendMessage {
+	type: "human" | "ai" | "tool";
+	content: string;
+	tool_calls?: Array<{
+		name: string;
+		args: Record<string, unknown>;
+		id: string;
+	}>;
+	tool_call_id?: string;
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
@@ -28,11 +47,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
+	const [currentTools, setCurrentTools] = useState<ToolCall[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [threadId] = useState(() => initialThreadId || crypto.randomUUID());
 
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const processingRef = useRef(false);
+	const toolContentRef = useRef<string | null>(null);
+	const toolTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	const stop = useCallback(() => {
 		if (abortControllerRef.current) {
@@ -48,10 +70,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 				}
 			}
 
+			if (toolTimeoutRef.current) {
+				clearTimeout(toolTimeoutRef.current);
+				toolTimeoutRef.current = null;
+			}
+
 			processingRef.current = true;
 			abortControllerRef.current = new AbortController();
 			setIsLoading(true);
 			setError(null);
+			setCurrentTools([]);
 
 			const userMsg: ChatMessage = {
 				id: `user-${Date.now()}`,
@@ -62,7 +90,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			setMessages((prev) => [...prev, userMsg]);
 
 			const assistantMsgId = `assistant-${Date.now()}`;
-			let fullResponse = "";
 
 			setMessages((prev) => [...prev, { id: assistantMsgId, role: "assistant", content: "" }]);
 
@@ -78,28 +105,66 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					}
 
 					if (chunk.type === "token" && chunk.content) {
-						fullResponse += chunk.content;
-						setMessages((prev) =>
-							prev.map((m) => (m.id === assistantMsgId ? { ...m, content: fullResponse } : m))
-						);
-					} else if (chunk.type === "message" && chunk.content) {
-						const completeResponse = typeof chunk.content === "string" ? chunk.content : (chunk.content as any)?.content || "";
-						setIsTyping(true);
-						
-						const words = completeResponse.split(" ");
-						for (let i = 0; i <= words.length; i++) {
-							if (abortControllerRef.current?.signal.aborted) break;
-							fullResponse = words.slice(0, i).join(" ");
-							setMessages((prev) =>
-								prev.map((m) => (m.id === assistantMsgId ? { ...m, content: fullResponse } : m))
-							);
-							if (i < words.length) {
-								await new Promise(resolve => setTimeout(resolve, 20));
+						setMessages((prev) => {
+							const existing = prev.find((m) => m.id === assistantMsgId);
+							if (existing) {
+								return prev.map((m) =>
+									m.id === assistantMsgId
+										? { ...m, content: (m.content || "") + chunk.content }
+										: m
+								);
 							}
+							return [...prev, { id: assistantMsgId, role: "assistant", content: chunk.content }];
+						});
+					} else if (chunk.type === "message") {
+						const msgType = (chunk as any).msgType;
+						const toolCalls = (chunk as any).toolCalls;
+						const toolCallId = (chunk as any).toolCallId;
+						const content = chunk.content as string;
+
+						if (msgType === "tool") {
+							const toolId = toolCallId || `tool-${Date.now()}`;
+							setCurrentTools((prev) =>
+								prev.map((t) =>
+									t.id === toolId
+										? { ...t, status: "done", content }
+										: t
+								)
+							);
+							continue;
 						}
-						setIsTyping(false);
+
+						if (msgType === "ai" && toolCalls && toolCalls.length > 0) {
+							setIsTyping(false);
+							const newTools: ToolCall[] = toolCalls.map((tool: any) => ({
+								id: tool.id,
+								name: tool.name,
+								status: "executing" as const,
+								content: null,
+							}));
+							setCurrentTools((prev) => [...prev, ...newTools]);
+							continue;
+						}
+
+						if (content) {
+							setMessages((prev) => {
+								const existing = prev.find((m) => m.id === assistantMsgId);
+								if (existing) {
+									return prev.map((m) =>
+										m.id === assistantMsgId
+											? { ...m, content: content }
+											: m
+									);
+								}
+								return [...prev, { id: assistantMsgId, role: "assistant", content: content }];
+							});
+						}
+						break;
 					} else if (chunk.type === "error") {
 						setError(chunk.content || "Unknown error");
+						setIsToolRunning(false);
+						setToolName(null);
+						setToolContent(null);
 					}
 				}
 			} catch (err) {
@@ -148,6 +213,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		stop,
 		isLoading,
 		isTyping,
+		currentTools,
 		error,
 		threadId,
 	};

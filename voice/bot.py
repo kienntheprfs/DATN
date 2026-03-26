@@ -35,16 +35,11 @@ from zipformer_stt.sherpa_stt import SherpaSTTService
 
 load_dotenv(override=True)
 
-logger.remove(0)
-logger.add(sys.stderr, level="DEBUG")
-
-# Agent API configuration
 AGENT_API_URL = os.getenv("AGENT_API_URL", "http://localhost:8080")
 USE_AGENT_API = os.getenv("USE_AGENT_API", "false").lower() == "true"
 
 
 def create_llm(session):
-    """Create LLM service based on configuration."""
     if USE_AGENT_API:
         return DirectAPIAgentLLMService(
             api_url=AGENT_API_URL,
@@ -94,7 +89,11 @@ async def run_bot(webrtc_connection):
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
             context,
             user_params=LLMUserAggregatorParams(
-                user_turn_strategies=UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]),
+                user_turn_strategies=UserTurnStrategies(
+                    stop=[
+                        TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
+                    ]
+                ),
             ),
         )
 

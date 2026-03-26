@@ -15,6 +15,7 @@ interface UseVoiceOptions {
   model?: string;
   onTranscript?: (text: string) => void;
   onBotOutput?: (text: string) => void;
+  onBotPartialOutput?: (text: string) => void;
   onError?: (error: string) => void;
 }
 
@@ -22,9 +23,12 @@ interface UseVoiceReturn {
   state: VoiceConnectionState;
   isListening: boolean;
   isSpeaking: boolean;
+  isMuted: boolean;
   error: string | null;
+  partialText: string;
   startConversation: () => Promise<void>;
   stopConversation: () => void;
+  toggleMute: () => void;
 }
 
 export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
@@ -34,17 +38,22 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     model,
     onTranscript,
     onBotOutput,
+    onBotPartialOutput,
     onError,
   } = options;
 
   const [state, setState] = useState<VoiceConnectionState>("idle");
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialText, setPartialText] = useState<string>("");
+  const partialTextRef = useRef<string>("");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
   const pcIdRef = useRef<string | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
   const canSendCandidatesRef = useRef(false);
@@ -63,13 +72,26 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     if (audioRef.current) {
       audioRef.current.srcObject = null;
     }
+    if (audioTrackRef.current) {
+      audioTrackRef.current.stop();
+      audioTrackRef.current = null;
+    }
     pcIdRef.current = null;
     canSendCandidatesRef.current = false;
     pendingCandidatesRef.current = [];
     setState("disconnected");
     setIsListening(false);
     setIsSpeaking(false);
+    setIsMuted(false);
   }, []);
+
+  const toggleMute = useCallback(() => {
+    if (audioTrackRef.current) {
+      const newMuted = !isMuted;
+      audioTrackRef.current.enabled = !newMuted;
+      setIsMuted(newMuted);
+    }
+  }, [isMuted]);
 
   const sendIceCandidate = useCallback(async (candidate: RTCIceCandidate) => {
     if (!pcIdRef.current) return;
@@ -133,23 +155,23 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
             break;
 
           case "bot-output":
-            // Only add bot message when spoken flag is true
-            if (message.data?.spoken && message.data?.text) {
-              const messageKey = `bot:${message.data.text}`;
-              const currentTime = Date.now();
-
-              if (currentTime - lastMessageTimeRef.current < MESSAGE_DEBOUNCE_TIME) {
-                return;
-              }
-              lastMessageTimeRef.current = currentTime;
+            if (message.data?.text && message.data?.spoken) {
+              const text = message.data.text;
+              const messageKey = `bot:${text}`;
 
               if (recentMessagesRef.current.has(messageKey)) {
                 return;
               }
               recentMessagesRef.current.add(messageKey);
 
+              if (recentMessagesRef.current.size > 50) {
+                const entries = Array.from(recentMessagesRef.current);
+                recentMessagesRef.current.clear();
+                entries.slice(-25).forEach(entry => recentMessagesRef.current.add(entry));
+              }
+
               if (onBotOutput) {
-                onBotOutput(message.data.text);
+                onBotOutput(text);
               }
             }
             break;
@@ -170,7 +192,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     } catch (err) {
       console.error("Error parsing data channel message:", err);
     }
-  }, [onTranscript, onBotOutput, onError]);
+  }, [onTranscript, onBotOutput, onBotPartialOutput, onError]);
 
   const startConversation = useCallback(async () => {
     if (state === "connected" || state === "connecting") {
@@ -185,6 +207,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioTrack = audioStream.getAudioTracks()[0];
+      audioTrackRef.current = audioTrack;
 
       const iceServers: RTCIceServer[] = [
         { urls: "stun:stun.l.google.com:19302" },
@@ -311,8 +334,11 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     state,
     isListening,
     isSpeaking,
+    isMuted,
     error,
+    partialText,
     startConversation,
     stopConversation,
+    toggleMute,
   };
 }

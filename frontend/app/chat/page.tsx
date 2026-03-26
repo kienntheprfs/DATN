@@ -8,7 +8,7 @@ import { useVoice } from "@/hooks/use-voice";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput } from "@/components/page.chatinput";
 
-function ChatContent() {
+function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
 	const initialQuery = searchParams.get("q");
 	const shouldStartVoice = searchParams.get("voice") === "true";
@@ -16,10 +16,7 @@ function ChatContent() {
 	const voiceStarted = useRef(false);
 	const { model, agent } = useAgent();
 
-	const [isListening, setIsListening] = useState(false);
-	const [isSpeaking, setIsSpeaking] = useState(false);
-
-	const { messages, sendMessage, addUserMessage, addBotMessage, updateLastBotMessage, stop, isLoading, isTyping, error } = useChat({
+	const { messages, sendMessage, addUserMessage, addBotMessage, updateLastBotMessage, stop, isLoading, isTyping, currentTools, error } = useChat({
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
 	});
@@ -41,30 +38,19 @@ function ChatContent() {
 		onError: (err) => console.error("Voice error:", err),
 	});
 
-	useEffect(() => {
-		setIsListening(voice.isListening);
-		setIsSpeaking(voice.isSpeaking);
-	}, [voice.isListening, voice.isSpeaking]);
-
-	const handleVoiceTranscript = (text: string) => {
-		if (text.trim()) {
-			addUserMessage(text);
-		}
-	};
-
-	const handleVoiceBotOutput = (text: string) => {
-		if (text.trim()) {
-			addBotMessage(text);
-		}
-	};
-
 	const handleVoiceStateChange = () => {
 		if (voice.state === "connected") {
 			voice.stopConversation();
 		} else if (voice.state === "idle" || voice.state === "disconnected" || voice.state === "error") {
-			voice.startConversation();
+			onVoiceToggle();
 		}
 	};
+
+	useEffect(() => {
+		if (voice.state === "connected" && !voiceStarted.current) {
+			voiceStarted.current = true;
+		}
+	}, [voice.state]);
 
 	useEffect(() => {
 		if (initialQuery && !hasAppended.current && model && agent) {
@@ -81,18 +67,19 @@ function ChatContent() {
 	}, [shouldStartVoice, voice.state]);
 
 	return (
-		<div className="flex h-screen w-full flex-col bg-background">
+		<div className="flex flex-1 flex-col overflow-hidden bg-background">
 			<ChatWindow 
 				messages={messages} 
 				error={error} 
 				isStreaming={isLoading} 
 				isTyping={isTyping}
-				isListening={isListening}
-				isSpeaking={isSpeaking}
-				onStop={stop} 
+				isVoiceMode={voice.state === "connected"}
+				isListening={voice.isListening}
+				currentTools={currentTools}
+				partialText={voice.partialText}
 			/>
 
-			<div className="border-t border-border bg-background p-4">
+			<div className="shrink-0 border-t border-border bg-background p-4">
 				<div className="mx-auto w-full max-w-4xl">
 					<ChatInput
 						isLoading={isLoading}
@@ -103,9 +90,9 @@ function ChatContent() {
 						voiceState={voice.state}
 						isListening={voice.isListening}
 						isSpeaking={voice.isSpeaking}
-						onVoiceTranscript={handleVoiceTranscript}
-						onVoiceBotOutput={handleVoiceBotOutput}
+						isMuted={voice.isMuted}
 						onVoiceToggle={handleVoiceStateChange}
+						onVoiceMute={voice.toggleMute}
 					/>
 				</div>
 			</div>
@@ -114,9 +101,19 @@ function ChatContent() {
 }
 
 export default function ChatPage() {
+	const [conversationKey, setConversationKey] = useState(0);
+	const voiceRef = useRef<{ startConversation: () => void } | null>(null);
+
+	const handleVoiceToggle = () => {
+		setConversationKey((k) => k + 1);
+	};
+
 	return (
 		<Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-			<ChatContent />
+			<ChatContent 
+				key={conversationKey}
+				onVoiceToggle={handleVoiceToggle}
+			/>
 		</Suspense>
 	);
 }

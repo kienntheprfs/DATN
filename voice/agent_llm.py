@@ -79,19 +79,23 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
 
                     content = strip_markdown(content)
 
-                    yield ChatCompletionChunk(
-                        id="mock-id",
-                        choices=[
-                            {
-                                "delta": {"role": "assistant", "content": content},
-                                "index": 0,
-                                "finish_reason": "stop",
-                            }
-                        ],
-                        model="agent-model",
-                        created=0,
-                        object="chat.completion.chunk",
-                    )
+                    # Stream từng chunk
+                    for i in range(0, len(content), 10):
+                        chunk_text = content[i : i + 10]
+                        is_last = (i + 10) >= len(content)
+                        yield ChatCompletionChunk(
+                            id="mock-id",
+                            choices=[
+                                {
+                                    "delta": {"role": "assistant", "content": chunk_text},
+                                    "index": 0,
+                                    "finish_reason": "stop" if is_last else None,
+                                }
+                            ],
+                            model="agent-model",
+                            created=0,
+                            object="chat.completion.chunk",
+                        )
             except Exception as e:
                 logger.error(f"Invoke error: {e}")
             finally:

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, SlidersHorizontal, Send, Loader2 } from "lucide-react";
+import { Paperclip, SlidersHorizontal, Send, Loader2, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group";
@@ -18,9 +18,11 @@ interface ChatInputProps {
   voiceState?: VoiceConnectionState;
   isListening?: boolean;
   isSpeaking?: boolean;
+  isMuted?: boolean;
   onVoiceTranscript?: (text: string) => void;
   onVoiceBotOutput?: (text: string) => void;
   onVoiceToggle?: () => void;
+  onVoiceMute?: () => void;
 }
 
 export function ChatInput({
@@ -32,9 +34,11 @@ export function ChatInput({
   voiceState = "idle",
   isListening = false,
   isSpeaking = false,
+  isMuted = false,
   onVoiceTranscript,
   onVoiceBotOutput,
   onVoiceToggle,
+  onVoiceMute,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -57,6 +61,8 @@ export function ChatInput({
       handleSend();
     }
   };
+
+  const isVoiceConnected = voiceState === "connected";
 
   return (
     <TooltipProvider>
@@ -91,7 +97,23 @@ export function ChatInput({
             </Tooltip>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {isVoiceConnected && onVoiceMute && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isMuted ? "destructive" : "secondary"}
+                    size="icon"
+                    className="size-9 rounded-none"
+                    onClick={onVoiceMute}
+                  >
+                    {isMuted ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isMuted ? "Bật mic" : "Tắt mic"}</TooltipContent>
+              </Tooltip>
+            )}
+
             <VoiceButton
               voiceServerUrl={voiceServerUrl}
               agentId={voiceAgentId}
