@@ -34,7 +34,15 @@ class SherpaSTTService(SegmentedSTTService):
     STT Service sử dụng Sherpa-ONNX với model local.
     """
 
-    def __init__(self, *, model: str | SherpaModel = SherpaModel.VIETNAMESE, model_dir: str = ".", device: str = "cpu", sample_rate: int = 16000, **kwargs):
+    def __init__(
+        self,
+        *,
+        model: str | SherpaModel = SherpaModel.VIETNAMESE,
+        model_dir: str = ".",
+        device: str = "cpu",
+        sample_rate: int = 16000,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._sample_rate = sample_rate
         self._device = device
@@ -92,7 +100,7 @@ class SherpaSTTService(SegmentedSTTService):
 
             if text:
                 print(f"STT Output: {text}")
-                yield TranscriptionFrame(text, "user", int(time.time() * 1000))
+                yield TranscriptionFrame(text, "user", str(int(time.time() * 1000)))
 
         except Exception as e:
             print(f"Sherpa STT Error: {e}")

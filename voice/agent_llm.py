@@ -1,10 +1,27 @@
 import aiohttp
 import json
 import uuid
+import re
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from pipecat.services.openai.base_llm import BaseOpenAILLMService, OpenAILLMSettings
 from openai.types.chat import ChatCompletionChunk
+
+
+def strip_markdown(text: str) -> str:
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"_(.+?)_", r"\1", text)
+    text = re.sub(r"~~(.+?)~~", r"\1", text)
+    text = re.sub(r"#+\s+(.+)", r"\1", text)
+    text = re.sub(r">\s+(.+)", r"\1", text)
+    text = re.sub(r"-\s+(.+)", r"\1", text)
+    text = re.sub(r"\d+\.\s+(.+)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
+    text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r"\1", text)
+    return text.strip()
 
 
 class DirectAPIAgentLLMService(BaseOpenAILLMService):
@@ -26,7 +43,6 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self._client_session_owned = False
 
     async def get_chat_completions(self, params_from_context):
-        # Lấy messages từ params
         if hasattr(params_from_context, "messages"):
             messages = params_from_context.messages
         elif isinstance(params_from_context, dict):
@@ -36,81 +52,48 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
 
         user_text = self._extract_user_text(messages)
 
+        payload = {
+            "message": user_text,
+            "thread_id": str(uuid.uuid4()),
+        }
+
         if self._session is None:
             self._session = aiohttp.ClientSession()
             self._client_session_owned = True
 
-        endpoint = f"{self.api_url}/{self.agent_name}/stream"
-        # Tạo thread_id mới mỗi lần để tránh lỗi tool_calls từ lịch sử
-        thread_id = str(uuid.uuid4())
-        payload = {
-            "message": user_text,
-            "thread_id": thread_id,
-            "stream_tokens": True,
-        }
+        endpoint = f"{self.api_url}/{self.agent_name}/invoke"
         headers = {"X-User-Id": self.user_id}
 
         async def _generate():
             try:
-                async with self._session.post(endpoint, json=payload, headers=headers, timeout=60.0) as resp:
+                async with self._session.post(
+                    endpoint, json=payload, headers=headers, timeout=60.0
+                ) as resp:
                     resp.raise_for_status()
-                    async for line in resp.content:
-                        line_str = line.decode("utf-8").strip()
-                        if not line_str:
-                            continue
-                        if line_str.startswith("data: "):
-                            data_str = line_str[6:]
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                data = json.loads(data_str)
-                            except json.JSONDecodeError:
-                                continue
+                    data = await resp.json()
 
-                            msg_type = data.get("type")
-                            content = data.get("content")
+                    # Trích xuất content từ response
+                    content = data.get("content", "")
+                    if isinstance(data, dict):
+                        content = data.get("content") or data.get("text") or ""
 
-                            if msg_type == "token" and isinstance(content, str):
-                                yield ChatCompletionChunk(
-                                    id="mock-id",
-                                    choices=[
-                                        {
-                                            "delta": {"role": "assistant", "content": content},
-                                            "index": 0,
-                                            "finish_reason": None,
-                                        }
-                                    ],
-                                    model="agent-model",
-                                    created=0,
-                                    object="chat.completion.chunk",
-                                )
-                            elif msg_type == "message" and content:
-                                # Trích xuất text từ content (có thể là string hoặc dict)
-                                if isinstance(content, dict):
-                                    text = content.get("content") or content.get("text") or str(content)
-                                else:
-                                    text = str(content)
-                                yield ChatCompletionChunk(
-                                    id="mock-id",
-                                    choices=[
-                                        {
-                                            "delta": {"role": "assistant", "content": text},
-                                            "index": 0,
-                                            "finish_reason": "stop",
-                                        }
-                                    ],
-                                    model="agent-model",
-                                    created=0,
-                                    object="chat.completion.chunk",
-                                )
-                                break
-                            elif msg_type == "error":
-                                logger.error(f"Agent stream error: {content}")
-                                # Không yield chunk lỗi, chỉ break
-                                break
+                    content = strip_markdown(content)
+
+                    yield ChatCompletionChunk(
+                        id="mock-id",
+                        choices=[
+                            {
+                                "delta": {"role": "assistant", "content": content},
+                                "index": 0,
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        model="agent-model",
+                        created=0,
+                        object="chat.completion.chunk",
+                    )
             except Exception as e:
-                logger.error(f"Stream error: {e}")
-                # Không yield chunk lỗi
+                logger.error(f"Invoke error: {e}")
             finally:
                 if self._client_session_owned and self._session:
                     await self._session.close()
@@ -127,6 +110,8 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         return AsyncGeneratorWrapper(_generate())
 
     def _extract_user_text(self, messages: List[Dict[str, Any]]) -> str:
+        user_parts = []
+
         for msg in reversed(messages):
             if hasattr(msg, "get"):
                 role = msg.get("role")
@@ -136,6 +121,11 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
                 content = msg.content
             else:
                 continue
-            if role == "user":
-                return content
-        return ""
+
+            if role == "assistant":
+                break
+
+            if role == "user" and content:
+                user_parts.insert(0, str(content))
+
+        return " ".join(user_parts)

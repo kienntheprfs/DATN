@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useVoice } from "@/hooks/use-voice";
+import { useVoice, VoiceConnectionState } from "@/hooks/use-voice";
 
 interface VoiceButtonProps {
   className?: string;
@@ -12,6 +12,11 @@ interface VoiceButtonProps {
   agentId?: string;
   model?: string;
   onTranscript?: (text: string) => void;
+  onBotOutput?: (text: string) => void;
+  externalState?: VoiceConnectionState;
+  externalIsListening?: boolean;
+  externalIsSpeaking?: boolean;
+  onToggle?: () => void;
 }
 
 export function VoiceButton({
@@ -20,26 +25,34 @@ export function VoiceButton({
   agentId = "chatbot",
   model,
   onTranscript,
+  onBotOutput,
+  externalState,
+  externalIsListening,
+  externalIsSpeaking,
+  onToggle,
 }: VoiceButtonProps) {
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const {
-    state,
-    isListening,
-    isSpeaking,
-    error,
-    startConversation,
-    stopConversation,
-  } = useVoice({
+  const internalVoice = useVoice({
     voiceServerUrl,
     agentId,
     model,
     onTranscript,
+    onBotOutput,
     onError: (err) => console.error("Voice error:", err),
   });
 
+  const state = externalState ?? internalVoice.state;
+  const isListening = externalIsListening ?? internalVoice.isListening;
+  const isSpeaking = externalIsSpeaking ?? internalVoice.isSpeaking;
+  const error = internalVoice.error;
+  const startConversation = internalVoice.startConversation;
+  const stopConversation = internalVoice.stopConversation;
+
   const handleClick = () => {
-    if (state === "connected") {
+    if (onToggle) {
+      onToggle();
+    } else if (state === "connected") {
       stopConversation();
     } else if (state === "idle" || state === "disconnected" || state === "error") {
       startConversation();

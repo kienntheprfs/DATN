@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group";
 import { VoiceButton } from "@/components/voice-button";
+import { VoiceConnectionState } from "@/hooks/use-voice";
 
 interface ChatInputProps {
   onSubmitMessage?: (message: string) => void;
@@ -14,7 +15,12 @@ interface ChatInputProps {
   voiceServerUrl?: string;
   voiceAgentId?: string;
   voiceModel?: string;
+  voiceState?: VoiceConnectionState;
+  isListening?: boolean;
+  isSpeaking?: boolean;
   onVoiceTranscript?: (text: string) => void;
+  onVoiceBotOutput?: (text: string) => void;
+  onVoiceToggle?: () => void;
 }
 
 export function ChatInput({
@@ -23,7 +29,12 @@ export function ChatInput({
   voiceServerUrl = "http://localhost:7860",
   voiceAgentId = "chatbot",
   voiceModel,
+  voiceState = "idle",
+  isListening = false,
+  isSpeaking = false,
   onVoiceTranscript,
+  onVoiceBotOutput,
+  onVoiceToggle,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -86,6 +97,11 @@ export function ChatInput({
               agentId={voiceAgentId}
               model={voiceModel}
               onTranscript={onVoiceTranscript}
+              onBotOutput={onVoiceBotOutput}
+              externalState={voiceState}
+              externalIsListening={isListening}
+              externalIsSpeaking={isSpeaking}
+              onToggle={onVoiceToggle}
             />
 
             <Button
