@@ -105,16 +105,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					}
 
 					if (chunk.type === "token" && chunk.content) {
+						const tokenContent = chunk.content;
 						setMessages((prev) => {
 							const existing = prev.find((m) => m.id === assistantMsgId);
 							if (existing) {
 								return prev.map((m) =>
 									m.id === assistantMsgId
-										? { ...m, content: (m.content || "") + chunk.content }
+										? { ...m, content: (m.content || "") + tokenContent }
 										: m
 								);
 							}
-							return [...prev, { id: assistantMsgId, role: "assistant", content: chunk.content }];
+							return [...prev, { id: assistantMsgId, role: "assistant", content: tokenContent }];
 						});
 					} else if (chunk.type === "message") {
 						const msgType = (chunk as any).msgType;
@@ -162,9 +163,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 						break;
 					} else if (chunk.type === "error") {
 						setError(chunk.content || "Unknown error");
-						setIsToolRunning(false);
-						setToolName(null);
-						setToolContent(null);
+						setCurrentTools([]);
 					}
 				}
 			} catch (err) {

@@ -59,9 +59,6 @@ function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {
 					/>
 				))}
 			</div>
-			<span className="text-sm text-muted-foreground">
-				{isListening ? "Đang nghe..." : "Đang suy nghĩ..."}
-			</span>
 		</div>
 	);
 }
