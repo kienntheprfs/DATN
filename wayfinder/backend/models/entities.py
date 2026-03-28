@@ -113,3 +113,26 @@ class Edge(SQLModel, table=True):
         back_populates="edges_to",
         sa_relationship_kwargs={"foreign_keys": "Edge.end_node_id"},
     )
+
+
+# ==========================================================
+# 6. EVENT MODEL
+# ==========================================================
+class Event(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    description: Optional[str] = None
+    start_date: str  # ISO format: "2024-12-25"
+    end_date: Optional[str] = None
+    start_time: Optional[str] = None  # "09:00"
+    end_time: Optional[str] = None
+    location_name: Optional[str] = None  # Tên địa điểm hiển thị
+
+    # Link to node for wayfinding
+    node_id: Optional[int] = Field(default=None, foreign_key="node.id")
+    node: Optional[Node] = Relationship()
+
+    organizer: Optional[str] = None
+    category: Optional[str] = None  # seminar, workshop, conference, meeting, etc.
+    is_active: bool = Field(default=True)
+    created_at: Optional[str] = None

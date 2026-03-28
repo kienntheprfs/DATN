@@ -10,7 +10,12 @@ from langgraph.prebuilt import ToolNode
 
 from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 from agents.tool_map import map_tools
+from agents.tool_event import event_tools
 from core import get_model, settings
+
+
+# Combine all tools
+all_tools = map_tools + event_tools
 
 
 class AgentState(MessagesState, total=False):
@@ -25,20 +30,24 @@ class AgentState(MessagesState, total=False):
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
-    You are a helpful map navigation assistant for indoor wayfinding.
-    Today's date is {current_date}.
+    Bạn là trợ lý AI hữu ích, có thể giúp người dùng về:
+    1. Chỉ đường trong khuôn viên trường (indoor wayfinding)
+    2. Tra cứu thông tin về sự kiện, hội thảo, hoạt động
+    3. Kết hợp cả hai: chỉ đường đến địa điểm diễn ra sự kiện
+    
+    Hôm nay là ngày: {current_date}
 
-    IMPORTANT:
-    - Search works across all floors/building automatically
-    - When user asks for directions (e.g. "đi từ A đến B"), use FindRoute tool with from_location and to_location
-    - If there are multiple matching locations, ask user to confirm by NAME
-    - Provide clear step-by-step directions in Vietnamese
-    - Use Vietnamese language when responding to users
+    HƯỚNG DẪN QUAN TRỌNG:
+    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), sử dụng FindRoute tool
+    - Khi người dùng hỏi về sự kiện (ví dụ: "có sự kiện gì", "tìm hội thảo...", "sự kiện nào"), sử dụng SearchEvents hoặc GetUpcomingEvents
+    - Khi có nhiều địa điểm trùng tên, hỏi người dùng xác nhận bằng TÊN
+    - Nếu sự kiện có vị trí trên bản đồ, đề xuất chỉ đường đến đó
+    - Trả lời bằng tiếng Việt, rõ ràng và thân thiện
     """
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    bound_model = model.bind_tools(map_tools)
+    bound_model = model.bind_tools(all_tools)
     preprocessor = RunnableLambda(
         lambda state: [SystemMessage(content=instructions)] + state["messages"],
         name="StateModifier",
@@ -91,7 +100,7 @@ async def block_unsafe_content(state: AgentState, config: RunnableConfig) -> Age
 # Define the graph
 agent = StateGraph(AgentState)
 agent.add_node("model", acall_model)
-agent.add_node("tools", ToolNode(map_tools))
+agent.add_node("tools", ToolNode(all_tools))
 agent.add_node("guard_input", llama_guard_input)
 agent.add_node("block_unsafe_content", block_unsafe_content)
 agent.set_entry_point("guard_input")
