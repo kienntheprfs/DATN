@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { locationApi } from '@/services/location-api';
 import { LocationSuggestion } from '@/types';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
 
 interface LocationSearchProps {
   value: string;
@@ -113,12 +115,14 @@ export function LocationSearch({
           className="flex-1"
         />
         {(query || value) && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 size-7"
             onClick={handleClear}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
           >
-            ✕
-          </button>
+            <X className="size-3" />
+          </Button>
         )}
       </div>
 

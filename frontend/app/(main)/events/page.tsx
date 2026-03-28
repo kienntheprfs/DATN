@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Calendar, MapPin, Users, Plus, Search, Edit, Trash2, ExternalLink, X, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -13,9 +14,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions, ItemMedia } from '@/components/ui/item';
+import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemActions } from '@/components/ui/item';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@/components/ui/input-group';
 import { eventsApi } from '@/services/events-api';
 import { locationApi } from '@/services/location-api';
 import { Event, EventCreate } from '@/types';
@@ -31,7 +33,7 @@ const CATEGORIES = [
 ];
 
 function NodeSelector({
-  value,
+  value: _value,
   onChange,
 }: {
   value: number | undefined;
@@ -107,13 +109,9 @@ function NodeSelector({
           <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50">
             <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <span className="flex-1 text-sm truncate">{getDisplayName(selectedLocation)}</span>
-            <button
-              type="button"
-              onClick={handleClear}
-              className="text-muted-foreground hover:text-foreground"
-            >
+            <Button type="button" variant="ghost" size="icon" onClick={handleClear} className="h-7 w-7">
               <X className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="relative">
@@ -144,20 +142,21 @@ function NodeSelector({
             </div>
           ) : (
             results.map((location) => (
-              <button
+              <Button
                 key={`${location.node_id}-${location.alias_id}`}
                 type="button"
+                variant="ghost"
+                className="w-full justify-start h-auto py-2 px-3"
                 onClick={() => handleSelect(location)}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-start gap-2"
               >
-                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0 mr-2" />
+                <div className="flex-1 min-w-0 text-left">
                   <div className="font-medium truncate">{location.name}</div>
                   <div className="text-xs text-muted-foreground truncate">
                     Tầng {location.floor ?? 'G'} {location.node_type && `• ${location.node_type}`}
                   </div>
                 </div>
-              </button>
+              </Button>
             ))
           )}
         </div>
@@ -339,27 +338,32 @@ export default function EventsPage() {
           </Button>
         </div>
 
-        <div className="flex gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
+        <div className="flex gap-3">
+          <InputGroup className="flex-1 h-9">
+            <InputGroupAddon align="inline-start">
+              <InputGroupText>
+                <Search className="size-4" />
+              </InputGroupText>
+            </InputGroupAddon>
+            <InputGroupInput
               placeholder="Tìm kiếm sự kiện..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
             />
-          </div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 rounded-lg border bg-background text-sm"
-          >
-            {CATEGORIES.map((cat) => (
-              <option key={cat.value} value={cat.value}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
+          </InputGroup>
+          <Select value={selectedCategory || "all"} onValueChange={(v) => setSelectedCategory(v === "all" ? "" : v)}>
+            <SelectTrigger className="h-8 w-auto min-w-[140px] text-xs">
+              <SelectValue placeholder="Tất cả" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả</SelectItem>
+              {CATEGORIES.slice(1).map((cat) => (
+                <SelectItem key={cat.value} value={cat.value}>
+                  {cat.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {loading ? (
@@ -453,12 +457,12 @@ export default function EventsPage() {
 
             <div className="space-y-2">
               <Label htmlFor="description">Mô tả</Label>
-              <textarea
+              <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Mô tả sự kiện..."
-                className="w-full px-3 py-2 rounded-md border bg-background text-sm min-h-[80px] resize-none"
+                className="min-h-20 resize-none"
               />
             </div>
 
@@ -533,19 +537,19 @@ export default function EventsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Loại sự kiện</Label>
-                <select
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 rounded-md border bg-background text-sm"
-                >
-                  <option value="">Chọn loại</option>
-                  {CATEGORIES.slice(1).map((cat) => (
-                    <option key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </option>
-                  ))}
-                </select>
+                <Select value={formData.category || "none"} onValueChange={(value) => setFormData({ ...formData, category: value === "none" ? "" : value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Chọn loại</SelectItem>
+                    {CATEGORIES.slice(1).map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -14,6 +14,8 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAgent } from "@/contexts/agent-context";
 import { Loader2 } from "lucide-react";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Button } from "@/components/ui/button";
 
 const routeDictionary: Record<string, string> = {
 	dashboard: "Bảng điều khiển",
@@ -25,7 +27,7 @@ const routeDictionary: Record<string, string> = {
 };
 
 function StatusBadge() {
-	const { isOnline, isLoading, model } = useAgent();
+	const { isOnline, isLoading, model, models } = useAgent();
 
 	if (isLoading) {
 		return (
@@ -47,54 +49,55 @@ function StatusBadge() {
 }
 
 function SettingsPanel() {
-	const { model, setModel, agent, setAgent, agents, isOnline } = useAgent();
+	const { model, setModel, agent, setAgent, agents, isOnline, models } = useAgent();
 	const [isOpen, setIsOpen] = React.useState(false);
 
 	if (!isOnline) return null;
 
 	return (
 		<div className="relative">
-			<button
+			<Button
+				variant="ghost"
+				size="sm"
 				onClick={() => setIsOpen(!isOpen)}
-				className="flex items-center gap-1.5 px-2 py-1 bg-surface-bg border border-border-color rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+				className="h-7 text-xs font-mono"
 			>
-				<span className="text-xs font-mono text-text-secondary">Settings ▼</span>
-			</button>
+				Settings ▼
+			</Button>
 
 			{isOpen && (
 				<>
 					<div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-					<div className="absolute right-0 top-full mt-1 z-50 w-64 bg-background border border-border-color rounded-sm shadow-lg">
-						<div className="p-3 border-b border-border-color">
-							<div className="text-xs font-semibold text-text-secondary mb-2">LLM Model</div>
-							<select
-								value={model}
+					<div className="absolute right-0 top-full mt-1 z-50 w-64 bg-popover border rounded-lg shadow-lg p-3">
+						<div className="mb-3">
+							<label className="text-xs font-semibold mb-2 block">LLM Model</label>
+							<NativeSelect 
+								value={model} 
 								onChange={(e) => setModel(e.target.value)}
 								className="w-full px-2 py-1.5 text-xs bg-surface-bg border border-border-color rounded-sm"
 							>
-								<option value="">Default</option>
-								<option value="gpt-5-nano">GPT-5 Nano</option>
-								<option value="gpt-5-mini">GPT-5 Mini</option>
-								<option value="gpt-5.1">GPT-5.1</option>
-								<option value="deepseek-chat">DeepSeek Chat</option>
-								<option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-								<option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-							</select>
+								<NativeSelectOption value="azure-gpt-4o">Default</NativeSelectOption>
+								{models.map((m) => (
+									<NativeSelectOption key={m.id} value={m.id}>
+										{m.name}
+									</NativeSelectOption>
+								))}
+							</NativeSelect>
 						</div>
 
-						<div className="p-3">
-							<div className="text-xs font-semibold text-text-secondary mb-2">Agent</div>
-							<select
-								value={agent}
+						<div>
+							<label className="text-xs font-semibold mb-2 block">Agent</label>
+							<NativeSelect 
+								value={agent} 
 								onChange={(e) => setAgent(e.target.value)}
 								className="w-full px-2 py-1.5 text-xs bg-surface-bg border border-border-color rounded-sm"
 							>
 								{agents.map((a) => (
-									<option key={a.key} value={a.key}>
+									<NativeSelectOption key={a.key} value={a.key}>
 										{a.key}
-									</option>
+									</NativeSelectOption>
 								))}
-							</select>
+							</NativeSelect>
 						</div>
 					</div>
 				</>

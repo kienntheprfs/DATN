@@ -16,6 +16,14 @@ interface ToolCall {
 	content: string | null;
 }
 
+interface MessageChunk {
+	type: "message";
+	msgType: string;
+	toolCalls?: Array<{ id: string; name: string }>;
+	toolCallId?: string;
+	content: string;
+}
+
 interface UseChatReturn {
 	messages: ChatMessage[];
 	sendMessage: (message: string) => Promise<void>;
@@ -118,10 +126,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 							return [...prev, { id: assistantMsgId, role: "assistant", content: tokenContent }];
 						});
 					} else if (chunk.type === "message") {
-						const msgType = (chunk as any).msgType;
-						const toolCalls = (chunk as any).toolCalls;
-						const toolCallId = (chunk as any).toolCallId;
-						const content = chunk.content as string;
+						const msgChunk = chunk as MessageChunk;
+						const msgType = msgChunk.msgType;
+						const toolCalls = msgChunk.toolCalls;
+						const toolCallId = msgChunk.toolCallId;
+						const content = msgChunk.content;
 
 						if (msgType === "tool") {
 							const toolId = toolCallId || `tool-${Date.now()}`;
@@ -137,7 +146,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 						if (msgType === "ai" && toolCalls && toolCalls.length > 0) {
 							setIsTyping(false);
-							const newTools: ToolCall[] = toolCalls.map((tool: any) => ({
+							const newTools: ToolCall[] = toolCalls.map((tool) => ({
 								id: tool.id,
 								name: tool.name,
 								status: "executing" as const,

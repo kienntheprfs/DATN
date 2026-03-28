@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
-import { Flame, Newspaper } from "lucide-react";
+import React, { useEffect } from "react";
+import { Flame, Newspaper, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useSuggestionStore } from "@/stores/suggest.store";
-// Nhớ kiểm tra lại đường dẫn import các component Item của bạn cho đúng nha
-import { Item, ItemGroup, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item"; // Ví dụ đường dẫn
+import { Item, ItemGroup, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemActions } from "@/components/ui/item";
 
-// --- TỪ ĐIỂN MAP STRING SANG ICON THẬT ---
-const ICON_MAP: Record<string, any> = {
+const ICON_MAP: Record<string, LucideIcon> = {
   flame: Flame,
   newspaper: Newspaper,
 };
@@ -28,27 +27,27 @@ export default function SuggestionSection() {
   // --- TRẠNG THÁI 1: HIỆU ỨNG SKELETON (ĐANG TẢI) ---
   if (isLoadingSuggestions || !suggestions) {
     return (
-      <div className="flex w-full max-w-3xl flex-col items-center justify-center gap-2 text-sm text-muted-foreground animate-pulse">
+      <div className="flex w-full max-w-3xl flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
         {/* Skeleton thẻ HOT */}
-        <div className="w-full border border-border bg-muted p-4 h-40 flex flex-col gap-4">
+        <div className="w-full border border-border p-4 h-40 flex flex-col gap-4">
           <div className="flex gap-4">
-            <div className="size-12 shrink-0 bg-muted-foreground/20" />
+            <Skeleton className="size-12 shrink-0" />
             <div className="flex w-full flex-col gap-2">
-              <div className="h-6 w-1/4 bg-muted-foreground/20" />
-              <div className="h-5 w-1/2 bg-muted-foreground/20" />
+              <Skeleton className="h-6 w-1/4" />
+              <Skeleton className="h-5 w-1/2" />
             </div>
           </div>
-          <div className="mt-auto h-4 w-3/4 bg-muted-foreground/20" />
+          <Skeleton className="mt-auto h-4 w-3/4" />
         </div>
 
         {/* Skeleton thẻ thường */}
         <div className="mt-3 grid w-full grid-cols-1 gap-3 md:grid-cols-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex h-24 w-full items-center gap-4 border border-border bg-muted p-4">
-              <div className="size-12 shrink-0 bg-muted-foreground/20" />
+            <div key={i} className="flex h-24 w-full items-center gap-4 border border-border p-4">
+              <Skeleton className="size-12 shrink-0" />
               <div className="flex w-full flex-col gap-2">
-                <div className="h-5 w-1/2 bg-muted-foreground/20" />
-                <div className="h-4 w-3/4 bg-muted-foreground/20" />
+                <Skeleton className="h-5 w-1/2" />
+                <Skeleton className="h-4 w-3/4" />
               </div>
             </div>
           ))}

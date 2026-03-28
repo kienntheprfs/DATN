@@ -47,6 +47,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 	const [agents, setAgents] = useState<Agent[]>([]);
 	const [isOnline, setIsOnline] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
+	const [defaultModel, setDefaultModel] = useState("gpt-5-nano");
 
 	const setModel = useCallback((value: string) => {
 		setModelState(value);
@@ -71,10 +72,12 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, []);
 
-	const fetchInfo = useCallback(async () => {
+		const fetchInfo = useCallback(async () => {
 		try {
 			const data: ServiceInfo = await agentClient.getInfo();
 			setIsOnline(true);
+
+			setDefaultModel(data.default_model);
 
 			const modelList: Model[] = data.models.map((m) => {
 				let provider = "Unknown";

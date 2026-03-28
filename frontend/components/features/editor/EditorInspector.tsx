@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { MapData, MapNode, NodeFormData, EdgeFormData } from '@/types';
+import { useState, useMemo, useEffect } from 'react';
+import { MapData, MapNode, NodeFormData, EdgeFormData, Building } from '@/types';
 import { editorApi } from '@/services/editor-api';
+import { mapApi } from '@/services/maps-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { BuildingModal } from './BuildingModal';
+import { Building2 } from 'lucide-react';
 
 interface EditorInspectorProps {
   currentMap: MapData | null;
@@ -18,6 +25,8 @@ interface EditorInspectorProps {
   onEdgeDelete: (id: number) => void;
   onSetEditing: (editing: boolean) => void;
   onRefreshNodes: () => void;
+  buildings: Building[];
+  onRefreshBuildings?: () => void;
 }
 
 export function EditorInspector({
@@ -32,9 +41,14 @@ export function EditorInspector({
   onEdgeDelete,
   onSetEditing,
   onRefreshNodes,
+  buildings,
+  onRefreshBuildings,
 }: EditorInspectorProps) {
   const [editedData, setEditedData] = useState<NodeFormData | EdgeFormData | null>(null);
   const [aliasInput, setAliasInput] = useState('');
+  const [showBuildingModal, setShowBuildingModal] = useState(false);
+  const [buildingMaps, setBuildingMaps] = useState<MapData[]>([]);
+  const [buildingNodes, setBuildingNodes] = useState<MapNode[]>([]);
 
   const rawData = useMemo(() => {
     if (selectedType === 'node') {
@@ -44,8 +58,7 @@ export function EditorInspector({
   }, [selectedType, selectedId, nodes]);
 
   const formData = useMemo(() => {
-    if (!rawData) return editedData;
-    if (selectedType === 'node') {
+    if (selectedType === 'node' && rawData) {
       const nodeData = rawData as MapNode;
       return {
         ...nodeData,
@@ -55,6 +68,25 @@ export function EditorInspector({
     }
     return editedData;
   }, [rawData, selectedType, editedData]);
+
+  useEffect(() => {
+    const nodeFormData = formData as NodeFormData | null;
+    const buildingId = nodeFormData?.building_id;
+    if (buildingId) {
+      mapApi.getAll().then((maps) => {
+        const bMaps = maps.filter((m) => m.building_id === buildingId);
+        setBuildingMaps(bMaps);
+        Promise.all(bMaps.map((m) => editorApi.getNodes(m.id))).then((nodeArrays) => {
+          setBuildingNodes(nodeArrays.flat());
+        });
+      });
+    } else {
+      queueMicrotask(() => {
+        setBuildingMaps([]);
+        setBuildingNodes([]);
+      });
+    }
+  }, [formData]);
 
   const handleChange = (field: string, value: unknown) => {
     const currentData = formData;
@@ -75,6 +107,7 @@ export function EditorInspector({
           type: nodeData.type,
           aliases,
           linked_node_ids: nodeData.linked_node_ids,
+          building_id: nodeData.building_id,
         });
         onNodeUpdate(selectedId, { ...nodeData, aliases });
       }
@@ -121,6 +154,22 @@ export function EditorInspector({
     setEditedData({ ...currentData, aliases: currentData.aliases?.filter((_, i) => i !== index) });
   };
 
+  const handleLinkedNodeSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    if (value) {
+      const currentData = formData as NodeFormData;
+      const current = currentData.linked_node_ids || [];
+      if (!current.includes(parseInt(value))) {
+        handleChange('linked_node_ids', [...current, parseInt(value)]);
+      }
+    }
+  };
+
+  const handleRemoveLinkedNode = (nodeId: number) => {
+    const currentData = formData as NodeFormData;
+    handleChange('linked_node_ids', (currentData.linked_node_ids || []).filter((id: number) => id !== nodeId));
+  };
+
   if (!currentMap) {
     return <aside className="w-80 bg-background border-l border-border" />;
   }
@@ -150,44 +199,77 @@ export function EditorInspector({
   }
 
   const isNode = selectedType === 'node';
+  const nodeData = formData as NodeFormData;
   const displayName = isNode && 'name' in formData ? (formData as NodeFormData).name : (formData as EdgeFormData).type;
+  const hasBuilding = !!nodeData?.building_id;
+  const currentBuilding = hasBuilding ? buildings.find(b => b.id === nodeData.building_id) : undefined;
 
   return (
-    <aside className="w-80 bg-background border-l border-border flex flex-col">
-      <InspectorHeader
-        id={formData.id}
-        name={displayName}
-        isEditing={isEditing}
-        isNode={isNode}
-        onToggleEdit={() => (isEditing ? handleSave() : onSetEditing(true))}
-        onNameChange={(name) => handleChange('name', name)}
-      />
+    <>
+      <aside className="w-80 bg-background border-l border-border flex flex-col">
+        <InspectorHeader
+          id={formData.id}
+          name={displayName}
+          isEditing={isEditing}
+          isNode={isNode}
+          onToggleEdit={() => (isEditing ? handleSave() : onSetEditing(true))}
+          onNameChange={(name) => handleChange('name', name)}
+        />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {selectedType === 'node' && (
-          <NodeForm
-            data={formData as NodeFormData}
-            isEditing={isEditing}
-            onChange={handleChange}
-            aliasInput={aliasInput}
-            onAliasInputChange={setAliasInput}
-            onAddAlias={handleAddAlias}
-            onRemoveAlias={handleRemoveAlias}
-          />
-        )}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {selectedType === 'node' && (
+            <NodeForm
+              data={nodeData}
+              isEditing={isEditing}
+              onChange={handleChange}
+              aliasInput={aliasInput}
+              onAliasInputChange={setAliasInput}
+              onAddAlias={handleAddAlias}
+              onRemoveAlias={handleRemoveAlias}
+              onManageBuilding={() => setShowBuildingModal(true)}
+              buildings={buildings}
+              currentBuilding={currentBuilding}
+              hasBuilding={hasBuilding}
+              buildingMaps={buildingMaps}
+              buildingNodes={buildingNodes}
+              onLinkedNodeSelect={handleLinkedNodeSelect}
+              onRemoveLinkedNode={handleRemoveLinkedNode}
+            />
+          )}
 
-        {selectedType === 'edge' && (
-          <EdgeForm data={formData as EdgeFormData} isEditing={isEditing} onChange={handleChange} />
-        )}
-      </div>
+          {selectedType === 'edge' && (
+            <EdgeForm data={formData as EdgeFormData} isEditing={isEditing} onChange={handleChange} />
+          )}
+        </div>
 
-      <InspectorFooter
-        isEditing={isEditing}
-        onSave={handleSave}
-        onCancel={() => { setEditedData(null); onSetEditing(false); }}
-        onDelete={handleDelete}
-      />
-    </aside>
+        <InspectorFooter
+          isEditing={isEditing}
+          onSave={handleSave}
+          onCancel={() => { setEditedData(null); onSetEditing(false); }}
+          onDelete={handleDelete}
+        />
+      </aside>
+
+      {showBuildingModal && isNode && (
+        <BuildingModal
+          nodeId={selectedId ?? undefined}
+          initialBuildingId={nodeData.building_id}
+          onClose={() => setShowBuildingModal(false)}
+          onSuccess={() => {
+            editorApi.getNodeById(selectedId!).then((updatedNode) => {
+              onNodeUpdate(selectedId!, updatedNode);
+              setEditedData({
+                ...updatedNode,
+                aliases: (updatedNode.aliases || []) as string[],
+                linked_node_ids: updatedNode.linked_node_ids || [],
+              } as unknown as NodeFormData);
+            });
+            onRefreshBuildings?.();
+            setShowBuildingModal(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -247,6 +329,14 @@ function NodeForm({
   onAliasInputChange,
   onAddAlias,
   onRemoveAlias,
+  onManageBuilding,
+  buildings,
+  currentBuilding,
+  hasBuilding,
+  buildingMaps,
+  buildingNodes,
+  onLinkedNodeSelect,
+  onRemoveLinkedNode,
 }: {
   data: NodeFormData;
   isEditing: boolean;
@@ -255,7 +345,19 @@ function NodeForm({
   onAliasInputChange: (value: string) => void;
   onAddAlias: () => void;
   onRemoveAlias: (index: number) => void;
+  onManageBuilding: () => void;
+  buildings: Building[];
+  currentBuilding?: Building;
+  hasBuilding: boolean;
+  buildingMaps: MapData[];
+  buildingNodes: MapNode[];
+  onLinkedNodeSelect: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onRemoveLinkedNode: (nodeId: number) => void;
 }) {
+  const linkedNodeOptions = buildingNodes.filter(
+    (n) => n.id !== data.id && n.map_id !== data.map_id && !(data.linked_node_ids || []).includes(n.id)
+  );
+
   return (
     <>
       <div className="p-3 bg-muted rounded-lg">
@@ -273,35 +375,39 @@ function NodeForm({
       </div>
 
       <div>
-        <label className="text-xs font-bold text-muted-foreground uppercase mb-1 block">Loại địa điểm</label>
-        <select
+        <Label className="text-xs font-bold uppercase mb-1 block">Loại địa điểm</Label>
+        <Select
           disabled={!isEditing}
           value={data.type}
-          onChange={(e) => onChange('type', e.target.value)}
-          className="w-full h-8 px-2 rounded-lg border bg-background text-sm disabled:opacity-50"
+          onValueChange={(value) => onChange('type', value)}
         >
-          <option value="path">Điểm trung gian</option>
-          <option value="room">Phòng</option>
-          <option value="stairs">Cầu thang</option>
-          <option value="elevator">Thang máy</option>
-          <option value="entrance">Cổng ra vào</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="path">Điểm trung gian</SelectItem>
+            <SelectItem value="room">Phòng</SelectItem>
+            <SelectItem value="stairs">Cầu thang</SelectItem>
+            <SelectItem value="elevator">Thang máy</SelectItem>
+            <SelectItem value="entrance">Cổng ra vào</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="pt-4 border-t border-border">
+      <Separator />
+
+      <div>
         <div className="flex justify-between items-center mb-2">
           <h3 className="text-xs font-bold text-muted-foreground uppercase">Tên gọi khác</h3>
           {(data.aliases?.length ?? 0) > 0 && (
-            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-              {data.aliases?.length}
-            </span>
+            <Badge variant="secondary">{data.aliases?.length} tên</Badge>
           )}
         </div>
 
         <div className="space-y-2 mb-2">
-          {data.aliases?.map((alias, index) => (
+          {(data.aliases || []).map((alias, index) => (
             <div key={index} className="flex items-center gap-2">
-              <div className="flex-1 px-2 py-1.5 bg-muted rounded text-sm">
+              <div className="flex-1 px-2 py-1.5 bg-muted rounded text-sm truncate">
                 {typeof alias === 'string' ? alias : alias.name}
               </div>
               {isEditing && (
@@ -330,6 +436,114 @@ function NodeForm({
           </div>
         )}
       </div>
+
+      <Separator />
+
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase">Chi tiết tòa nhà</h3>
+          {hasBuilding && <Badge variant="secondary">Đã thiết lập</Badge>}
+        </div>
+
+        {hasBuilding && currentBuilding ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Building2 className="size-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] text-muted-foreground font-bold uppercase">Tòa nhà trực thuộc</div>
+                <div className="text-sm font-bold truncate">{currentBuilding.name}</div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={onManageBuilding}
+            >
+              Quản lý / Đổi tòa nhà
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full border-dashed h-auto py-4 flex-col gap-2"
+            onClick={onManageBuilding}
+          >
+            <Building2 className="size-5" />
+            <span className="font-bold">Thiết lập tòa nhà</span>
+            <span className="text-xs font-normal text-muted-foreground">Thêm tầng & bản đồ chi tiết</span>
+          </Button>
+        )}
+      </div>
+
+      {hasBuilding && buildingMaps.length > 0 && (
+        <>
+          <Separator />
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase">Liên kết tầng</h3>
+              {(data.linked_node_ids?.length ?? 0) > 0 && (
+                <Badge variant="secondary">{data.linked_node_ids?.length} node</Badge>
+              )}
+            </div>
+
+            <p className="text-[10px] text-muted-foreground mb-2">
+              Chọn node cầu thang/thang máy ở tầng khác để liên kết
+            </p>
+
+            <Select
+              disabled={!isEditing}
+              onValueChange={(value) => {
+                if (value) onLinkedNodeSelect({ target: { value } } as React.ChangeEvent<HTMLSelectElement>);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="-- Chọn node liên kết --" />
+              </SelectTrigger>
+              <SelectContent>
+                {linkedNodeOptions.map((n) => (
+                  <SelectItem key={n.id} value={String(n.id)}>
+                    {n.name} (Tầng {buildingMaps.find((m) => m.id === n.map_id)?.floor_level || '?'})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(data.linked_node_ids?.length ?? 0) > 0 && (
+              <div className="mt-2 space-y-1">
+                {data.linked_node_ids?.map((nodeId: number) => {
+                  const linkedNode = buildingNodes.find((n) => n.id === nodeId);
+                  if (!linkedNode) return null;
+                  return (
+                    <div key={nodeId} className="flex items-center justify-between p-2 bg-muted rounded-lg">
+                      <span className="text-sm truncate">
+                        {linkedNode.name} (Tầng {buildingMaps.find((m) => m.id === linkedNode.map_id)?.floor_level || '?'})
+                      </span>
+                      {isEditing && (
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => onRemoveLinkedNode(nodeId)}
+                        >
+                          ✕
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {data.type !== 'stairs' && data.type !== 'elevator' && data.type !== 'entrance' && (
+              <p className="text-[10px] text-orange-500 mt-2 italic">
+                Nên dùng node loại &quot;Cầu thang&quot; hoặc &quot;Thang máy&quot; để liên kết tầng
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -354,7 +568,7 @@ function EdgeForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-xs font-bold uppercase mb-1 block">Weight</label>
+          <Label className="text-xs font-bold uppercase mb-1 block">Weight</Label>
           <Input
             type="number"
             disabled={!isEditing}
@@ -364,17 +578,21 @@ function EdgeForm({
           />
         </div>
         <div>
-          <label className="text-xs font-bold uppercase mb-1 block">Type</label>
-          <select
+          <Label className="text-xs font-bold uppercase mb-1 block">Type</Label>
+          <Select
             disabled={!isEditing}
             value={data.type}
-            onChange={(e) => onChange('type', e.target.value)}
-            className="w-full h-8 px-2 rounded-lg border bg-background text-sm disabled:opacity-50"
+            onValueChange={(value) => onChange('type', value)}
           >
-            <option value="walk">Đi bộ</option>
-            <option value="stairs">Thang bộ</option>
-            <option value="elevator">Thang máy</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="walk">Đi bộ</SelectItem>
+              <SelectItem value="stairs">Thang bộ</SelectItem>
+              <SelectItem value="elevator">Thang máy</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -385,6 +603,7 @@ function EdgeForm({
           disabled={!isEditing}
           checked={data.bidirectional ?? true}
           onChange={(e) => onChange('bidirectional', e.target.checked)}
+          className="w-4 h-4 accent-primary"
         />
       </div>
     </>
@@ -414,7 +633,7 @@ function InspectorFooter({
   return (
     <div className="p-4 border-t border-border">
       <Button variant="destructive" onClick={onDelete} className="w-full">
-        🗑️ Xóa đối tượng
+        Xóa đối tượng
       </Button>
     </div>
   );

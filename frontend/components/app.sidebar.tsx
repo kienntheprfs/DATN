@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useAppStore } from "@/stores/app.store";
 
@@ -149,7 +150,7 @@ export function AppSidebar() {
                                                                 </SidebarMenuSubItem>
                                                             ))}
 
-                                                            {hasMoreHistory && (
+                                                            {hasMoreHistory && !isLoadingHistory && (
                                                                 <SidebarMenuSubItem>
                                                                     <SidebarMenuSubButton
                                                                         onClick={(e) => {
@@ -159,21 +160,24 @@ export function AppSidebar() {
                                                                             }
                                                                             fetchMoreHistory();
                                                                         }}
-                                                                        // Xử lý nút xem thêm
-                                                                        className={`mt-1 transition-colors ${
-                                                                            isLoadingHistory
-                                                                                ? "opacity-50 pointer-events-none text-primary-foreground/70"
-                                                                                : "text-primary-foreground/80 hover:bg-white/15 hover:text-white cursor-pointer"
-                                                                        }`}
+                                                                        className="mt-1 transition-colors text-primary-foreground/80 hover:bg-white/15 hover:text-white cursor-pointer"
                                                                     >
-                                                                        {isLoadingHistory ? (
-                                                                            <Loader2 className="size-4 animate-spin" />
-                                                                        ) : (
-                                                                            <MoreHorizontal className="size-4" />
-                                                                        )}
-                                                                        <span>{isLoadingHistory ? "Đang tải..." : "Xem thêm"}</span>
+                                                                        <MoreHorizontal className="size-4" />
+                                                                        <span>Xem thêm</span>
                                                                     </SidebarMenuSubButton>
                                                                 </SidebarMenuSubItem>
+                                                            )}
+
+                                                            {isLoadingHistory && (
+                                                                <>
+                                                                    {[1, 2, 3].map((i) => (
+                                                                        <SidebarMenuSubItem key={`skeleton-${i}`}>
+                                                                            <SidebarMenuSubButton className="pointer-events-none opacity-50">
+                                                                                <Skeleton className="h-4 w-full rounded" />
+                                                                            </SidebarMenuSubButton>
+                                                                        </SidebarMenuSubItem>
+                                                                    ))}
+                                                                </>
                                                             )}
                                                         </>
                                                     ) : (

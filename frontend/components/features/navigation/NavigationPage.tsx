@@ -4,9 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import { wayfindingApi } from '@/services/wayfinding-api';
 import { wayfindingMapApi } from '@/services/wayfinding-map-api';
 import { buildingApi } from '@/services/building-api';
+import { useBuildingStore } from '@/stores/building.store';
 import { RouteResponse, MapData, MapNode, MapEdge, Building, Instruction } from '@/types';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { LocationSearch } from './LocationSearch';
+import { Button } from '@/components/ui/button';
+import { ArrowUpDown, Navigation, RefreshCw} from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 const ACTION_ICONS: Record<string, string> = {
   start: 'trip_origin',
@@ -48,7 +52,9 @@ interface FloorSegment {
 }
 
 export default function NavigationPage() {
-  const [buildings, setBuildings] = useState<Building[]>([]);
+  const buildings = useBuildingStore((state) => state.buildings);
+  const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
+  
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [floorMaps, setFloorMaps] = useState<FloorMap[]>([]);
   const [currentFloorIndex, setCurrentFloorIndex] = useState(0);
@@ -76,22 +82,18 @@ export default function NavigationPage() {
   const lastMousePos = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    const loadBuildings = async () => {
-      try {
-        console.log('[Nav] Loading buildings...');
-        const data = await buildingApi.getAll();
-        console.log('[Nav] Buildings loaded:', data.length);
-        setBuildings(data);
-        if (data.length > 0) {
-          console.log('[Nav] Setting selected building:', data[0].id);
-          setSelectedBuildingId(data[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to load buildings:', err);
+    fetchBuildings().then(() => {
+      if (buildings.length === 0) {
+        useBuildingStore.getState().buildings.length > 0 && setSelectedBuildingId(useBuildingStore.getState().buildings[0].id);
       }
-    };
-    loadBuildings();
-  }, []);
+    });
+  }, [fetchBuildings]);
+
+  useEffect(() => {
+    if (buildings.length > 0 && !selectedBuildingId) {
+      setSelectedBuildingId(buildings[0].id);
+    }
+  }, [buildings, selectedBuildingId]);
 
   useEffect(() => {
     const loadMaps = async () => {
@@ -331,8 +333,8 @@ export default function NavigationPage() {
       if (segments.length > 0) {
         setCurrentFloorIndex(segments[0].floorIndex);
       }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Could not find route. Please try different locations.';
+    } catch (err) {
+      const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Could not find route. Please try different locations.';
       setError(errorMsg);
       console.error(err);
     } finally {
@@ -492,12 +494,13 @@ export default function NavigationPage() {
               />
               
               <div className="flex justify-center -my-2 relative z-10">
-                <button 
+                <Button
+                  size="icon"
                   onClick={handleSwap}
-                  className="bg-primary p-1 rounded-full text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+                  className="rounded-full"
                 >
-                  <span className="material-symbols-outlined">swap_vert</span>
-                </button>
+                  <ArrowUpDown className="size-5" />
+                </Button>
               </div>
               
               <LocationSearch
@@ -512,32 +515,34 @@ export default function NavigationPage() {
             </div>
 
             {/* Find Route Button */}
-            <button
+            <Button
               onClick={handleFindRoute}
               disabled={loading || !startNodeId || !endNodeId}
-              className="w-full bg-primary hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full"
+              size="lg"
             >
               {loading ? (
                 <>
-                  <span className="material-symbols-outlined animate-spin">sync</span>
+                  <RefreshCw className="size-4 animate-spin" />
                   Finding route...
                 </>
               ) : (
                 <>
-                  <span className="material-symbols-outlined">navigation</span>
+                  <Navigation className="size-4" />
                   Find Route
                 </>
               )}
-            </button>
+            </Button>
 
             {/* Refresh Cache Button */}
-            <button
+            <Button
+              variant="secondary"
               onClick={handleRefreshCache}
-              className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+              className="w-full"
             >
-              <span className="material-symbols-outlined">refresh</span>
+              <RefreshCw className="size-4" />
               Refresh Map Cache
-            </button>
+            </Button>
 
             {error && (
               <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
@@ -545,7 +550,7 @@ export default function NavigationPage() {
               </div>
             )}
 
-            <hr className="border-border my-2" />
+            <Separator />
 
             {/* Directions */}
             {route && (
@@ -642,20 +647,17 @@ export default function NavigationPage() {
                     ? (fm.map.floor_level >= 0 ? `Tầng ${fm.map.floor_level}` : `B${Math.abs(fm.map.floor_level)}`)
                     : fm.map.name;
                 return (
-                  <button
+                  <Button
                     key={fm.map.id}
+                    variant={isActive ? "default" : "ghost"}
+                    size="sm"
                     onClick={() => {
                       setHighlightedCoord(null);
                       setCurrentFloorIndex(idx);
                     }}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'text-muted-foreground hover:bg-muted'
-                    }`}
                   >
                     {floorLabel}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -936,19 +938,24 @@ export default function NavigationPage() {
 
           {/* Map Controls */}
           <div className="absolute bottom-6 right-6 flex flex-col gap-2">
-            <button 
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setScale((s) => Math.min(s * 1.2, 3))}
-              className="bg-card p-3 rounded-lg border border-border text-foreground hover:bg-muted shadow-md"
             >
               <span className="material-symbols-outlined">add</span>
-            </button>
-            <button 
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
-              className="bg-card p-3 rounded-lg border border-border text-foreground hover:bg-muted shadow-md"
             >
               <span className="material-symbols-outlined">remove</span>
-            </button>
-            <button 
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="mt-2"
               onClick={() => {
                 setScale(1);
                 if (svgRef.current) {
@@ -956,10 +963,9 @@ export default function NavigationPage() {
                   setPosition({ x: (rect.width - MAP_WIDTH) / 2, y: (rect.height - MAP_HEIGHT) / 2 });
                 }
               }}
-              className="bg-card p-3 rounded-lg border border-border text-foreground hover:bg-muted shadow-md mt-4"
             >
               <span className="material-symbols-outlined">fit_screen</span>
-            </button>
+            </Button>
           </div>
 
           {/* Legend */}

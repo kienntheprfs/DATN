@@ -2,11 +2,14 @@
 
 import { useState, useRef, useEffect, useMemo, MouseEvent } from 'react';
 import { useEditorStore } from '@/stores/editor.store';
+import { useBuildingStore } from '@/stores/building.store';
 import { mapApi } from '@/services/maps-api';
 import { editorApi } from '@/services/editor-api';
-import { buildingApi } from '@/services/building-api';
 import { MapData, MapNode, MapEdge, ToolType, NodeFormData, EdgeFormData, Building } from '@/types';
 import { getFullImageUrl } from '@/services/wayfinding-client';
+import { BuildingModal } from './BuildingModal';
+import { EditorInspector } from './EditorInspector';
+import { Button } from '@/components/ui/button';
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -27,6 +30,8 @@ const TOOLS = [
 
 export default function EditorPage() {
   const { maps, currentMap, nodes, edges, activeTool, selectedId, selectedType, isEditing, setMap, setMaps, setNodes, setEdges, setTool, selectItem, addNode, updateNode, deleteNode, addEdge, deleteEdge, setEditing } = useEditorStore();
+  const buildings = useBuildingStore((state) => state.buildings);
+  const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
   
   const [cursorCoords, setCursorCoords] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -40,17 +45,16 @@ export default function EditorPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const groupRef = useRef<SVGGElement>(null);
   const startPanRef = useRef({ x: 0, y: 0 });
-  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [showBuildingModal, setShowBuildingModal] = useState(false);
 
   useEffect(() => {
-    const loadMaps = async () => {
+    const loadData = async () => {
       try {
-        const [mapsData, buildingsData] = await Promise.all([
+        const [mapsData] = await Promise.all([
           mapApi.getAll(),
-          buildingApi.getAll()
+          fetchBuildings()
         ]);
         setMaps(mapsData);
-        setBuildings(buildingsData);
         if (mapsData.length > 0 && !currentMap) {
           setMap(mapsData[0]);
         }
@@ -58,8 +62,8 @@ export default function EditorPage() {
         console.error('Failed to load maps:', error);
       }
     };
-    loadMaps();
-  }, []);
+    loadData();
+  }, [fetchBuildings, setMaps, setMap, currentMap]);
 
   useEffect(() => {
     if (!currentMap?.id) return;
@@ -277,6 +281,7 @@ export default function EditorPage() {
           if (selectedMap) setMap(selectedMap);
         }}
         onDelete={handleDeleteMap}
+        onOpenBuildingModal={() => setShowBuildingModal(true)}
       />
 
       <div className="flex-1 flex overflow-hidden relative">
@@ -496,7 +501,25 @@ export default function EditorPage() {
           </main>
         </div>
 
-        <EditorInspector buildings={buildings} nodes={nodes} />
+        <EditorInspector 
+          buildings={buildings} 
+          nodes={nodes}
+          selectedId={selectedId}
+          selectedType={selectedType}
+          isEditing={isEditing}
+          onSelect={selectItem}
+          onNodeUpdate={updateNode}
+          onNodeDelete={deleteNode}
+          onEdgeDelete={deleteEdge}
+          onSetEditing={setEditing}
+          onRefreshNodes={() => {
+            if (currentMap?.id) {
+              editorApi.getNodes(currentMap.id).then(setNodes);
+            }
+          }}
+          onRefreshBuildings={fetchBuildings}
+          currentMap={currentMap}
+        />
       </div>
     </div>
   );
@@ -507,11 +530,13 @@ function EditorHeader({
   currentMapId,
   onMapChange,
   onDelete,
+  onOpenBuildingModal,
 }: {
   maps: MapData[];
   currentMapId?: number;
   onMapChange: (mapId: number) => void;
   onDelete?: () => void;
+  onOpenBuildingModal?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -642,6 +667,15 @@ function EditorHeader({
       </div>
 
       <div className="flex-1 flex items-center justify-end gap-3">
+        {onOpenBuildingModal && (
+          <button 
+            onClick={onOpenBuildingModal}
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all"
+            title="Quản lý tòa nhà"
+          >
+            <span className="material-symbols-outlined">apartment</span>
+          </button>
+        )}
         {currentMapId && onDelete && (
           <button 
             onClick={onDelete}
@@ -656,7 +690,7 @@ function EditorHeader({
   );
 }
 
-function EditorInspector({ buildings, nodes }: { buildings: Building[]; nodes: MapNode[] }) {
+function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: MapNode[] }) {
   const { currentMap, edges, selectedId, selectedType, isEditing, updateNode, deleteNode, deleteEdge, setEditing } = useEditorStore();
 
   const data = selectedType === 'node' ? nodes.find(n => n.id === selectedId) : edges.find(e => e.id === selectedId);
@@ -665,6 +699,7 @@ function EditorInspector({ buildings, nodes }: { buildings: Building[]; nodes: M
   const [aliasInput, setAliasInput] = useState('');
   const [linkedNodeSearch, setLinkedNodeSearch] = useState('');
   const [showLinkedNodeDropdown, setShowLinkedNodeDropdown] = useState(false);
+  const [showBuildingModal, setShowBuildingModal] = useState(false);
 
   const formData = useMemo(() => {
     if (!data) return editedData;
@@ -875,21 +910,50 @@ function EditorInspector({ buildings, nodes }: { buildings: Building[]; nodes: M
               </select>
             </div>
 
-            {isEditing && buildings.length > 0 && (
-              <div>
-                <label className="text-xs font-bold text-foreground mb-2 block">Tòa nhà</label>
-                <select
-                  value={nodeData.building_id || ''}
-                  onChange={(e) => handleChange('building_id', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm text-foreground bg-background border-input appearance-none focus:outline-none focus:border-primary"
-                >
-                  <option value="">-- Không chọn --</option>
-                  {buildings.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
+            <div className="pt-4 border-t border-border">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Chi tiết tòa nhà</h4>
+                {nodeData.building_id && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Đã thiết lập</span>}
               </div>
-            )}
+
+              {nodeData.building_id ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-muted border border-border">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined">domain</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">Tòa nhà trực thuộc</div>
+                      <div className="text-sm font-bold truncate">
+                        {buildings.find(b => b.id === nodeData.building_id)?.name || `Building #${nodeData.building_id}`}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowBuildingModal(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-background border border-border text-muted-foreground text-xs font-bold hover:bg-muted hover:text-primary hover:border-primary/20 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Quản lý / Đổi tòa nhà
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowBuildingModal(true)}
+                  className="group relative w-full py-4 rounded-xl overflow-hidden bg-background border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 transition-all duration-300"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                      <span className="material-symbols-outlined">domain_add</span>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-foreground">Thiết lập tòa nhà</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">Thêm tầng & bản đồ chi tiết</div>
+                    </div>
+                  </div>
+                </button>
+              )}
+            </div>
 
             <div className="pt-4 border-t border-border">
               <div className="flex justify-between items-center mb-3">
@@ -932,9 +996,9 @@ function EditorInspector({ buildings, nodes }: { buildings: Building[]; nodes: M
                     onKeyDown={(e) => e.key === 'Enter' && handleAddAlias()}
                     className="flex-1 px-3 py-2 rounded-lg border text-foreground border-input text-sm focus:outline-none focus:border-primary bg-background"
                   />
-                  <button onClick={handleAddAlias} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90">
+                  <Button onClick={handleAddAlias}>
                     Thêm
-                  </button>
+                  </Button>
                 </div>
               )}
               <p className="text-[10px] text-muted-foreground mt-1">Nhấn Enter để thêm</p>
@@ -1060,22 +1124,44 @@ function EditorInspector({ buildings, nodes }: { buildings: Building[]; nodes: M
 
       {isEditing ? (
         <div className="p-4 border-t border-border bg-background grid grid-cols-2 gap-3">
-          <button onClick={() => setEditing(false)} className="py-2.5 rounded-lg text-muted-foreground font-bold text-xs hover:bg-muted transition-colors">
+          <Button variant="outline" onClick={() => setEditing(false)}>
             Hủy bỏ
-          </button>
-          <button onClick={handleSave} className="py-2.5 rounded-lg bg-primary text-primary-foreground font-bold text-xs shadow-md hover:bg-primary/90 transition-colors">
+          </Button>
+          <Button onClick={handleSave}>
             Lưu thay đổi
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="p-4 border-t border-border bg-muted/50">
-          <button
+          <Button
+            variant="destructive"
             onClick={handleDelete}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-destructive bg-background border border-border hover:bg-destructive/10 hover:border-destructive/20 shadow-sm transition-all duration-200 font-bold text-xs"
+            className="w-full"
           >
-            <span className="material-symbols-outlined text-sm">delete</span> Xóa đối tượng
-          </button>
+            <span className="material-symbols-outlined text-sm mr-2">delete</span> Xóa đối tượng
+          </Button>
         </div>
+      )}
+
+      {showBuildingModal && selectedType === 'node' && (
+        <BuildingModal
+          nodeId={selectedId ?? undefined}
+          initialBuildingId={nodeData?.building_id}
+          onClose={() => setShowBuildingModal(false)}
+          onSuccess={() => {
+            if (selectedId) {
+              editorApi.getNodeById(selectedId).then((updatedNode) => {
+                updateNode(selectedId, updatedNode);
+                setEditedData({
+                  ...updatedNode,
+                  aliases: (updatedNode.aliases || []) as string[],
+                  linked_node_ids: updatedNode.linked_node_ids || [],
+                } as unknown as NodeFormData);
+              });
+            }
+            setShowBuildingModal(false);
+          }}
+        />
       )}
     </aside>
   );

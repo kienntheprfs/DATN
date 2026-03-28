@@ -219,14 +219,20 @@ interface MapToolResultProps {
 }
 
 export function MapToolResult({ toolContent }: MapToolResultProps) {
+  let routeData: RouteData | null = null;
+  
   try {
     const data = JSON.parse(toolContent);
-    
     if (data.type === 'route') {
-      return <MiniNavigation routeData={data} />;
+      routeData = data;
     }
   } catch {
     // Not JSON
   }
+  
+  if (routeData) {
+    return <MiniNavigation routeData={routeData} />;
+  }
+  
   return null;
 }

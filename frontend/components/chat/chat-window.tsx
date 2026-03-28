@@ -133,7 +133,7 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 	return (
 		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
 			<CollapsibleTrigger asChild>
-				<button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-100/50 transition-colors text-left">
+				<Button variant="ghost" className="w-full justify-start h-auto py-3 px-4">
 					<ChevronDown
 						className={`size-4 text-blue-600 transition-transform ${isOpen ? "" : "-rotate-90"}`}
 					/>
@@ -156,7 +156,7 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 							<span className="text-xs text-blue-600/70">Hoàn tất</span>
 						)}
 					</div>
-				</button>
+				</Button>
 			</CollapsibleTrigger>
 			<CollapsibleContent>
 				<div className="px-4 pb-3 text-xs text-blue-600/80 border-t border-blue-200/50 pt-2">
