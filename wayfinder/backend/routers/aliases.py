@@ -142,29 +142,40 @@ def search_alias(
         return []
 
     norm_q = q.strip().lower()
-    stmt = select(Alias).where(Alias.name.ilike(f"%{norm_q}%"))
-    items = session.exec(stmt).all()
 
-    if not items:
-        return []
+    # Tìm trong Alias table
+    alias_stmt = select(Alias).where(Alias.name.ilike(f"%{norm_q}%"))
+    alias_items = session.exec(alias_stmt).all()
 
-    choices = {a.id: a.name for a in items}
+    # Tìm trong Node table (node names)
+    node_stmt = select(Node).where(Node.name.ilike(f"%{norm_q}%"))
+    node_items = session.exec(node_stmt).all()
 
-    # token_set_ratio rất tốt cho việc tìm "Phòng họp" khi user gõ "họp phòng"
-    results = process.extract(norm_q, choices, scorer=fuzz.token_set_ratio, limit=limit)
-
-    # Format kết quả trả về
+    # Combine results
     out = []
-    items_map = {a.id: a for a in items}
+    seen_node_ids = set()
 
-    for _, score, alias_id in results:
-        if score < 40:  # Ngưỡng tối thiểu để được coi là khớp
-            continue
-
-        a = items_map.get(alias_id)
-        out.append(
-            AliasSearchOut(
-                node_id=a.node_id, alias_id=a.id, name=a.name, score=float(score)
+    # Add alias matches first (higher priority)
+    for a in alias_items:
+        if a.node_id not in seen_node_ids:
+            score = fuzz.token_set_ratio(norm_q, a.name.lower())
+            out.append(
+                AliasSearchOut(
+                    node_id=a.node_id, alias_id=a.id, name=a.name, score=float(score)
+                )
             )
-        )
-    return out
+            seen_node_ids.add(a.node_id)
+
+    # Add node name matches
+    for n in node_items:
+        if n.id not in seen_node_ids:
+            score = fuzz.token_set_ratio(norm_q, n.name.lower())
+            out.append(
+                AliasSearchOut(
+                    node_id=n.id, alias_id=0, name=n.name, score=float(score)
+                )
+            )
+
+    # Sort theo điểm giảm dần, lấy top N
+    out.sort(key=lambda x: x.score, reverse=True)
+    return out[:limit]

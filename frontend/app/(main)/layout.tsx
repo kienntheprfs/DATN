@@ -14,6 +14,11 @@ const inter = Inter({
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi" className={inter.variable}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700;0,20..48,100..700&display=swap" rel="stylesheet" />
+      </head>
       <body className="font-sans">
         <TooltipProvider>
           <AgentProvider>

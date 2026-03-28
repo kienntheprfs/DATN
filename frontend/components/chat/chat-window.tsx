@@ -8,12 +8,30 @@ import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/services/agent";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MapToolResult } from "./MapPreview";
+import { MapData, MapNode, Instruction } from "@/types";
+import { MiniNavigation } from "./MapPreview";
 
 interface ToolCall {
 	id: string;
 	name: string;
 	status: "executing" | "done";
 	content: string | null;
+}
+
+interface RouteData {
+	type: "route";
+	start_name: string;
+	end_name: string;
+	map: MapData;
+	path_coords: number[][];
+	path_node_ids: number[];
+	total_distance_m: number;
+	instructions: Instruction[];
+}
+
+interface ChatMessageWithRoute extends ChatMessage {
+	routeData?: RouteData;
 }
 
 interface ChatWindowProps {
@@ -91,9 +109,9 @@ function ThinkingIndicator() {
 }
 
 function ToolCollapsible({ tool }: { tool: ToolCall }) {
-	const [isOpen, setIsOpen] = useState(true);
+	const [isOpen, setIsOpen] = useState(false);
 
-	let parsedContent: { query?: string; results?: any[]; content?: string } | null = null;
+	let parsedContent: Record<string, unknown> | null = null;
 	let isJson = false;
 	
 	if (tool.content) {
@@ -105,6 +123,13 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 		}
 	}
 
+	const isRouteTool = tool.name.toLowerCase().includes('route') || 
+	                    tool.name.toLowerCase().includes('find') ||
+	                    tool.name.toLowerCase().includes('map');
+
+	const isDone = tool.status === "done";
+	const isExecuting = tool.status === "executing";
+
 	return (
 		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
 			<CollapsibleTrigger asChild>
@@ -114,11 +139,22 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 					/>
 					<div className="flex items-center gap-2">
 						<div className="relative">
-							<div className={`size-4 rounded-full border-2 border-blue-500 ${tool.status === "executing" ? "border-t-transparent animate-spin" : ""}`} />
+							{isDone ? (
+								<div className="size-4 rounded-full bg-blue-500 flex items-center justify-center">
+									<svg className="size-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+									</svg>
+								</div>
+							) : (
+								<div className={`size-4 rounded-full border-2 ${isExecuting ? 'border-blue-500 border-t-transparent animate-spin' : 'border-blue-400'}`} />
+							)}
 						</div>
-						<span className="text-sm text-blue-700 font-medium">
+						<span className="text-sm font-medium text-blue-700">
 							{tool.name}
 						</span>
+						{isDone && (
+							<span className="text-xs text-blue-600/70">Hoàn tất</span>
+						)}
 					</div>
 				</button>
 			</CollapsibleTrigger>
@@ -131,18 +167,21 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 									{parsedContent?.query && (
 										<div className="mb-2">
 											<span className="font-semibold">Query: </span>
-											<span className="font-mono">{parsedContent.query}</span>
+											<span className="font-mono">{String(parsedContent.query)}</span>
 										</div>
 									)}
 									{parsedContent?.results && Array.isArray(parsedContent.results) && (
 										<div className="space-y-1">
-											<span className="font-semibold">Results ({parsedContent.results.length}):</span>
-											{parsedContent.results.slice(0, 5).map((r: any, i: number) => (
-												<div key={i} className="pl-2 border-l-2 border-blue-300 whitespace-pre-wrap">
-													{r.title && <div className="font-medium">{r.title}</div>}
-													<div className="text-blue-700/70 line-clamp-2">{r.content || r.snippet || JSON.stringify(r)}</div>
-												</div>
-											))}
+											<span className="font-semibold">Results ({(parsedContent.results as unknown[]).length}):</span>
+											{(parsedContent.results as unknown[]).slice(0, 5).map((r: unknown, i: number) => {
+												const result = r as Record<string, unknown>;
+												return (
+													<div key={i} className="pl-2 border-l-2 border-blue-300 whitespace-pre-wrap">
+														{result.title ? <div className="font-medium">{String(result.title)}</div> : null}
+														<div className="line-clamp-2">{String(result.content || result.snippet || JSON.stringify(result))}</div>
+													</div>
+												);
+											})}
 										</div>
 									)}
 								</>
@@ -161,6 +200,18 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 			</CollapsibleContent>
 		</Collapsible>
 	);
+}
+
+function RouteMessage({ routeData }: { routeData: RouteData }) {
+	if (!routeData) {
+		return (
+			<div className="p-4 text-sm text-muted-foreground">
+				Đang tải lộ trình...
+			</div>
+		);
+	}
+
+	return <MiniNavigation routeData={routeData} />;
 }
 
 interface GroupedMessages {
@@ -184,6 +235,26 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
 	}, [visibleMessages, currentTools.length]);
+
+	// Extract route data from completed tools
+	const routeData = useMemo(() => {
+		const routeTool = currentTools.find(tool => {
+			const name = tool.name.toLowerCase();
+			return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
+		});
+		
+		if (routeTool?.content) {
+			try {
+				const parsed = JSON.parse(routeTool.content);
+				if (parsed.type === 'route') {
+					return parsed as RouteData;
+				}
+			} catch {
+				// Not JSON
+			}
+		}
+		return null;
+	}, [currentTools]);
 
 	const groupedMessages = useMemo(() => {
 		const groups: GroupedMessages[] = [];
@@ -244,7 +315,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 						);
 					}
 
-					if (showToolsForThisGroup && !combinedContent) {
+					if (showToolsForThisGroup && !combinedContent && !routeData) {
 						return (
 							<div key={`group-${groupIndex}`} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 								<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
@@ -264,13 +335,13 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 							<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 								<Bot className="size-6" />
 							</div>
-							<div className="group relative max-w-[85%] space-y-2">
-								{showToolsForThisGroup && currentTools.map((tool) => (
+							<div className="group relative max-w-[85%] space-y-3">
+								{showToolsForThisGroup && !routeData && currentTools.map((tool) => (
 									<ToolCollapsible key={tool.id} tool={tool} />
 								))}
 								{combinedContent && (
 									<div className="p-4 text-sm rounded-none shadow-sm transition-all duration-200 border bg-background border-border">
-										<div className="prose prose-sm dark:prose-invert max-w-none">
+										<div className="prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/50 [&_a]:hover:decoration-primary">
 											<Markdown remarkPlugins={[remarkGfm]}>
 												{combinedContent}
 											</Markdown>
@@ -281,6 +352,17 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 						</div>
 					);
 				})}
+
+				{routeData && (
+					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+							<Bot className="size-6" />
+						</div>
+						<div className="flex-1 max-w-[85%]">
+							<RouteMessage routeData={routeData} />
+						</div>
+					</div>
+				)}
 
 				{error && (
 					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">

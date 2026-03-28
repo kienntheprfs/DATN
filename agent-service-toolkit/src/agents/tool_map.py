@@ -1,10 +1,11 @@
 from typing import Optional, Any
+import json
 
 import requests
 from langchain_core.tools import tool
 
 
-WAYFINDER_API = "http://127.0.0.1:8000/api"
+WAYFINDER_API = "http://127.0.0.1:8000"
 
 
 def find_route_func(
@@ -15,7 +16,7 @@ def find_route_func(
     try:
         # Search start location (all floors)
         start_response = requests.get(
-            f"{WAYFINDER_API}/search",
+            f"{WAYFINDER_API}/api/aliases/search",
             params={"q": from_location, "limit": 5},
             timeout=10,
         )
@@ -24,7 +25,7 @@ def find_route_func(
 
         # Search end location (all floors)
         end_response = requests.get(
-            f"{WAYFINDER_API}/search",
+            f"{WAYFINDER_API}/api/aliases/search",
             params={"q": to_location, "limit": 5},
             timeout=10,
         )
@@ -106,7 +107,7 @@ Hãy cho biết TÊN và VỊ TRÍ (ví dụ: "Tòa A3" hoặc "Nhà vệ sinh T
 
         # Find route (multi-floor)
         route_response = requests.get(
-            f"{WAYFINDER_API}/find",
+            f"{WAYFINDER_API}/api/find",
             params={"start_node_id": start_node_id, "end_node_id": end_node_id},
             timeout=30,
         )
@@ -119,14 +120,28 @@ Hãy cho biết TÊN và VỊ TRÍ (ví dụ: "Tòa A3" hoặc "Nhà vệ sinh T
         route_response.raise_for_status()
         result = route_response.json()
 
-        instructions = [f"{ins['step']}. {ins['text']}" for ins in result.get("instructions", [])]
-        instructions_text = "\n".join(instructions)
+        # Get map info
+        map_id = result.get("map_id", 1)
+        map_response = requests.get(f"{WAYFINDER_API}/api/maps/{map_id}", timeout=10)
+        map_data = (
+            map_response.json()
+            if map_response.status_code == 200
+            else {"id": map_id, "name": "Bản đồ", "image_url": "", "scale_ratio": 1.0}
+        )
 
-        return f"""Tìm đường từ '{start_results[0]["name"]}' đến '{end_results[0]["name"]}'
-Tổng khoảng cách: {result.get("total_distance_m", 0):.1f}m
-
-Hướng dẫn:
-{instructions_text}"""
+        # Return structured JSON for frontend rendering
+        return json.dumps(
+            {
+                "type": "route",
+                "start_name": start_results[0]["name"],
+                "end_name": end_results[0]["name"],
+                "map": map_data,
+                "path_coords": result.get("path_coords", []),
+                "path_node_ids": result.get("path_node_ids", []),
+                "total_distance_m": result.get("total_distance_m", 0),
+                "instructions": result.get("instructions", []),
+            }
+        )
 
     except requests.RequestException as e:
         return f"Lỗi tìm đường: {str(e)}"

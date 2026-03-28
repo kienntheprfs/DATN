@@ -41,12 +41,35 @@ export function useAgent() {
 }
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
-	const [model, setModel] = useState("gpt-5-nano");
-	const [agent, setAgent] = useState("chatbot");
+	const [model, setModelState] = useState("gpt-5-nano");
+	const [agent, setAgentState] = useState("chatbot");
 	const [models, setModels] = useState<Model[]>([]);
 	const [agents, setAgents] = useState<Agent[]>([]);
 	const [isOnline, setIsOnline] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
+
+	const setModel = useCallback((value: string) => {
+		setModelState(value);
+		if (typeof window !== "undefined") {
+			localStorage.setItem("selectedModel", value);
+		}
+	}, []);
+
+	const setAgent = useCallback((value: string) => {
+		setAgentState(value);
+		if (typeof window !== "undefined") {
+			localStorage.setItem("selectedAgent", value);
+		}
+	}, []);
+
+	useEffect(() => {
+		if (typeof window !== "undefined") {
+			const savedModel = localStorage.getItem("selectedModel");
+			const savedAgent = localStorage.getItem("selectedAgent");
+			if (savedModel) setModelState(savedModel);
+			if (savedAgent) setAgentState(savedAgent);
+		}
+	}, []);
 
 	const fetchInfo = useCallback(async () => {
 		try {
@@ -66,8 +89,16 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
 			setModels(modelList);
 			setAgents(data.agents);
-			setModel(data.default_model);
-			setAgent(data.default_agent);
+
+			if (typeof window !== "undefined") {
+				const savedModel = localStorage.getItem("selectedModel");
+				const savedAgent = localStorage.getItem("selectedAgent");
+				setModelState(savedModel || data.default_model);
+				setAgentState(savedAgent || data.default_agent);
+			} else {
+				setModelState(data.default_model);
+				setAgentState(data.default_agent);
+			}
 		} catch {
 			setIsOnline(false);
 		} finally {
