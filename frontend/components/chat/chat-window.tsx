@@ -11,12 +11,20 @@ import { Button } from "@/components/ui/button";
 import { MapToolResult } from "./MapPreview";
 import { MapData, MapNode, Instruction } from "@/types";
 import { MiniNavigation } from "./MapPreview";
+import { useRouter } from "next/navigation";
+import { Navigation } from "lucide-react";
 
 interface ToolCall {
 	id: string;
 	name: string;
 	status: "executing" | "done";
 	content: string | null;
+}
+
+interface RouteMapData {
+	map: MapData;
+	nodes: MapNode[];
+	edges: any[];
 }
 
 interface RouteData {
@@ -28,6 +36,9 @@ interface RouteData {
 	path_node_ids: number[];
 	total_distance_m: number;
 	instructions: Instruction[];
+	is_multi_floor?: boolean;
+	route_maps?: RouteMapData[];
+	floor_count?: number;
 }
 
 interface ChatMessageWithRoute extends ChatMessage {
@@ -203,10 +214,46 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 }
 
 function RouteMessage({ routeData }: { routeData: RouteData }) {
+	const router = useRouter();
+
 	if (!routeData) {
 		return (
 			<div className="p-4 text-sm text-muted-foreground">
 				Đang tải lộ trình...
+			</div>
+		);
+	}
+
+	if (routeData.is_multi_floor) {
+		const navUrl = new URL("/navigation", window.location.origin);
+		navUrl.searchParams.set("start", routeData.start_name);
+		navUrl.searchParams.set("end", routeData.end_name);
+		navUrl.searchParams.set("start_node", routeData.path_node_ids[0]?.toString() || "");
+		navUrl.searchParams.set("end_node", routeData.path_node_ids[routeData.path_node_ids.length - 1]?.toString() || "");
+
+		return (
+			<div className="p-4 bg-blue-600 text-white rounded-lg shadow-md">
+				<div className="flex items-start gap-3">
+					<Navigation className="w-6 h-6 mt-0.5" />
+					<div className="flex-1">
+						<h4 className="font-bold text-lg mb-1">
+							Đường đi qua {routeData.floor_count} tầng
+						</h4>
+						<p className="text-sm text-blue-100 mb-3">
+							Từ <strong>{routeData.start_name}</strong> đến{" "}
+							<strong>{routeData.end_name}</strong>
+							<br />
+							Khoảng cách: {Math.round(routeData.total_distance_m)}m
+						</p>
+						<button
+							onClick={() => router.push(navUrl.toString())}
+							className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-colors shadow-sm"
+						>
+							<Navigation className="w-4 h-4" />
+							Mở bản đồ dẫn đường
+						</button>
+					</div>
+				</div>
 			</div>
 		);
 	}

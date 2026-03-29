@@ -75,6 +75,28 @@ export default function NavigationPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
+  // Handle URL parameters for navigation from chatbot
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const startNode = params.get('start_node');
+    const endNode = params.get('end_node');
+    const start = params.get('start');
+    const end = params.get('end');
+
+    if (startNode) {
+      setStartNodeId(parseInt(startNode));
+    }
+    if (endNode) {
+      setEndNodeId(parseInt(endNode));
+    }
+    if (start) {
+      setStartLocation(decodeURIComponent(start));
+    }
+    if (end) {
+      setEndLocation(decodeURIComponent(end));
+    }
+  }, []);
+
   useEffect(() => {
     const loadBuildings = async () => {
       try {
@@ -157,6 +179,28 @@ export default function NavigationPage() {
       });
     }
   }, [currentMap]);
+
+  // Auto find route when start and end nodes are provided via URL
+  useEffect(() => {
+    if (startNodeId && endNodeId && allNodes.length > 0 && !route) {
+      const startNode = allNodes.find(n => n.id === startNodeId);
+      const endNode = allNodes.find(n => n.id === endNodeId);
+      
+      if (startNode) {
+        setStartLocation(startNode.name);
+      }
+      if (endNode) {
+        setEndLocation(endNode.name);
+      }
+      
+      // Small delay to ensure map is loaded
+      const timer = setTimeout(() => {
+        handleFindRoute();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [startNodeId, endNodeId, allNodes.length, route]);
 
   const handleRefreshCache = async () => {
     try {
@@ -437,7 +481,7 @@ export default function NavigationPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 bg-white px-6 py-3 z-20 shadow-sm">
+      <header className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 bg-white px-6 py-3 z-[60] shadow-sm relative">
         <div className="flex items-center gap-4">
           <div className="size-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <span className="material-symbols-outlined text-white">map</span>

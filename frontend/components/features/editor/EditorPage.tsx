@@ -9,6 +9,7 @@ import { MapData, MapNode, MapEdge, ToolType, NodeFormData, EdgeFormData, Buildi
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { BuildingModal } from './BuildingModal';
 import { EditorInspector } from './EditorInspector';
+import { MapOverlay } from './MapOverlay';
 import { Button } from '@/components/ui/button';
 
 const MAP_WIDTH = 800;
@@ -344,12 +345,7 @@ export default function EditorPage() {
         <div className="flex-1 relative flex flex-col min-w-0">
           <main className="flex-1 relative bg-muted overflow-hidden">
             {!currentMap && (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <span className="material-symbols-outlined text-6xl mb-4">map</span>
-                  <p>Chọn một bản đồ để bắt đầu chỉnh sửa</p>
-                </div>
-              </div>
+              <MapOverlay onUploadSuccess={setMap} />
             )}
 
             <div className="absolute inset-0 flex items-center justify-center">

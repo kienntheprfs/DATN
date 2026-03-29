@@ -48,6 +48,24 @@ function NodeSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (_value && !selectedLocation) {
+      loadLocationById(_value);
+    }
+  }, [_value]);
+
+  const loadLocationById = async (nodeId: number) => {
+    try {
+      const data = await locationApi.getAll();
+      const found = data.find(loc => loc.node_id === nodeId);
+      if (found) {
+        setSelectedLocation(found);
+      }
+    } catch (error) {
+      console.error('Failed to load location:', error);
+    }
+  };
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -58,17 +76,35 @@ function NodeSelector({
   }, []);
 
   useEffect(() => {
-    if (query.length >= 2) {
+    if (isOpen && results.length === 0) {
+      loadAllLocations();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (query.length >= 1) {
       searchLocations(query);
-    } else {
-      setResults([]);
+    } else if (isOpen) {
+      loadAllLocations();
     }
   }, [query]);
+
+  const loadAllLocations = async () => {
+    setLoading(true);
+    try {
+      const data = await locationApi.getAll();
+      setResults(data);
+    } catch (error) {
+      console.error('Failed to load locations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const searchLocations = async (q: string) => {
     setLoading(true);
     try {
-      const data = await locationApi.search(q, 10);
+      const data = await locationApi.search(q, 20);
       setResults(data);
     } catch (error) {
       console.error('Failed to search locations:', error);
@@ -124,7 +160,7 @@ function NodeSelector({
                 setIsOpen(true);
               }}
               onFocus={() => setIsOpen(true)}
-              placeholder="Tìm kiếm vị trí trên bản đồ..."
+              placeholder="Gõ để lọc vị trí..."
               className="pr-10"
             />
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -132,13 +168,13 @@ function NodeSelector({
         )}
       </div>
 
-      {isOpen && (query.length >= 2 || !selectedLocation) && (
+      {isOpen && (
         <div className="absolute z-50 w-full mt-1 py-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto">
           {loading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Đang tìm kiếm...</div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">Đang tải...</div>
           ) : results.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">
-              {query.length < 2 ? 'Nhập ít nhất 2 ký tự để tìm kiếm' : 'Không tìm thấy vị trí nào'}
+              Không tìm thấy vị trí nào
             </div>
           ) : (
             results.map((location) => (

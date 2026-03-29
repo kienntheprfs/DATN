@@ -12,13 +12,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Card } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { PlusIcon, UploadIcon, Building2Icon, LayersIcon } from "lucide-react";
 
 interface BuildingModalProps {
     nodeId?: number;
@@ -119,179 +121,157 @@ export const BuildingModal = ({ nodeId, initialBuildingId, onClose, onSuccess }:
         }
     };
 
+    const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
+
     return (
-        <Dialog open onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="!w-[900px] !max-w-[95vw] !h-[700px] !max-h-[90vh] !overflow-hidden !p-0 !gap-0">
-                <DialogHeader className="px-6 py-4 border-b border-border">
-                    <DialogTitle>Quản lý Tòa nhà</DialogTitle>
-                    <DialogDescription>
-                        Thiết lập danh sách tầng & bản đồ
-                    </DialogDescription>
-                </DialogHeader>
+        <Sheet open onOpenChange={(open) => !open && onClose()}>
+            <SheetContent side="right" className="w-[50vw] h-[70vh] mt-[15vh] p-0 flex flex-col">
+                <SheetHeader className="px-6 py-4 border-b shrink-0">
+                    <SheetTitle>Quản lý Tòa nhà</SheetTitle>
+                    <SheetDescription>Thiết lập danh sách tầng & bản đồ</SheetDescription>
+                </SheetHeader>
 
                 <div className="flex flex-1 overflow-hidden">
-                    <div className="w-64 border-r border-border bg-muted/30 flex flex-col">
-                        <div className="p-4">
+                    <div className="w-40 border-r border-border bg-muted/30 overflow-y-auto shrink-0">
+                        <div className="p-3">
                             <Button 
                                 variant={selectedBuildingId === 'new' ? "default" : "outline"}
-                                className="w-full justify-start mb-4"
+                                className="w-full justify-start mb-3 text-xs"
+                                size="sm"
                                 onClick={() => setSelectedBuildingId('new')}
                             >
-                                <span className="material-symbols-outlined mr-2">add_circle</span> 
+                                <PlusIcon className="mr-1.5 h-3 w-3" />
                                 Tạo tòa nhà
                             </Button>
                             
-                            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 px-2 block">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2 px-1">
                                 Danh sách
-                            </Label>
+                            </p>
                             
-                            <div className="space-y-1 overflow-y-auto max-h-[50vh] pr-1">
+                            <div className="space-y-0.5">
                                 {isLoading && buildings.length === 0 ? (
                                     <div className="text-center py-4 text-xs text-muted-foreground">Đang tải...</div>
                                 ) : (
                                     buildings.map(b => (
-                                        <Button
+                                        <button
                                             key={b.id}
-                                            variant={selectedBuildingId === b.id ? "secondary" : "ghost"}
-                                            size="sm"
                                             onClick={() => handleSelectBuilding(b.id)}
-                                            className={`w-full justify-start font-semibold ${
+                                            className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors truncate ${
                                                 selectedBuildingId === b.id 
-                                                    ? '' 
-                                                    : 'text-muted-foreground'
+                                                    ? 'bg-primary text-primary-foreground' 
+                                                    : 'hover:bg-muted text-muted-foreground hover:text-foreground'
                                             }`}
                                         >
-                                            <span className="truncate">{b.name}</span>
-                                            {selectedBuildingId === b.id && <span className="material-symbols-outlined text-base ml-auto">chevron_right</span>}
-                                        </Button>
+                                            {b.name}
+                                        </button>
                                     ))
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-background relative overflow-y-auto">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-
-                        <div className="absolute inset-0 p-8 z-10">
-                            
-                            {selectedBuildingId === 'new' && (
-                                <div className="h-full flex flex-col items-center justify-center max-w-md mx-auto text-center">
-                                    <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-                                        <span className="material-symbols-outlined text-4xl">domain_add</span>
-                                    </div>
-                                    <h4 className="font-bold text-2xl mb-2">Thêm tòa nhà mới</h4>
-                                    <p className="text-sm text-muted-foreground mb-8">Nhập tên tòa nhà để bắt đầu quản lý các tầng.</p>
-                                    
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {selectedBuildingId === 'new' && (
+                            <div className="h-full flex flex-col items-center justify-center text-center">
+                                <div className="w-14 h-14 bg-primary/10 text-primary rounded-xl flex items-center justify-center mb-4">
+                                    <Building2Icon className="h-7 w-7" />
+                                </div>
+                                <h4 className="font-bold text-lg mb-2">Thêm tòa nhà mới</h4>
+                                <p className="text-xs text-muted-foreground mb-4">Nhập tên tòa nhà để bắt đầu quản lý các tầng.</p>
+                                
+                                <div className="w-full space-y-2">
                                     <Input 
-                                        className="w-full mb-4"
-                                        placeholder="Ví dụ: Tòa nhà A - Block B"
+                                        placeholder="Ví dụ: Tòa nhà A"
                                         value={newBuildingName}
                                         onChange={e => setNewBuildingName(e.target.value)}
                                         autoFocus
+                                        className="text-sm"
                                     />
                                     <Button 
                                         onClick={handleCreateBuilding}
                                         disabled={isLoading || !newBuildingName}
                                         className="w-full"
+                                        size="sm"
                                     >
-                                        {isLoading ? "Đang xử lý..." : "Xác nhận & Tạo tầng"}
+                                        {isLoading ? "Đang xử lý..." : "Xác nhận"}
                                     </Button>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {typeof selectedBuildingId === 'number' && (
-                                <div className="space-y-6">
-                                    <div className="flex justify-between items-end">
-                                        <div>
-                                            <Label className="text-xs font-bold text-primary uppercase tracking-wider mb-1 block">
-                                                Đang chọn
-                                            </Label>
-                                            <h2 className="text-3xl font-extrabold tracking-tight">
-                                                {buildings.find(b => b.id === selectedBuildingId)?.name}
-                                            </h2>
+                        {typeof selectedBuildingId === 'number' && selectedBuilding && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-primary uppercase">Đang chọn</p>
+                                        <h2 className="text-xl font-extrabold">{selectedBuilding.name}</h2>
+                                    </div>
+                                    
+                                    <Button 
+                                        onClick={() => {
+                                            const nextLevel = floors.length > 0 ? (floors[floors.length - 1].floor_level || 0) + 1 : 1;
+                                            setUploadingLevel(nextLevel);
+                                            fileInputRef.current?.click();
+                                        }}
+                                        disabled={isUploading}
+                                        size="sm"
+                                    >
+                                        {isUploading ? "..." : <PlusIcon className="h-4 w-4" />}
+                                        Thêm tầng
+                                    </Button>
+                                </div>
+
+                                <Separator />
+
+                                <div className="space-y-2">
+                                    {floors.length === 0 ? (
+                                        <div className="text-center py-8 border-2 border-dashed border-border rounded-xl bg-muted/30">
+                                            <LayersIcon className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                                            <p className="text-xs text-muted-foreground">Chưa có bản đồ tầng nào.</p>
                                         </div>
-                                        
-                                        <Button 
-                                            onClick={() => {
-                                                const nextLevel = floors.length > 0 ? (floors[floors.length - 1].floor_level || 0) + 1 : 1;
-                                                setUploadingLevel(nextLevel);
-                                                fileInputRef.current?.click();
-                                            }}
-                                            disabled={isUploading}
-                                        >
-                                            {isUploading ? (
-                                                <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
-                                            ) : (
-                                                <span className="material-symbols-outlined mr-2">add_photo_alternate</span>
-                                            )}
-                                            {isUploading ? "Đang tải..." : `Thêm tầng ${floors.length + 1}`}
-                                        </Button>
-                                    </div>
-
-                                    <Separator />
-
-                                    <div className="space-y-4">
-                                        {floors.length === 0 ? (
-                                            <div className="text-center py-16 border-2 border-dashed border-border rounded-2xl bg-muted/30">
-                                                <div className="w-16 h-16 bg-muted text-muted-foreground rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
-                                                    <span className="material-symbols-outlined text-3xl">layers_clear</span>
+                                    ) : (
+                                        floors.map((map) => (
+                                            <Card key={map.id} className="flex gap-3 p-3">
+                                                <div className="w-12 h-12 bg-primary/10 text-primary rounded-lg flex flex-col items-center justify-center shrink-0">
+                                                    <span className="text-[8px] uppercase font-bold text-primary/60">Tầng</span>
+                                                    <span className="text-lg font-bold leading-none">{map.floor_level}</span>
                                                 </div>
-                                                <p className="text-muted-foreground font-medium">Chưa có bản đồ tầng nào.</p>
-                                                <p className="text-xs text-muted-foreground mt-1">Bấm nút &quot;Thêm tầng&quot; ở trên để bắt đầu.</p>
-                                            </div>
-                                        ) : (
-                                            floors.map((map) => (
-                                                <div key={map.id} className="group flex gap-5 p-4 border border-border rounded-xl bg-card shadow-sm hover:shadow-md transition-all items-center">
-                                                    <div className="w-14 h-14 bg-primary/10 text-primary rounded-xl flex flex-col items-center justify-center border border-primary/20 shrink-0">
-                                                        <span className="text-[10px] uppercase font-bold text-primary/60">Tầng</span>
-                                                        <span className="text-xl font-bold leading-none">{map.floor_level}</span>
-                                                    </div>
-                                                    
-                                                    <div className="w-32 h-20 rounded-lg overflow-hidden border border-border bg-muted relative">
-                                                        <Image 
-                                                            src={map.image_url} 
-                                                            alt="Map" 
-                                                            fill
-                                                            className="object-contain"
-                                                            unoptimized
-                                                        />
-                                                    </div>
-                                                    
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="font-bold text-lg truncate">{map.name}</div>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <Badge variant="secondary" className="font-mono text-xs">ID: {map.id}</Badge>
-                                                            <span className="text-xs text-muted-foreground">Scale: {map.scale_ratio}</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <Button 
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => { /* TODO: Open map editor */ }}
-                                                    >
-                                                        Chỉnh sửa
-                                                    </Button>
+                                                
+                                                <div className="w-24 h-16 rounded-lg overflow-hidden border border-border bg-muted relative shrink-0">
+                                                    <Image 
+                                                        src={map.image_url} 
+                                                        alt="Map" 
+                                                        fill
+                                                        className="object-contain"
+                                                        unoptimized
+                                                    />
                                                 </div>
-                                            ))
-                                        )}
-                                    </div>
+                                                
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-bold text-sm truncate">{map.name}</div>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <Badge variant="secondary" className="font-mono text-[10px]">ID: {map.id}</Badge>
+                                                        <span className="text-[10px] text-muted-foreground">Scale: {map.scale_ratio}</span>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        ))
+                                    )}
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {selectedBuildingId === null && (
-                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-60">
-                                    <span className="material-symbols-outlined text-6xl mb-4 text-muted-foreground/30">apartment</span>
-                                    <p>Chọn một tòa nhà bên trái để xem chi tiết.</p>
-                                </div>
-                            )}
-                        </div>
+                        {selectedBuildingId === null && (
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-60">
+                                <Building2Icon className="h-12 w-12 mb-2 opacity-30" />
+                                <p className="text-sm">Chọn một tòa nhà để xem chi tiết.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
                 
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleUploadFloor} accept="image/*" />
-            </DialogContent>
-        </Dialog>
+            </SheetContent>
+        </Sheet>
     );
 };

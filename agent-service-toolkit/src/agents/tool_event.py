@@ -5,7 +5,7 @@ import requests
 from langchain_core.tools import tool
 
 
-WAYFINDER_API = "http://127.0.0.1:8000"
+WAYFINDER_API = "http://127.0.0.1:8004"
 
 
 def search_events_func(

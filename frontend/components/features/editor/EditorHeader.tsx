@@ -35,7 +35,7 @@ export function EditorHeader({
   const buildingMaps = maps.filter((m) => m.building_id);
 
   return (
-    <header className="h-14 bg-background border-b border-border flex items-center justify-between px-6 shrink-0">
+    <header className="h-14 bg-background border-b border-border flex items-center justify-between px-6 shrink-0 relative z-[100]">
       <div className="flex items-center gap-3">
         <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
           ✏️
@@ -72,7 +72,7 @@ export function EditorHeader({
           </button>
 
           {isOpen && (
-            <div className="absolute top-full mt-2 w-full bg-background rounded-xl shadow-lg border overflow-hidden z-50">
+            <div className="absolute top-full mt-2 w-full bg-background rounded-xl shadow-lg border z-[100]">
               <div className="max-h-[60vh] overflow-y-auto py-2">
                 {campusMaps.length > 0 && (
                   <div className="mb-2">

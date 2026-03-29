@@ -58,6 +58,9 @@ export function EditorInspector({
   }, [selectedType, selectedId, nodes]);
 
   const formData = useMemo(() => {
+    if (editedData) {
+      return editedData;
+    }
     if (selectedType === 'node' && rawData) {
       const nodeData = rawData as MapNode;
       return {
@@ -66,7 +69,7 @@ export function EditorInspector({
         linked_node_ids: nodeData.linked_node_ids || [],
       };
     }
-    return editedData;
+    return null;
   }, [rawData, selectedType, editedData]);
 
   useEffect(() => {

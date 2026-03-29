@@ -1,7 +1,12 @@
 import { apiClient } from './wayfinding-client';
-import { MapNode, MapEdge } from '@/types';
+import { MapNode, MapEdge, Building } from '@/types';
 
 export const editorApi = {
+  getBuildings: async () => {
+    const res = await apiClient.get<Building[]>("/api/buildings");
+    return res.data;
+  },
+
   createNode: async (data: Partial<MapNode>) => {
     const res = await apiClient.post<MapNode>("/api/nodes", data);
     return res.data;
