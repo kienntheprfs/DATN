@@ -18,7 +18,28 @@ Simplified API Gateway with JWT authentication and Python-based authorization (n
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Start PostgreSQL
+
+```bash
+cd api_gateway
+
+# Using docker-compose (recommended)
+docker-compose up -d
+
+# Or manually with docker
+docker run -d \
+  --name postgres-gateway \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=authdb \
+  -p 5433:5432 \
+  postgres:15-alpine
+
+# Or connect to existing PostgreSQL instance
+# Update DATABASE_URL in step 3 below
+```
+
+### 2. Install Dependencies
 
 ```bash
 cd api_gateway
@@ -28,21 +49,6 @@ uv sync
 
 # Or using pip
 pip install -e .
-```
-
-### 2. Setup Database
-
-```bash
-# Start PostgreSQL (if using Docker)
-docker run -d \
-  --name postgres-gateway \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=authdb \
-  -p 5433:5432 \
-  postgres:15-alpine
-
-# Or use existing PostgreSQL instance
 ```
 
 ### 3. Configure Environment
@@ -154,8 +160,10 @@ curl -X POST http://localhost:8002/agent/invoke \
 | Role | Knowledge | Wayfinder | Agent Invoke | Agent History | Thread CRUD |
 |------|-----------|-----------|--------------|---------------|-------------|
 | **Admin** | ✅ Full | ✅ Full | ✅ All | ✅ All | ✅ All |
-| **User** | ❌ 403 | ❌ 403 | ✅ Own | ✅ Own | ✅ Own |
-| **Guest** | ❌ 401 | ❌ 401 | ✅ Temp | ❌ 401 | ❌ 401 |
+| **User** | ❌ 403 | ❌ 403 | ✅ Public | ✅ Own | ✅ Own |
+| **Guest** | ❌ 401 | ❌ 401 | ✅ Public | ❌ 401 | ❌ 401 |
+
+> **Note**: `/agent/invoke` is public endpoint—no JWT required, works in guest mode
 
 ## Development
 
@@ -243,6 +251,35 @@ psql -h localhost -p 5433 -U postgres -d authdb
 uv run alembic current
 ```
 
+### Database URL Compatibility
+
+**Issue**: `sqlalchemy.exc.NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:postgres`
+
+**Cause**: DATABASE_URL uses `postgres://` scheme instead of `postgresql://`
+
+**Solution**: API Gateway auto-normalizes URL schemes:
+```bash
+# Both work fine (gateway converts postgres:// to postgresql://)
+DATABASE_URL=postgres://user:pass@host:port/dbname
+DATABASE_URL=postgresql://user:pass@host:port/dbname
+```
+
+### asyncpg SSL Parameter Issue
+
+**Issue**: `TypeError: connect() got an unexpected keyword argument 'sslmode'`
+
+**Cause**: Cloud databases (Aiven, AWS RDS) use `sslmode` parameter, but asyncpg driver expects `ssl`
+
+**Solution**: Gateway auto-converts query parameters:
+```bash
+# This works - gateway converts sslmode=require to ssl=require for asyncpg
+DATABASE_URL=postgresql://... ?sslmode=require
+```
+
+**How it works**:
+- Runtime uses asyncpg (async driver) + auto-converts `sslmode` → `ssl`
+- Migrations use psycopg2 (sync driver) + keeps `sslmode` parameter
+
 ### JWT Token Issues
 
 ```bash
@@ -259,6 +296,19 @@ cat .env | grep JWT_SECRET
 - **401 Unauthorized**: Missing or invalid JWT token
 - **403 Forbidden**: User doesn't have required role or ownership
 - **404 Not Found**: Resource not found
+
+### Seed Script Fails
+
+**Issue**: `seed_data.py` fails with database errors
+
+**Debug**:
+```bash
+# Verify database connection
+uv run python -c "from src.config import settings; print(settings.database_url_async)"
+
+# Run seed with debugging
+uv run python scripts/seed_data.py
+```
 
 ## Architecture Comparison
 

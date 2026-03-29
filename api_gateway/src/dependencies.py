@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Database Engine with optimized connection pooling
 engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    settings.database_url_async,
     echo=settings.debug,
     pool_pre_ping=True,  # Test connections before using them
     pool_size=settings.db_pool_size,  # Number of persistent connections

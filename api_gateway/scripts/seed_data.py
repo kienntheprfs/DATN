@@ -112,7 +112,7 @@ async def main():
     
     # Create async engine
     engine = create_async_engine(
-        settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+        settings.database_url_async,
         echo=False,
     )
     

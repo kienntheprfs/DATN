@@ -22,21 +22,15 @@ Lưu ý: phiên bản hiện tại không dùng OPA runtime và không cần Red
 
 ## Quick Start
 
-### 1. Start PostgreSQL
 
-```bash
-cd api_gateway
-docker-compose up -d
-```
-
-### 2. Install dependencies
+### 1. Install dependencies
 
 ```bash
 cd api_gateway
 uv sync
 ```
 
-### 3. Configure environment
+### 2. Configure environment
 
 ```bash
 cd api_gateway
@@ -58,14 +52,8 @@ Các biến quan trọng:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
-### 4. Run database migrations
 
-```bash
-cd api_gateway
-alembic upgrade head
-```
-
-### 5. Run API Gateway
+### 3. Run API Gateway
 
 ```bash
 cd api_gateway
@@ -159,7 +147,7 @@ alembic downgrade base
 alembic upgrade head
 ```
 
-Dừng service:
+Dừng service db postgres local (nếu dùng docker):
 
 ```bash
 cd api_gateway
@@ -172,5 +160,63 @@ Xóa data volume:
 ```bash
 cd api_gateway
 docker-compose down -v
+```
+
+## Troubleshooting
+
+### Database URL compatibility
+
+**Issue**: `sqlalchemy.exc.NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:postgres`
+
+**Cause**: DATABASE_URL dùng scheme `postgres://` thay vì `postgresql://`.
+
+**Solution**: API Gateway tự động chuẩn hóa URL. Hỗ trợ cả:
+- `postgres://` → sẽ được chuyển thành `postgresql://`
+- `postgresql://` → không thay đổi
+
+```bash
+# Cách 1: Cập nhật .env (tuỳ chọn, gateway tự xử lý)
+DATABASE_URL=postgresql://user:password@host:port/dbname
+
+# Hay giữ lại postgres:// cũng được
+DATABASE_URL=postgres://user:password@host:port/dbname
+```
+
+### asyncpg SSL parameter incompatibility
+
+**Issue**: `TypeError: connect() got an unexpected keyword argument 'sslmode'`
+
+**Cause**: Tham số `sslmode` (dành cho psycopg2 sync) không tương thích với asyncpg.
+
+**Solution**: Gateway tự động chuyển đổi query parameter:
+- `sslmode=require` → `ssl=require` (asyncpg compatible)
+
+Không cần thay đổi DATABASE_URL.
+
+**Note**: Migration (Alembic) vẫn dùng psycopg2 sync, nên giữ lại `sslmode` trong URL là đúng.
+
+### Database migration fails
+
+**Issue**: `alembic upgrade head` bị lỗi kết nối
+
+**Debug**: Kiểm tra URL và kết nối:
+```bash
+cd api_gateway
+uv run python -c "from src.config import settings; print('Sync:', settings.database_url_sync); print('Async:', settings.database_url_async)"
+```
+
+**Common causes**:
+- Host/port/credentials sai trong DATABASE_URL
+- Database server chưa đạt
+- Firewall chặn kết nối
+
+### Seed data fails
+
+**Issue**: `seed_data.py` bị lỗi sslmode
+
+**Solution**: Script đã cập nhật dùng chuẩn hóa URL từ config:
+```bash
+cd api_gateway
+echo "admin@example.com" | uv run python scripts/seed_data.py
 ```
 

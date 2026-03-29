@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 class Settings(BaseSettings):
@@ -55,6 +56,48 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""
         return [origin.strip() for origin in self.cors_origins.split(",")]
+
+    @property
+    def normalized_database_url(self) -> str:
+        """Normalize DB URL scheme for SQLAlchemy compatibility.
+
+        Supports providers that expose URLs as `postgres://...`.
+        """
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql://", 1)
+        return url
+
+    @property
+    def database_url_async(self) -> str:
+        """Return async SQLAlchemy URL for runtime engine."""
+        url = self.normalized_database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # asyncpg does not accept `sslmode`; use `ssl` instead.
+        parts = urlsplit(url)
+        query_items = parse_qsl(parts.query, keep_blank_values=True)
+        has_ssl = any(key.lower() == "ssl" for key, _ in query_items)
+        converted_items = []
+
+        for key, value in query_items:
+            if key.lower() == "sslmode":
+                if not has_ssl:
+                    converted_items.append(("ssl", value))
+                continue
+            converted_items.append((key, value))
+
+        new_query = urlencode(converted_items, doseq=True)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+
+    @property
+    def database_url_sync(self) -> str:
+        """Return sync SQLAlchemy URL for Alembic engine."""
+        url = self.normalized_database_url
+        if url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return url
     
     # Application
     app_name: str = "API Gateway"

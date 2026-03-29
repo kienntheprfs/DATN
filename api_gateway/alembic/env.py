@@ -14,8 +14,9 @@ from src.config import settings
 # this is the Alembic Config object
 config = context.config
 
+
 # Override sqlalchemy.url from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.database_url_sync)
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
