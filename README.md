@@ -13,3 +13,8 @@ Chatbot backend
 
 Chatbot UI
 - `streamlit run src/streamlit_app.py`
+
+API Gateway
+- cài đặt package: `cd api_gateway; uv sync`
+- chạy migration (nếu có): `cd api_gateway; uv run alembic upgrade head`
+- chạy: `cd api_gateway; docker compose up -d; uv run uvicorn src.main:app --reload --port 8002`
