@@ -6,15 +6,17 @@ from sqlmodel import SQLModel, Field, Relationship
 
 # Export SQLModel as Base for Alembic compatibility
 Base = SQLModel
+API_GATEWAY_SCHEMA = "api_gateway"
 
 
 # Link model for many-to-many relationship between users and roles
 class UserRoleLink(SQLModel, table=True):
     """Link table for User-Role many-to-many relationship."""
     __tablename__ = "user_roles"
+    __table_args__ = {"schema": API_GATEWAY_SCHEMA}
     
-    user_id: str = Field(foreign_key="users.id", primary_key=True, max_length=36)
-    role_id: str = Field(foreign_key="roles.id", primary_key=True, max_length=36)
+    user_id: str = Field(foreign_key=f"{API_GATEWAY_SCHEMA}.users.id", primary_key=True, max_length=36)
+    role_id: str = Field(foreign_key=f"{API_GATEWAY_SCHEMA}.roles.id", primary_key=True, max_length=36)
 
 
 class AuthProvider:
@@ -30,6 +32,7 @@ class User(SQLModel, table=True):
     OAuth users may have nullable hashed_password.
     """
     __tablename__ = "users"
+    __table_args__ = {"schema": API_GATEWAY_SCHEMA}
     
     id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -97,6 +100,7 @@ class User(SQLModel, table=True):
 class Role(SQLModel, table=True):
     """Role model for RBAC."""
     __tablename__ = "roles"
+    __table_args__ = {"schema": API_GATEWAY_SCHEMA}
     
     id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -124,6 +128,7 @@ class Role(SQLModel, table=True):
 class Thread(SQLModel, table=True):
     """Thread model for conversation tracking."""
     __tablename__ = "threads"
+    __table_args__ = {"schema": API_GATEWAY_SCHEMA}
     
     id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -131,7 +136,7 @@ class Thread(SQLModel, table=True):
         max_length=36,
     )
     user_id: str = Field(
-        foreign_key="users.id",
+        foreign_key=f"{API_GATEWAY_SCHEMA}.users.id",
         index=True,
         max_length=36,
     )
@@ -157,6 +162,7 @@ class Thread(SQLModel, table=True):
 class RefreshToken(SQLModel, table=True):
     """Refresh token model for token management and revocation."""
     __tablename__ = "refresh_tokens"
+    __table_args__ = {"schema": API_GATEWAY_SCHEMA}
     
     id: str = Field(
         default_factory=lambda: str(uuid4()),
@@ -170,7 +176,7 @@ class RefreshToken(SQLModel, table=True):
         description="The JWT refresh token string",
     )
     user_id: str = Field(
-        foreign_key="users.id",
+        foreign_key=f"{API_GATEWAY_SCHEMA}.users.id",
         index=True,
         max_length=36,
     )

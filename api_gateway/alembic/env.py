@@ -1,6 +1,6 @@
 """Alembic environment configuration."""
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ if config.config_file_name is not None:
 
 # Import all models for autogenerate support
 target_metadata = Base.metadata
+VERSION_TABLE_SCHEMA = "api_gateway"
 
 
 def run_migrations_offline() -> None:
@@ -32,6 +33,8 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        include_schemas=True,
+        version_table_schema=VERSION_TABLE_SCHEMA,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -49,9 +52,27 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Commit schema/version-table housekeeping before Alembic starts its own transaction.
+        with connection.begin():
+            connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {VERSION_TABLE_SCHEMA}"))
+
+            public_version_table = connection.execute(
+                text("SELECT to_regclass('public.alembic_version')")
+            ).scalar_one_or_none()
+            schema_version_table = connection.execute(
+                text(f"SELECT to_regclass('{VERSION_TABLE_SCHEMA}.alembic_version')")
+            ).scalar_one_or_none()
+
+            if public_version_table and not schema_version_table:
+                connection.execute(
+                    text(f"ALTER TABLE public.alembic_version SET SCHEMA {VERSION_TABLE_SCHEMA}")
+                )
+
         context.configure(
             connection=connection,
-            target_metadata=target_metadata
+            target_metadata=target_metadata,
+            include_schemas=True,
+            version_table_schema=VERSION_TABLE_SCHEMA,
         )
 
         with context.begin_transaction():
