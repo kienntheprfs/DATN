@@ -18,7 +18,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const { model, agent } = useAgent();
 	const { state } = useSidebar();
 
-	const { messages, sendMessage, addUserMessage, addBotMessage, updateLastBotMessage, stop, isLoading, isTyping, currentTools, error } = useChat({
+	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error } = useChat({
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
 	});
@@ -30,12 +30,21 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		onTranscript: (text) => {
 			if (text.trim()) {
 				addUserMessage(text);
+				clearVoiceTools();
 			}
 		},
 		onBotOutput: (text) => {
 			if (text.trim()) {
-				addBotMessage(text);
+				appendBotMessage(text);
 			}
+		},
+		onToolStarted: (toolCalls) => {
+			toolCalls.forEach((tool) => {
+				addVoiceToolCall(tool);
+			});
+		},
+		onToolResult: (result) => {
+			updateVoiceToolResult(result.toolCallId, result.content);
 		},
 		onError: (err) => console.error("Voice error:", err),
 	});

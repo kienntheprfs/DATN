@@ -2,26 +2,55 @@ import aiohttp
 import json
 import uuid
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 from loguru import logger
 from pipecat.services.openai.base_llm import BaseOpenAILLMService, OpenAILLMSettings
 from openai.types.chat import ChatCompletionChunk
 
 
 def strip_markdown(text: str) -> str:
-    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
-    text = re.sub(r"\*(.+?)\*", r"\1", text)
-    text = re.sub(r"__(.+?)__", r"\1", text)
-    text = re.sub(r"_(.+?)_", r"\1", text)
-    text = re.sub(r"~~(.+?)~~", r"\1", text)
-    text = re.sub(r"#+\s+(.+)", r"\1", text)
-    text = re.sub(r">\s+(.+)", r"\1", text)
-    text = re.sub(r"-\s+(.+)", r"\1", text)
-    text = re.sub(r"\d+\.\s+(.+)", r"\1", text)
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-    text = re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
+    if not text:
+        return text
+
+    # 1. Xử lý Code Blocks và Inline Code trước (giữ lại nội dung bên trong)
+    # Loại bỏ ``` ngôn_ngữ và ``` ở cuối
+    text = re.sub(r"```[a-zA-Z0-9]*\n(.*?)\n```", r"\1", text, flags=re.DOTALL)
+    # Loại bỏ inline code `code`
+    text = re.sub(r"`(.*?)`", r"\1", text)
+
+    # 2. Xử lý Image trước Link (giữ lại alt text)
     text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r"\1", text)
+    # 3. Xử lý Link (giữ lại text hiển thị)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+
+    # 4. Xử lý các Block elements (Header, Quote, List) - Bắt buộc phải ở đầu dòng
+    # Xóa Headers (# Header)
+    text = re.sub(r"^#+\s+", "", text, flags=re.MULTILINE)
+    # Xóa Blockquotes (> Quote)
+    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
+    # Xóa Unordered Lists (-, *, +)
+    text = re.sub(r"^[\-\*\+]\s+", "", text, flags=re.MULTILINE)
+    # Xóa Ordered Lists (1. Item)
+    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+    # Xóa Horizontal Rules (---, ***, ___)
+    text = re.sub(r"^(?:---|\*\*\*|___)\s*$", "", text, flags=re.MULTILINE)
+
+    # 5. Xử lý các Inline elements (Bold, Italic, Strikethrough)
+    # Dùng ? để non-greedy, tránh xóa nhầm khoảng văn bản giữa 2 phần in đậm khác nhau
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"__(.*?)__", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"\*(.*?)\*", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"_(.*?)_", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"~~(.*?)~~", r"\1", text, flags=re.DOTALL)
+
+    # 6. Loại bỏ các thẻ HTML cơ bản (nếu có lẫn trong Markdown)
+    text = re.sub(r"<[^>]*>", "", text)
+
     return text.strip()
+
+
+ToolCallCallback = Callable[[List[Dict[str, Any]]], Awaitable[None]]
+ToolResultCallback = Callable[[str, str, Any], Awaitable[None]]
 
 
 class DirectAPIAgentLLMService(BaseOpenAILLMService):
@@ -31,6 +60,8 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         agent_name: str,
         user_id: str = "web-user-123",
         session: Optional[aiohttp.ClientSession] = None,
+        on_tool_calls: Optional[ToolCallCallback] = None,
+        on_tool_result: Optional[ToolResultCallback] = None,
         **kwargs,
     ):
         settings = OpenAILLMSettings(model="dummy")
@@ -41,6 +72,8 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self.user_id = user_id
         self._session = session
         self._client_session_owned = False
+        self._on_tool_calls = on_tool_calls
+        self._on_tool_result = on_tool_result
 
     async def get_chat_completions(self, params_from_context):
         if hasattr(params_from_context, "messages"):
@@ -51,54 +84,99 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
             messages = []
 
         user_text = self._extract_user_text(messages)
-
-        payload = {
-            "message": user_text,
-            "thread_id": str(uuid.uuid4()),
-        }
+        thread_id = str(uuid.uuid4())
 
         if self._session is None:
             self._session = aiohttp.ClientSession()
             self._client_session_owned = True
 
-        endpoint = f"{self.api_url}/{self.agent_name}/invoke"
-        headers = {"X-User-Id": self.user_id}
+        endpoint = f"{self.api_url}/{self.agent_name}/stream"
+        headers = {
+            "X-User-Id": self.user_id,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "message": user_text,
+            "thread_id": thread_id,
+            "stream_tokens": True,
+        }
 
         async def _generate():
+            accumulated_content = ""
             try:
-                async with self._session.post(
-                    endpoint, json=payload, headers=headers, timeout=60.0
-                ) as resp:
+                async with self._session.post(endpoint, json=payload, headers=headers, timeout=120.0) as resp:
                     resp.raise_for_status()
-                    data = await resp.json()
+                    async for line in resp.content:
+                        line = line.decode("utf-8").strip()
+                        if not line.startswith("data: "):
+                            continue
 
-                    # Trích xuất content từ response
-                    content = data.get("content", "")
-                    if isinstance(data, dict):
-                        content = data.get("content") or data.get("text") or ""
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
 
-                    content = strip_markdown(content)
+                        try:
+                            data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
 
-                    # Stream từng chunk
-                    for i in range(0, len(content), 10):
-                        chunk_text = content[i : i + 10]
-                        is_last = (i + 10) >= len(content)
-                        yield ChatCompletionChunk(
-                            id="mock-id",
-                            choices=[
-                                {
-                                    "delta": {"role": "assistant", "content": chunk_text},
-                                    "index": 0,
-                                    "finish_reason": "stop" if is_last else None,
-                                }
-                            ],
-                            model="agent-model",
-                            created=0,
-                            object="chat.completion.chunk",
-                        )
+                        msg_type = data.get("type")
+
+                        if msg_type == "token":
+                            content = data.get("content", "")
+                            if content:
+                                accumulated_content += content
+                                yield ChatCompletionChunk(
+                                    id="agent-stream",
+                                    choices=[
+                                        {
+                                            "delta": {
+                                                "role": "assistant",
+                                                "content": content,
+                                            },
+                                            "index": 0,
+                                            "finish_reason": None,
+                                        }
+                                    ],
+                                    model="agent-model",
+                                    created=0,
+                                    object="chat.completion.chunk",
+                                )
+
+                        elif msg_type == "message":
+                            content = data.get("content")
+                            if content and isinstance(content, dict):
+                                msg_type_inner = content.get("type")
+
+                                if msg_type_inner == "ai":
+                                    tool_calls = content.get("tool_calls", [])
+                                    if tool_calls:
+                                        if self._on_tool_calls:
+                                            await self._on_tool_calls(tool_calls)
+
+                                elif msg_type_inner == "tool":
+                                    tool_call_id = content.get("tool_call_id", "")
+                                    tool_result = content.get("content", "")
+                                    if self._on_tool_result and tool_call_id:
+                                        await self._on_tool_result(tool_call_id, tool_result, None)
+
             except Exception as e:
-                logger.error(f"Invoke error: {e}")
+                logger.error(f"Stream error: {e}")
             finally:
+                if accumulated_content:
+                    yield ChatCompletionChunk(
+                        id="agent-stream",
+                        choices=[
+                            {
+                                "delta": {"role": "assistant", "content": ""},
+                                "index": 0,
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        model="agent-model",
+                        created=0,
+                        object="chat.completion.chunk",
+                    )
                 if self._client_session_owned and self._session:
                     await self._session.close()
                     self._session = None

@@ -9,6 +9,20 @@ export type VoiceConnectionState =
   | "disconnected"
   | "error";
 
+export interface VoiceToolCall {
+  id: string;
+  name: string;
+  args?: Record<string, unknown>;
+  status: "executing" | "done";
+  content: string | null;
+}
+
+export interface VoiceToolResult {
+  toolCallId: string;
+  toolName: string;
+  content: string;
+}
+
 interface UseVoiceOptions {
   voiceServerUrl?: string;
   agentId?: string;
@@ -16,6 +30,8 @@ interface UseVoiceOptions {
   onTranscript?: (text: string) => void;
   onBotOutput?: (text: string) => void;
   onBotPartialOutput?: (text: string) => void;
+  onToolStarted?: (toolCalls: Array<{ id: string; name: string; args?: Record<string, unknown> }>) => void;
+  onToolResult?: (result: VoiceToolResult) => void;
   onError?: (error: string) => void;
 }
 
@@ -39,6 +55,8 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     onTranscript,
     onBotOutput,
     onBotPartialOutput,
+    onToolStarted,
+    onToolResult,
     onError,
   } = options;
 
@@ -119,6 +137,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
     try {
       const message = JSON.parse(event.data);
+      console.log("[RTVI] Received message:", message.type, message.data);
       
       // RTVI protocol: message has label "rtvi-ai" and type
       if (message.label === "rtvi-ai") {
@@ -126,6 +145,10 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
           case "user-transcription":
             // Only process final transcriptions
             if (message.data?.final && message.data?.text) {
+              // Clear tool-related messages when new user input comes
+              recentMessagesRef.current = new Set(
+                Array.from(recentMessagesRef.current).filter(k => !k.startsWith('tool'))
+              );
               const messageKey = `user:${message.data.text}`;
               const currentTime = Date.now();
 
@@ -155,13 +178,26 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
             break;
 
           case "bot-output":
-            if (message.data?.text && message.data?.spoken) {
-              const text = message.data.text;
-              const messageKey = `bot:${text}`;
-
-              if (recentMessagesRef.current.has(messageKey)) {
+            if (message.data?.text !== undefined) {
+              const text = message.data.spoken || message.data.text;
+              // Ensure text is a string
+              if (typeof text !== "string") {
+                console.log("[RTVI] Skipping non-string bot-output:", typeof text);
                 return;
               }
+              const trimmedText = text.trim();
+              if (!trimmedText) {
+                return;
+              }
+              // Use exact text match for deduplication
+              const messageKey = `bot:${trimmedText}`;
+              
+              // Check if this exact message was already sent
+              if (recentMessagesRef.current.has(messageKey)) {
+                console.log("[RTVI] Skipping duplicate bot-output");
+                return;
+              }
+              
               recentMessagesRef.current.add(messageKey);
 
               if (recentMessagesRef.current.size > 50) {
@@ -171,8 +207,50 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
               }
 
               if (onBotOutput) {
-                onBotOutput(text);
+                onBotOutput(trimmedText);
               }
+            }
+            break;
+
+          case "tool-started":
+            if (message.data?.toolCalls && onToolStarted) {
+              // Deduplicate by tool names
+              const toolNames = message.data.toolCalls.map((tc: any) => tc.name).join(',');
+              const messageKey = `tool:${toolNames}`;
+              console.log("[RTVI] Tool started, key:", messageKey, "existing:", recentMessagesRef.current.has(messageKey));
+              if (recentMessagesRef.current.has(messageKey)) {
+                console.log("[RTVI] Skipping duplicate tool-started");
+                return;
+              }
+              recentMessagesRef.current.add(messageKey);
+              console.log("[RTVI] Processing tool-started");
+              const toolCalls = message.data.toolCalls.map((tc: { id?: string; name: string; args?: Record<string, unknown> }) => ({
+                id: tc.id || `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                name: tc.name,
+                args: tc.args,
+              }));
+              onToolStarted(toolCalls);
+            }
+            break;
+
+          case "tool-result":
+            if (message.data && onToolResult) {
+              const messageKey = `tool-result:${message.data.toolCallId}`;
+              if (recentMessagesRef.current.has(messageKey)) {
+                return;
+              }
+              recentMessagesRef.current.add(messageKey);
+              if (recentMessagesRef.current.size > 50) {
+                const entries = Array.from(recentMessagesRef.current);
+                recentMessagesRef.current.clear();
+                entries.slice(-25).forEach(entry => recentMessagesRef.current.add(entry));
+              }
+              const result: VoiceToolResult = {
+                toolCallId: message.data.toolCallId,
+                toolName: message.data.toolName,
+                content: message.data.content,
+              };
+              onToolResult(result);
             }
             break;
         }
@@ -192,7 +270,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     } catch (err) {
       console.error("Error parsing data channel message:", err);
     }
-  }, [onTranscript, onBotOutput, onBotPartialOutput, onError]);
+  }, [onTranscript, onBotOutput, onBotPartialOutput, onToolStarted, onToolResult, onError]);
 
   const startConversation = useCallback(async () => {
     if (state === "connected" || state === "connecting") {

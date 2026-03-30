@@ -7,6 +7,7 @@
 import os
 import sys
 import uuid
+import json
 
 import aiohttp
 from dotenv import load_dotenv
@@ -15,7 +16,7 @@ from loguru import logger
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import LLMRunFrame, OutputTransportMessageFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -39,13 +40,44 @@ AGENT_API_URL = os.getenv("AGENT_API_URL", "http://localhost:8080")
 USE_AGENT_API = os.getenv("USE_AGENT_API", "false").lower() == "true"
 
 
-def create_llm(session):
+async def send_tool_message(transport, tool_calls, event_type="tool-started"):
+    """Send tool call information to the frontend via RTVI protocol."""
+    try:
+        msg = {"label": "rtvi-ai", "type": event_type, "data": {"toolCalls": tool_calls}}
+        await transport.output().send_message(OutputTransportMessageFrame(message=msg))
+    except Exception as e:
+        logger.error(f"Failed to send tool message: {e}")
+
+
+async def send_tool_result_message(transport, tool_call_id, content, tool_name):
+    """Send tool result to the frontend via RTVI protocol."""
+    try:
+        msg = {
+            "label": "rtvi-ai",
+            "type": "tool-result",
+            "data": {"toolCallId": tool_call_id, "toolName": tool_name, "content": content},
+        }
+        await transport.output().send_message(OutputTransportMessageFrame(message=msg))
+    except Exception as e:
+        logger.error(f"Failed to send tool result: {e}")
+
+
+def create_llm(session, transport):
+    async def on_tool_calls(tool_calls):
+        await send_tool_message(transport, tool_calls, "tool-started")
+
+    async def on_tool_result(tool_call_id, content, args):
+        tool_name = "Unknown"
+        await send_tool_result_message(transport, tool_call_id, content, tool_name)
+
     if USE_AGENT_API:
         return DirectAPIAgentLLMService(
             api_url=AGENT_API_URL,
             agent_name=os.getenv("AGENT_ID", "chatbot"),
             user_id="web-user-123",
             session=session,
+            on_tool_calls=on_tool_calls,
+            on_tool_result=on_tool_result,
         )
     else:
         model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -71,7 +103,7 @@ async def run_bot(webrtc_connection):
             sample_rate=24000,
             voice_id="vi_VN-vais1000-medium",
         )
-        llm = create_llm(session)
+        llm = create_llm(session, pipecat_transport)
 
         if USE_AGENT_API:
             system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Hãy trả lời ngắn gọn, tự nhiên như đang nói chuyện. Không dùng markdown hay bullet points."

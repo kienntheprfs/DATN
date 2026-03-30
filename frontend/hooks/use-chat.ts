@@ -28,8 +28,12 @@ interface UseChatReturn {
 	messages: ChatMessage[];
 	sendMessage: (message: string) => Promise<void>;
 	addUserMessage: (content: string) => string;
-	addBotMessage: (content: string) => void;
+	addBotMessage: (content: string) => string;
+	appendBotMessage: (content: string) => void;
 	updateLastBotMessage: (content: string) => void;
+	addVoiceToolCall: (tool: { id: string; name: string; args?: Record<string, unknown> }) => void;
+	updateVoiceToolResult: (toolCallId: string, content: string) => void;
+	clearVoiceTools: () => void;
 	stop: () => void;
 	isLoading: boolean;
 	isTyping: boolean;
@@ -202,6 +206,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		return id;
 	}, []);
 
+	const appendBotMessage = useCallback((content: string) => {
+		setMessages((prev) => {
+			const lastIdx = prev.length - 1;
+			if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
+				return prev.map((m, i) => 
+					i === lastIdx ? { ...m, content: (m.content || "") + "\n" + content } : m
+				);
+			}
+			// If no assistant message exists, create one
+			const id = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+			return [...prev, { id, role: "assistant", content }];
+		});
+	}, []);
+
 	const updateLastBotMessage = useCallback((content: string) => {
 		setMessages((prev) => {
 			const lastIdx = prev.length - 1;
@@ -212,12 +230,40 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		});
 	}, []);
 
+	const addVoiceToolCall = useCallback((tool: { id: string; name: string; args?: Record<string, unknown> }) => {
+		const newTool: ToolCall = {
+			id: tool.id,
+			name: tool.name,
+			status: "executing",
+			content: null,
+		};
+		setCurrentTools((prev) => [...prev, newTool]);
+	}, []);
+
+	const updateVoiceToolResult = useCallback((toolCallId: string, content: string) => {
+		setCurrentTools((prev) =>
+			prev.map((t) =>
+				t.id === toolCallId
+					? { ...t, status: "done" as const, content }
+					: t
+			)
+		);
+	}, []);
+
+	const clearVoiceTools = useCallback(() => {
+		setCurrentTools([]);
+	}, []);
+
 	return {
 		messages,
 		sendMessage,
 		addUserMessage,
 		addBotMessage,
+		appendBotMessage,
 		updateLastBotMessage,
+		addVoiceToolCall,
+		updateVoiceToolResult,
+		clearVoiceTools,
 		stop,
 		isLoading,
 		isTyping,
