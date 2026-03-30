@@ -12,6 +12,7 @@ dependencies = [
 	"psycopg2-binary>=2.9.9",
 	"alembic>=1.13.2",
 	"pydantic-settings>=2.5.2",
+	"dotenv>=0.9.9",
 ]
 
 [dependency-groups]
@@ -25,3 +26,6 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+	"e2e: end-to-end tests that call a running dashboard service",
+]

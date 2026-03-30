@@ -21,6 +21,24 @@ async def test_post_rating_requires_user_header(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_post_rating_like_with_comment_is_invalid(client: AsyncClient) -> None:
+    payload = {
+        "run_id": str(uuid4()),
+        "rating": "LIKE",
+        "comment": "not-allowed",
+        "thread_id": "thread-1",
+        "agent_id": "agent-1",
+    }
+
+    response = await client.post(
+        "/ratings",
+        json=payload,
+        headers={"X-User-Id": "user-1", "X-User-Roles": "user"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_and_update_rating_upsert(client: AsyncClient) -> None:
     run_id = str(uuid4())
     headers = {"X-User-Id": "user-1", "X-User-Roles": "user"}
@@ -134,3 +152,21 @@ async def test_delete_rating_owner_and_forbidden(client: AsyncClient) -> None:
         headers={"X-User-Id": "owner", "X-User-Roles": "user"},
     )
     assert owner_delete.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_requires_user_header(client: AsyncClient) -> None:
+    response = await client.delete(f"/ratings/{uuid4()}")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_thread_requires_user_header(client: AsyncClient) -> None:
+    response = await client.get("/ratings/thread/thread-auth-required")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_agent_stats_requires_user_header(client: AsyncClient) -> None:
+    response = await client.get("/ratings/stats/agent/agent-auth-required")
+    assert response.status_code == 401

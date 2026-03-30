@@ -236,6 +236,14 @@ Chạy riêng integration test:
 uv run pytest tests/integration -q
 ```
 
+Chạy e2e test (gọi service thật đang chạy):
+
+```bash
+$env:DASHBOARD_RUN_E2E="1"
+$env:DASHBOARD_E2E_BASE_URL="http://localhost:8010"
+uv run pytest tests/e2e -q
+```
+
 ## 8) Kiểm tra chất lượng và vận hành
 
 - Trước khi merge:
