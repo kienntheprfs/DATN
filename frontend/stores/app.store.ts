@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState} from '@/types/state'
-import type { HistoryItem } from '@/types/history'
+import type { HistoryItem, User } from '@/types'
+import { authService } from '@/services/auth-api'
 
 const MOCK_USERS = [
   { name: "Nguyễn Văn A", email: "nguyen.van.a@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=nguyenvana" },
@@ -19,8 +20,37 @@ export const useAppStore = create<AppState>()(
       hasMoreHistory: true,
       currentPage: 1,
 
-      login: (userData) => set({ user: userData }),
-      logout: () => set({ user: null }),
+      login: async (userData?: { email: string; password: string }) => {
+        if (userData) {
+          try {
+            const result = await authService.login(userData.email, userData.password);
+            const user = await authService.me();
+            set({ user });
+          } catch (error) {
+            console.error("Login failed:", error);
+            throw error;
+          }
+        } else {
+          const token = authService.getToken();
+          if (token) {
+            try {
+              const user = await authService.me();
+              set({ user });
+            } catch {
+              authService.logout();
+            }
+          }
+        }
+      },
+      
+      logout: async () => {
+        try {
+          await authService.logout();
+        } catch {
+          // Ignore errors
+        }
+        set({ user: null, history: [], currentPage: 1 });
+      },
 
       // --- HÀM GỌI API THỰC TẾ ---
       fetchMoreHistory: async () => {

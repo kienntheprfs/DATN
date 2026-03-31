@@ -11,8 +11,8 @@ export interface AppState {
   currentPage: number;       // Đang ở trang mấy
   
   // Actions
-  login: (userData: User) => void;
-  logout: () => void;
+  login: (userData?: { email: string; password: string }) => Promise<void>;
+  logout: () => Promise<void>;
   
   // Action gọi API (Async)
   fetchMoreHistory: () => Promise<void>; 

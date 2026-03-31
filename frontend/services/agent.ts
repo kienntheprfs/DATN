@@ -36,11 +36,21 @@ export class AgentClientError extends Error {
 	}
 }
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
+
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('access_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 class AgentClient {
 	async getInfo(): Promise<ServiceInfo> {
-		const response = await fetch(`${API_BASE}/api/agent/info`);
+		const response = await fetch(`${API_BASE}/agent/info`, {
+			headers: getAuthHeaders(),
+		});
 
 		if (!response.ok) {
 			throw new AgentClientError(`Failed to get info: ${response.status}`);
@@ -50,12 +60,8 @@ class AgentClient {
 	}
 
 	async getHistory(threadId: string): Promise<ChatHistory> {
-		const response = await fetch(`${API_BASE}/api/agent/history`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ thread_id: threadId }),
+		const response = await fetch(`${API_BASE}/agent/history/${threadId}`, {
+			headers: getAuthHeaders(),
 		});
 
 		if (!response.ok) {
@@ -86,11 +92,9 @@ class AgentClient {
 		if (model) requestBody.model = model;
 		requestBody.agent = agent;
 
-		const response = await fetch(`${API_BASE}/api/agent/stream`, {
+		const response = await fetch(`${API_BASE}/agent/stream`, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
+			headers: getAuthHeaders(),
 			body: JSON.stringify(requestBody),
 			signal,
 		});

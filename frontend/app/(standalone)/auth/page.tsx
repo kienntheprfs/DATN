@@ -1,16 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { GraduationCap } from "lucide-react";
+import { authService } from "@/services/auth-api";
 
 export default function AuthPage() {
 	const [isLogin, setIsLogin] = useState(true);
 	const [showPassword, setShowPassword] = useState(false);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState("");
+
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [fullname, setFullname] = useState("");
+
+	const router = useRouter();
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setError("");
+		setIsLoading(true);
+
+		try {
+			if (isLogin) {
+				await authService.login(email, password);
+				router.push("/");
+			} else {
+				if (password !== confirmPassword) {
+					setError("Mật khẩu xác nhận không khớp");
+					setIsLoading(false);
+					return;
+				}
+				await authService.register({ email, password });
+				await authService.login(email, password);
+				router.push("/");
+			}
+		} catch (err: any) {
+			setError(err.response?.data?.detail || "Đã xảy ra lỗi. Vui lòng thử lại.");
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	const handleGoogleLogin = async () => {
+		// Check if Google SDK is loaded
+		if ((window as any).google?.accounts?.oauth2) {
+			const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+			if (!clientId) {
+				setError("Google OAuth chưa được cấu hình");
+				return;
+			}
+
+			const googleOAuth = (window as any).google.accounts.oauth2.initTokenClient({
+				client_id: clientId,
+				scope: 'openid email profile',
+				callback: async (response: any) => {
+					if (response.access_token) {
+						try {
+							await authService.googleLogin(response.access_token);
+							router.push("/");
+						} catch (err: any) {
+							setError(err.response?.data?.detail || "Đăng nhập Google thất bại");
+						}
+					}
+				},
+			});
+			googleOAuth.requestAccessToken();
+		} else {
+			setError("Google SDK chưa được tải. Vui lòng thử lại sau.");
+		}
+	};
 
 	return (
 		<div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background-light">
@@ -43,7 +109,8 @@ export default function AuthPage() {
 						{/* Tabs */}
 						<div className="flex border-b border-gray-200 mb-8">
 							<button
-								onClick={() => setIsLogin(true)}
+								type="button"
+								onClick={() => { setIsLogin(true); setError(""); }}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -51,7 +118,8 @@ export default function AuthPage() {
 								Đăng nhập
 							</button>
 							<button
-								onClick={() => setIsLogin(false)}
+								type="button"
+								onClick={() => { setIsLogin(false); setError(""); }}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									!isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -60,8 +128,15 @@ export default function AuthPage() {
 							</button>
 						</div>
 
+						{/* Error Message */}
+						{error && (
+							<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+								{error}
+							</div>
+						)}
+
 						{/* Form */}
-						<form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
+						<form className="flex flex-col gap-6" onSubmit={handleSubmit}>
 							{!isLogin && (
 								<div className="space-y-3">
 									<Label className="block font-bold uppercase text-text-secondary tracking-widest text-[14px]" htmlFor="fullname">
@@ -75,6 +150,8 @@ export default function AuthPage() {
 											id="fullname"
 											name="fullname"
 											placeholder="Nguyễn Văn A"
+											value={fullname}
+											onChange={(e) => setFullname(e.target.value)}
 											className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
 										/>
 									</div>
@@ -94,6 +171,9 @@ export default function AuthPage() {
 										name="email"
 										type="email"
 										placeholder="ten.ho@hcmut.edu.vn"
+										value={email}
+										onChange={(e) => setEmail(e.target.value)}
+										required
 										className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
 									/>
 								</div>
@@ -119,6 +199,10 @@ export default function AuthPage() {
 										name="password"
 										type={showPassword ? "text" : "password"}
 										placeholder="••••••••"
+										value={password}
+										onChange={(e) => setPassword(e.target.value)}
+										required
+										minLength={8}
 										className="pl-12 pr-12 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
 									/>
 									<button
@@ -147,6 +231,10 @@ export default function AuthPage() {
 											name="confirmPassword"
 											type={showPassword ? "text" : "password"}
 											placeholder="••••••••"
+											value={confirmPassword}
+											onChange={(e) => setConfirmPassword(e.target.value)}
+											required
+											minLength={8}
 											className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
 										/>
 									</div>
@@ -171,9 +259,10 @@ export default function AuthPage() {
 
 							<Button
 								type="submit"
-								className="mt-2 w-full flex justify-center items-center gap-3 py-3.5 px-4 border border-slate-300 rounded-sm shadow-sm font-bold text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all active:scale-[0.98] text-lg"
+								disabled={isLoading}
+								className="mt-2 w-full flex justify-center items-center gap-3 py-3.5 px-4 border border-slate-300 rounded-sm shadow-sm font-bold text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all active:scale-[0.98] text-lg disabled:opacity-50"
 							>
-								{isLogin ? "Đăng nhập" : "Đăng ký"}
+								{isLoading ? "Đang xử lý..." : (isLogin ? "Đăng nhập" : "Đăng ký")}
 							</Button>
 						</form>
 
@@ -190,6 +279,7 @@ export default function AuthPage() {
 						{/* Google Login */}
 						<Button
 							type="button"
+							onClick={handleGoogleLogin}
 							className="w-full flex justify-center items-center gap-3 py-3.5 px-4 border border-slate-300 rounded-sm shadow-sm font-bold text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all text-lg"
 						>
 							<svg height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">
