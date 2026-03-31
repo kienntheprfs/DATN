@@ -8,6 +8,117 @@ from langchain_core.tools import tool
 WAYFINDER_API = "http://127.0.0.1:8004"
 
 
+def _report_missing_location_internal(
+    name: str,
+    building_name: Optional[str] = None,
+    floor_level: Optional[int] = None,
+    description: Optional[str] = None,
+):
+    """Report a missing location to the database (internal helper)."""
+    try:
+        payload = {
+            "name": name,
+            "building_name": building_name,
+            "floor_level": floor_level,
+            "description": description,
+        }
+        response = requests.post(
+            f"{WAYFINDER_API}/api/missing-locations",
+            json=payload,
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception:
+        return None
+
+
+def _report_missing_route_internal(
+    start_name: str,
+    start_building: Optional[str] = None,
+    start_floor: Optional[int] = None,
+    end_name: Optional[str] = None,
+    end_building: Optional[str] = None,
+    end_floor: Optional[int] = None,
+    reason: Optional[str] = None,
+):
+    """Report a missing route to the database (internal helper)."""
+    try:
+        payload = {
+            "start_name": start_name,
+            "start_building": start_building,
+            "start_floor": start_floor,
+            "end_name": end_name,
+            "end_building": end_building,
+            "end_floor": end_floor,
+            "reason": reason,
+        }
+        response = requests.post(
+            f"{WAYFINDER_API}/api/missing-routes",
+            json=payload,
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception:
+        return None
+
+
+def report_missing_location(
+    location_name: str,
+    building_name: Optional[str] = None,
+    floor_level: Optional[int] = None,
+    description: Optional[str] = None,
+) -> str:
+    """Báo cáo địa điểm bị thiếu trong hệ thống bản đồ. Dùng khi người dùng phản ánh hoặc không tìm thấy địa điểm nào đó.
+
+    Args:
+        location_name: Tên địa điểm bị thiếu (VD: "Phòng họp A", "Căn tin tầng 2")
+        building_name: Tên tòa nhà nếu biết (VD: "Tòa B4", "Khu A")
+        floor_level: Số tầng nếu biết
+        description: Mô tả thêm về địa điểm hoặc ngữ cảnh báo cáo
+    """
+    result = _report_missing_location_internal(
+        name=location_name,
+        building_name=building_name,
+        floor_level=floor_level,
+        description=description,
+    )
+    if result:
+        return f"Đã ghi nhận báo cáo địa điểm '{location_name}'. Cảm ơn bạn đã phản hồi, chúng tôi sẽ cập nhật sớm nhất có thể."
+    return f"Không thể gửi báo cáo cho '{location_name}'. Vui lòng thử lại sau."
+
+
+def report_missing_route(
+    start_location: str,
+    end_location: str,
+    start_building: Optional[str] = None,
+    end_building: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> str:
+    """Báo cáo tuyến đường bị thiếu hoặc không thể tìm được. Dùng khi người dùng phản ánh hoặc không tìm được đường giữa 2 điểm.
+
+    Args:
+        start_location: Tên địa điểm xuất phát
+        end_location: Tên địa điểm đến
+        start_building: Tên tòa nhà xuất phát nếu biết
+        end_building: Tên tòa nhà đến nếu biết
+        reason: Lý do/ngữ cảnh báo cáo (VD: "đi qua khu vực đang thi công", "thiếu cầu thang kết nối")
+    """
+    result = _report_missing_route_internal(
+        start_name=start_location,
+        start_building=start_building,
+        end_name=end_location,
+        end_building=end_building,
+        reason=reason,
+    )
+    if result:
+        return f"Đã ghi nhận báo cáo tuyến đường từ '{start_location}' đến '{end_location}'. Cảm ơn bạn đã phản hồi, chúng tôi sẽ kiểm tra và cập nhật sớm nhất có thể."
+    return f"Không thể gửi báo cáo cho tuyến đường này. Vui lòng thử lại sau."
+
+
 def find_route_func(
     from_location: str,
     to_location: str,
@@ -34,10 +145,22 @@ def find_route_func(
 
         # Validate results
         if not start_results:
-            return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hãy thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
+            _report_missing_location_internal(
+                name=from_location,
+                building_name=None,
+                floor_level=None,
+                description=f"Người dùng tìm đường từ '{from_location}' đến '{to_location}' nhưng không tìm thấy địa điểm xuất phát",
+            )
+            return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
 
         if not end_results:
-            return f"Không tìm thấy địa điểm đến '{to_location}'. Hãy thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 2' thay vì 'Phòng 2 - Tòa B4')."
+            _report_missing_location_internal(
+                name=to_location,
+                building_name=None,
+                floor_level=None,
+                description=f"Người dùng tìm đường từ '{from_location}' đến '{to_location}' nhưng không tìm thấy địa điểm đến",
+            )
+            return f"Không tìm thấy địa điểm đến '{to_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 2' thay vì 'Phòng 2 - Tòa B4')."
 
         # Helper to format location string
         def format_location(item):
@@ -105,7 +228,12 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
         )
 
         if route_response.status_code == 404:
-            return f"Không tìm được đường từ '{start_display}' đến '{end_display}'."
+            _report_missing_route_internal(
+                start_name=start_display,
+                end_name=end_display,
+                reason="disconnected_graph",
+            )
+            return f"Không tìm được đường từ '{start_display}' đến '{end_display}'. Hệ thống đã ghi nhận vấn đề này và sẽ xử lý sớm."
         if route_response.status_code == 400:
             return f"Lỗi: {route_response.json().get('detail', 'Node không hợp lệ')}"
 
@@ -187,4 +315,10 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
 find_route: Any = tool(find_route_func)
 find_route.name = "FindRoute"
 
-map_tools = [find_route]
+report_missing_location_tool: Any = tool(report_missing_location)
+report_missing_location_tool.name = "ReportMissingLocation"
+
+report_missing_route_tool: Any = tool(report_missing_route)
+report_missing_route_tool.name = "ReportMissingRoute"
+
+map_tools = [find_route, report_missing_location_tool, report_missing_route_tool]

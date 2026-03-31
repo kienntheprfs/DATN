@@ -123,3 +123,50 @@ class Event(SQLModel, table=True, metadata=metadata):
     category: Optional[str] = None
     is_active: bool = Field(default=True)
     created_at: Optional[str] = None
+
+
+class MissingLocation(SQLModel, table=True, metadata=metadata):
+    __tablename__ = "wayfinder_missing_location"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    building_name: Optional[str] = None
+    floor_level: Optional[int] = None
+    description: Optional[str] = None
+
+    requested_by: Optional[str] = None
+
+    status: str = Field(default="pending")
+    resolved_node_id: Optional[int] = Field(default=None)
+    resolved_at: Optional[str] = None
+    resolved_by: Optional[str] = None
+    admin_note: Optional[str] = None
+
+    created_at: Optional[str] = None
+
+
+class MissingRoute(SQLModel, table=True, metadata=metadata):
+    __tablename__ = "wayfinder_missing_route"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    start_node_id: Optional[int] = Field(default=None)
+    start_name: str
+    start_building: Optional[str] = None
+    start_floor: Optional[int] = None
+
+    end_node_id: Optional[int] = Field(default=None)
+    end_name: str
+    end_building: Optional[str] = None
+    end_floor: Optional[int] = None
+
+    reason: Optional[str] = Field(default=None)
+
+    status: str = Field(default="pending")
+    resolved_note: Optional[str] = None
+    resolved_at: Optional[str] = None
+    resolved_by: Optional[str] = None
+
+    reported_by: Optional[str] = None
+
+    created_at: Optional[str] = None
