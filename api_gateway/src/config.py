@@ -5,53 +5,56 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
+
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5433/authdb"
     db_pool_size: int = 10  # Number of connections in the pool
     db_max_overflow: int = 20  # Max connections that can be created beyond pool_size
     db_pool_timeout: float = 30.0  # Seconds to wait for a connection from the pool
-    db_pool_recycle: int = 3600  # Recycle connections after N seconds (prevent stale connections)
-    
+    db_pool_recycle: int = (
+        3600  # Recycle connections after N seconds (prevent stale connections)
+    )
+
     # Redis
     redis_url: str = "redis://localhost:6379/0"
     redis_cache_ttl: int = 300  # 5 minutes
-    
+
     # OPA
     opa_url: str = "http://localhost:8181"
     opa_policy_path: str = "/v1/data/authz/allow"
-    
+
     # JWT
     jwt_secret: str = "your-secret-key-change-this-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
-    
+
     api_gateway_host: str = "0.0.0.0"
     api_gateway_port: int = 8002
-    
+
     # Downstream Services
     agent_service_url: str = "http://localhost:8080"
     knowledge_service_url: str = "http://localhost:8000"
     wayfinder_service_url: str = "http://localhost:8001"
-    
+    voice_service_url: str = "http://localhost:7860"
+
     # Internal Security
     internal_secret: str = "your-internal-secret-for-service-to-service-auth"
-    
+
     # Google OAuth2
     google_client_id: str = ""
     google_client_secret: str = ""
-    
+
     # CORS
     cors_origins: str = "*"
-    
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""
@@ -89,7 +92,9 @@ class Settings(BaseSettings):
             converted_items.append((key, value))
 
         new_query = urlencode(converted_items, doseq=True)
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+        return urlunsplit(
+            (parts.scheme, parts.netloc, parts.path, new_query, parts.fragment)
+        )
 
     @property
     def database_url_sync(self) -> str:
@@ -98,7 +103,7 @@ class Settings(BaseSettings):
         if url.startswith("postgresql+asyncpg://"):
             return url.replace("postgresql+asyncpg://", "postgresql://", 1)
         return url
-    
+
     # Application
     app_name: str = "API Gateway"
     app_version: str = "0.1.0"

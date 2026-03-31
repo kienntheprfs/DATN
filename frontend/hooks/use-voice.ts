@@ -24,8 +24,9 @@ export interface VoiceToolResult {
 }
 
 interface UseVoiceOptions {
-  voiceServerUrl?: string;
+  apiGatewayUrl: string;
   agentId?: string;
+  userId?: string;
   model?: string;
   onTranscript?: (text: string) => void;
   onBotOutput?: (text: string) => void;
@@ -47,10 +48,11 @@ interface UseVoiceReturn {
   toggleMute: () => void;
 }
 
-export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
+export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const {
-    voiceServerUrl = "http://localhost:7860",
+    apiGatewayUrl,
     agentId = "chatbot",
+    userId,
     model,
     onTranscript,
     onBotOutput,
@@ -115,9 +117,15 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     if (!pcIdRef.current) return;
 
     try {
-      await fetch(`${voiceServerUrl}/api/offer`, {
+      const targetUrl = `${apiGatewayUrl}/voice/offer`;
+      const token = localStorage.getItem('access_token');
+      
+      await fetch(targetUrl, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           pc_id: pcIdRef.current,
           candidates: [{
@@ -130,7 +138,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     } catch (err) {
       console.error("Failed to send ICE candidate:", err);
     }
-  }, [voiceServerUrl]);
+  }, [apiGatewayUrl]);
 
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
     const MESSAGE_DEBOUNCE_TIME = 500;
@@ -353,17 +361,25 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
         type: pc.localDescription?.type,
       };
 
-      // Add request_data if agent_id or model is provided
-      if (agentId || model) {
+      // Determine the target URL
+      const targetUrl = `${apiGatewayUrl}/voice/offer`;
+      const token = localStorage.getItem('access_token');
+
+      // Add request_data if agent_id, user_id, or model is provided
+      if (agentId || userId || model) {
         const requestData: Record<string, string> = {};
         if (agentId) requestData.agent_id = agentId;
+        if (userId) requestData.user_id = userId;
         if (model) requestData.model = model;
         requestBody.request_data = requestData;
       }
 
-      const response = await fetch(`${voiceServerUrl}/api/offer`, {
+      const response = await fetch(targetUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(requestBody),
       });
 
@@ -396,7 +412,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
       cleanup();
       onError?.(errorMessage);
     }
-  }, [state, voiceServerUrl, agentId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
+  }, [state, apiGatewayUrl, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
 
   const stopConversation = useCallback(() => {
     cleanup();

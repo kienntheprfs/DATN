@@ -20,7 +20,7 @@ export default function Home() {
 	const [isSpeaking, setIsSpeaking] = useState(false);
 
 	const voice = useVoice({
-		voiceServerUrl: "http://localhost:7860",
+		apiGatewayUrl: "http://localhost:8002",
 		agentId: "chatbot",
 		onTranscript: (text) => {
 			if (text.trim()) {
@@ -93,7 +93,7 @@ export default function Home() {
 
 						<div className="flex items-center gap-1">
 							<VoiceButton
-								voiceServerUrl="http://localhost:7860"
+								apiGatewayUrl="http://localhost:8002"
 								agentId="chatbot"
 								externalState={voice.state}
 								externalIsListening={isListening}
