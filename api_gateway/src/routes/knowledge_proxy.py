@@ -59,22 +59,8 @@ async def proxy_to_knowledge(
         # Update request path (remove /kb prefix)
         actual_path = f"/{path}" if path else "/"
         request._url = request.url.replace(path=actual_path)
-        
-        # Inject user headers for downstream service
-        request.headers.__dict__["_list"].append(
-            (b"x-user-id", user.id.encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-user-email", user.email.encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-user-roles", ",".join(user.roles).encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-internal-secret", settings.internal_secret.encode())
-        )
-        
-        return await proxy_request(request, target_url, client)
+
+        return await proxy_request(request, target_url, client, user=user)
         
     except HTTPException:
         # Re-raise HTTPException from fastapiDI (role check)

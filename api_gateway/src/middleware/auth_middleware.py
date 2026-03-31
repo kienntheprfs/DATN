@@ -46,6 +46,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/auth/register",
         "/auth/refresh",
         "/auth/google",
+        "/wayfinder/api/missing-locations",
+        "/wayfinder/api/missing-routes",
+        "/wayfinder/api/refresh-cache",
     ]
     
     # Guest-allowed paths - authentication optional
@@ -61,6 +64,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Allow OPTIONS requests (CORS preflight) without authentication
         if method == "OPTIONS":
+            return await call_next(request)
+
+        # Wayfinder GET routes are public
+        if method == "GET" and (path == "/wayfinder" or path.startswith("/wayfinder/")):
             return await call_next(request)
         
         # Public paths: skip auth, no user info
