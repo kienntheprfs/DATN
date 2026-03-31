@@ -5,7 +5,7 @@ Tests all endpoints from:
 - agent_proxy.py: Agent service endpoints (mixed access)
 - threads.py: Thread management endpoints (auth required)
 - knowledge_proxy.py: Knowledge service endpoints (admin only)
-- wayfinder_proxy.py: Wayfinder service endpoints (admin only)
+- wayfinder_proxy.py: Wayfinder service endpoints (mixed public/admin)
 
 For each endpoint, tests access with:
 - Guest (no authentication)
@@ -300,8 +300,29 @@ def define_all_endpoints() -> List[EndpointTest]:
         EndpointTest("GET", "/kb/", ExpectedAccess.ADMIN, "KB root endpoint"),
         EndpointTest("GET", "/kb/search?q=test", ExpectedAccess.ADMIN, "Search KB"),
         
-        # ==================== WAYFINDER ENDPOINTS (Admin only) ====================
-        EndpointTest("GET", "/wayfinder/", ExpectedAccess.ADMIN, "Wayfinder root"),
+        # ==================== WAYFINDER ENDPOINTS ====================
+        EndpointTest(
+            "POST",
+            "/wayfinder/api/missing-locations",
+            ExpectedAccess.PUBLIC,
+            "Wayfinder missing locations (public)",
+            body={"city": "hanoi"},
+        ),
+        EndpointTest(
+            "POST",
+            "/wayfinder/api/missing-routes",
+            ExpectedAccess.PUBLIC,
+            "Wayfinder missing routes (public)",
+            body={"from": "A", "to": "B"},
+        ),
+        EndpointTest(
+            "POST",
+            "/wayfinder/api/refresh-cache",
+            ExpectedAccess.PUBLIC,
+            "Wayfinder refresh cache (public)",
+            body={},
+        ),
+        EndpointTest("GET", "/wayfinder/", ExpectedAccess.PUBLIC, "Wayfinder root (public GET)"),
     ]
 
 

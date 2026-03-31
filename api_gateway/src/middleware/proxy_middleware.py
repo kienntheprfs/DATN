@@ -5,7 +5,7 @@ from fastapi import Request, Response, Depends
 from starlette.background import BackgroundTask
 from src.dependencies import get_http_client
 
-from src.config import settings
+from src.utils.proxy_headers import build_downstream_headers
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 async def proxy_request(
     request: Request,
     target_url: str,
-    client = Depends(get_http_client)
+    client=Depends(get_http_client),
+    user=None,
 ) -> Response:
     """
     Proxy request to downstream service.
@@ -36,20 +37,8 @@ async def proxy_request(
     # Get request body
     body = await request.body()
     
-    # Prepare headers to forward
-    headers = dict(request.headers)
-    
-    # Remove host header (will be set by httpx)
-    headers.pop("host", None)
-    
-    # Add internal authentication headers
-    headers["X-Internal-Secret"] = settings.internal_secret
-    
-    # Add user context headers from middleware
-    if hasattr(request.state, "user_id"):
-        headers["X-User-ID"] = request.state.user_id
-        headers["X-User-Email"] = request.state.user_email
-        headers["X-User-Roles"] = ",".join(request.state.user_roles)
+    # Build downstream headers in one place for all proxy routes.
+    headers = build_downstream_headers(request, user=user)
     
     # Make request to downstream service
     try:

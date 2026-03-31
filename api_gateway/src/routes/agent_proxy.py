@@ -77,25 +77,8 @@ async def invoke_agent(
         
         # Proxy to agent service
         target_url = settings.agent_service_url
-        
-        # Inject user headers if authenticated
-        if user:
-            request.headers.__dict__["_list"].append(
-                (b"x-user-id", user.id.encode())
-            )
-            request.headers.__dict__["_list"].append(
-                (b"x-user-email", user.email.encode())
-            )
-            request.headers.__dict__["_list"].append(
-                (b"x-user-roles", ",".join(user.roles).encode())
-            )
-        
-        # Inject internal secret for service-to-service auth
-        request.headers.__dict__["_list"].append(
-            (b"x-internal-secret", settings.internal_secret.encode())
-        )
-        
-        return await proxy_request(request, target_url, client)
+
+        return await proxy_request(request, target_url, client, user=user)
         
     except HTTPException:
         # Re-raise HTTPException from service layer
@@ -131,22 +114,8 @@ async def get_thread_history(
         
         # Build target URL
         target_url = f"{settings.agent_service_url}/history/{thread_id}"
-        
-        # Inject user headers
-        request.headers.__dict__["_list"].append(
-            (b"x-user-id", user.id.encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-user-email", user.email.encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-user-roles", ",".join(user.roles).encode())
-        )
-        request.headers.__dict__["_list"].append(
-            (b"x-internal-secret", settings.internal_secret.encode())
-        )
-        
-        return await proxy_request(request, target_url, client)
+
+        return await proxy_request(request, target_url, client, user=user)
         
     except HTTPException:
         # Re-raise HTTPException from fastapiDI (ownership check)
@@ -188,23 +157,7 @@ async def proxy_agent_generic(
         # Update request path
         request._url = request.url.replace(path=f"/{path}")
         
-        # Inject headers if authenticated
-        if user:
-            request.headers.__dict__["_list"].append(
-                (b"x-user-id", user.id.encode())
-            )
-            request.headers.__dict__["_list"].append(
-                (b"x-user-email", user.email.encode())
-            )
-            request.headers.__dict__["_list"].append(
-                (b"x-user-roles", ",".join(user.roles).encode())
-            )
-        
-        request.headers.__dict__["_list"].append(
-            (b"x-internal-secret", settings.internal_secret.encode())
-        )
-        
-        return await proxy_request(request, target_url, client)
+        return await proxy_request(request, target_url, client, user=user)
         
     except HTTPException:
         # Re-raise HTTPException
