@@ -36,6 +36,7 @@ class DocumentStatus(StrEnum):
     ARCHIVED = "archived"
     DELETED = "deleted"  # Soft delete is better than hard delete
 
+
 # --- Base & Mixins ---
 
 class Base(DeclarativeBase):
@@ -186,6 +187,16 @@ class DocumentVersion(Base, TimestampMixin):
         UniqueConstraint("document_id", "version", name="uq_document_version"),
         Index("idx_doc_ver_status", "processing_status"),
     )
+
+
+class FormalDocument(Base, TimestampMixin):
+    __tablename__ = "formal_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    storage_id: Mapped[int] = mapped_column(ForeignKey("document_storages.id"))
+    file_path: Mapped[str] = mapped_column(String(1024))
+    lightrag_track_id: Mapped[str] = mapped_column(String(255), index=True)
+    lightrag_doc_id: Mapped[Optional[str]] = mapped_column(String(255), index=True)
 
 # --- RAG Chunks ---
 

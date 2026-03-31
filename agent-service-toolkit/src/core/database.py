@@ -1,5 +1,8 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from core.settings import settings
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
 
 # Sử dụng lại đúng các biến cấu hình mà postgres.py đang dùng
 # Lưu ý: Cần cài đặt asyncpg bằng lệnh `pip install asyncpg` nếu chưa có

@@ -12,6 +12,7 @@ langchain-experimental==0.3.4
 langchain-openai==0.3.32
 fastembed
 boto3 # storage
+httpx
 # parse pdf
 llama-cloud
 PyMuPDF

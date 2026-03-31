@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     JINA_API_KEY: str | None = None
     JINA_API_URL: str | None = None
 
+    # LightRAG
+    LIGHTRAG_BASE_URL: str | None = "http://localhost:9621"
+    LIGHTRAG_API_KEY: str | None = None
+    LIGHTRAG_QUERY_PATH: str = "/query/data"
+    # LIGHTRAG_TRACK_PATH: str = "/documents/track_status/{track_id}"
+    # LIGHTRAG_DELETE_PATH: str = "/documents/delete_document"
+
     # If DEFAULT_MODEL is None, it will be set in model_post_init
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]

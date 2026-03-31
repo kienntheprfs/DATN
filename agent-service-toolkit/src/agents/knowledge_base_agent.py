@@ -12,11 +12,13 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langchain_tavily import TavilySearch
+from datetime import datetime, timezone
 
 # --- Project imports ---
 from core import get_model, settings
 from rag_utils.retriever import QdrantHybridRetriever
 from rag_utils.reranker import BaseReranker, JinaReranker
+from rag_utils.lightrag_service import LightRAGService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -33,64 +35,147 @@ MAX_TURNS = 6  # Số lượt hội thoại tối đa để ngắt mạch
 # ==============================================================================
 retriever_service = QdrantHybridRetriever()
 reranker_service: BaseReranker = JinaReranker()
+lightrag_service: LightRAGService = LightRAGService()
 
 # ==============================================================================
 # DEFINING TOOLS
 # ==============================================================================
+class UnifiedDocument:
+    def __init__(self, content: str, source: str, doc_id: str):
+        self.content = content
+        self.source = source
+        self.doc_id = doc_id
 
-@tool
-async def lookup_hcmut_info(query: str):
+@tool("lookup_hcmut_info")
+async def lookup_hcmut_info(query: str, config: RunnableConfig):
     """
-    Sử dụng công cụ này ĐẦU TIÊN để tìm kiếm thông tin nội bộ về Đại học Bách Khoa TP.HCM (HCMUT).
-    Kết quả trả về sẽ bao gồm độ tin cậy (Score).
+    Tìm kiếm thông tin nội bộ. 
+    search_depth: "normal" (Tìm kiếm nhanh) hoặc "deep" (Tìm kiếm sâu trên đồ thị tri thức).
     """
-    logger.error(f"CALL TOOL: lookup_hcmut_info \n QUERY: {query}")
+    # Lấy query_mode từ config (mặc định là 'normal' nếu API không truyền)
+    query_mode = config.get("configurable", {}).get("query_mode", "normal")
+    
+    logger.info(f"CALL TOOL: lookup_hcmut_info | QUERY: {query} | MODE: {query_mode}")
 
-    collection_doc = "kb_1"
-    collection_faq = "faqs"
+    # Ánh xạ query_mode (normal/deep) sang search_depth của logic cũ
+    search_depth = "deep" if query_mode == "deep" else "normal"
+    lightrag_mode = "hybrid" if search_depth == "deep" else "naive"
 
     try:
-        # Lấy Top-K và Score Threshold thấp (0.3) để Agent có dữ liệu đánh giá
-        task_doc = retriever_service.search(
-            query=query, collection_name=collection_doc, top_k=5, score_threshold=0.3
-        )
-        task_faq = retriever_service.search(
-            query=query, collection_name=collection_faq, top_k=2, score_threshold=0.5
-        )
+        # 1. CHẠY SONG SONG QDRANT VÀ LIGHTRAG
+        task_qdrant = retriever_service.search(query=query, collection_name="kb_1", top_k=5)
+        task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
         
-        initial_docs, faq_result = await asyncio.gather(task_doc, task_faq)
+        qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
 
-        # Xử lý kết quả trả về cho Agent đọc
+        # 2. XỬ LÝ CHUNKS (GỘP & RERANK)
+        unified_chunks: List[UnifiedDocument] = []
+
+        # Đưa Qdrant chunks vào pool
+        for doc in qdrant_docs:
+            unified_chunks.append(UnifiedDocument(content=doc.content, source="VectorDB", doc_id=str(doc.doc_id)))
+                
+        # Đưa LightRAG chunks vào pool
+        for chunk in lightrag_result.chunks:
+            unified_chunks.append(UnifiedDocument(content=chunk.content, source=chunk.file_path, doc_id=chunk.chunk_id))
+
         output_lines = []
 
-        # 1. Ưu tiên FAQ nếu điểm rất cao
-        # CHECK: Tạm tắt do chất lượng hoạt động kém
-        # if faq_result and faq_result[0].score > 0.98:
-        #      return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
+        # Rerank toàn bộ pool hỗn hợp
+        if unified_chunks:
+            # Lưu ý: Pass unified_chunks vào reranker_service của bạn. 
+            # Đảm bảo reranker_service đọc được thuộc tính `content` từ object truyền vào.
+            reranked_docs = await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
+            
+            output_lines.append(f"### THÔNG TIN TỪ VĂN BẢN ({len(reranked_docs)} đoạn phù hợp nhất):")
+            for doc in reranked_docs:
+                output_lines.append(f"- [Nguồn: {doc.source} | Điểm: {doc.score:.2f}]: {doc.content}")
 
-        # 2. Format Documents kèm Score
-        if initial_docs:
-            docs_result = await reranker_service.rerank(
-                query=query, 
-                documents=initial_docs, 
-                top_n=5
-            )
+        # 3. XỬ LÝ ĐỒ THỊ TRI THỨC (Chỉ áp dụng cho Mode Deep)
+        if search_depth == "deep":
+            entities = lightrag_result.entities
+            relationships = lightrag_result.relationships
+            
+            # Truncate bớt để tránh nổ Context Window của LLM (VD: chỉ lấy top 10 entities/relations)
+            entities = entities[:10]
+            relationships = relationships[:10]
 
-            output_lines.append(f"Tìm thấy {len(docs_result)} tài liệu liên quan:")
-            for doc in docs_result:
-                output_lines.append(
-                    f"\n--- Doc {doc.doc_id} (Score: {doc.score:.2f}) ---\n"
-                    f"Nội dung: {doc.content}"
-                )
-        else:
-            output_lines.append("SYSTEM_NOTE: Không tìm thấy tài liệu nào khớp trong Database nội bộ.")
+            if entities or relationships:
+                output_lines.append("\n### TÓM TẮT TỪ ĐỒ THỊ TRI THỨC (KNOWLEDGE GRAPH):")
+                
+                if entities:
+                    output_lines.append("**Thực thể chính:**")
+                    for e in entities:
+                        output_lines.append(f"- {e.entity_name} ({e.entity_type}): {e.description}")
+                
+                if relationships:
+                    output_lines.append("\n**Mối quan hệ:**")
+                    for r in relationships:
+                        output_lines.append(f"- {r.src_id} -> {r.tgt_id}: {r.description}")
 
-        logger.info(f"FINISH TOOL: lookup_hcmut_info")
+        if not output_lines:
+            return "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
 
         return "\n".join(output_lines)
 
     except Exception as e:
+        logger.exception("Lỗi trong quá trình truy xuất dữ liệu")
         return f"Database Error: {str(e)}"
+    
+# OLD TOOL: NOT INTEGRATE WITH LIGHTRAG
+# @tool
+# async def lookup_hcmut_info(query: str, mode: str = "naive"):
+#     """
+#     Sử dụng công cụ này ĐẦU TIÊN để tìm kiếm thông tin nội bộ về Đại học Bách Khoa TP.HCM (HCMUT).
+#     Kết quả trả về sẽ bao gồm độ tin cậy (Score).
+#     """
+#     logger.error(f"CALL TOOL: lookup_hcmut_info \n QUERY: {query}")
+
+#     collection_doc = "kb_1"
+#     collection_faq = "faqs"
+
+#     try:
+#         # Lấy Top-K và Score Threshold thấp (0.3) để Agent có dữ liệu đánh giá
+#         task_doc = retriever_service.search(
+#             query=query, collection_name=collection_doc, top_k=5, score_threshold=0.3
+#         )
+#         task_faq = retriever_service.search(
+#             query=query, collection_name=collection_faq, top_k=2, score_threshold=0.5
+#         )
+        
+#         initial_docs, faq_result = await asyncio.gather(task_doc, task_faq)
+
+#         # Xử lý kết quả trả về cho Agent đọc
+#         output_lines = []
+
+#         # 1. Ưu tiên FAQ nếu điểm rất cao
+#         # CHECK: Tạm tắt do chất lượng hoạt động kém
+#         # if faq_result and faq_result[0].score > 0.98:
+#         #      return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
+
+#         # 2. Format Documents kèm Score
+#         if initial_docs:
+#             docs_result = await reranker_service.rerank(
+#                 query=query, 
+#                 documents=initial_docs, 
+#                 top_n=5
+#             )
+
+#             output_lines.append(f"Tìm thấy {len(docs_result)} tài liệu liên quan:")
+#             for doc in docs_result:
+#                 output_lines.append(
+#                     f"\n--- Doc {doc.doc_id} (Score: {doc.score:.2f}) ---\n"
+#                     f"Nội dung: {doc.content}"
+#                 )
+#         else:
+#             output_lines.append("SYSTEM_NOTE: Không tìm thấy tài liệu nào khớp trong Database nội bộ.")
+
+#         logger.info(f"FINISH TOOL: lookup_hcmut_info")
+
+#         return "\n".join(output_lines)
+
+#     except Exception as e:
+#         return f"Database Error: {str(e)}"
 
 # Tool 2: Web Search (Tavily)
 web_search_tool = TavilySearch(
@@ -99,8 +184,49 @@ web_search_tool = TavilySearch(
     topic="general",
 )
 
+# --- Helper chạy ngầm lưu lại câu hỏi bị thiếu kiến thức---
+async def background_log_missing_knowledge(user_id: str, thread_id: str, query: str):
+    """Mở một session DB độc lập để lưu log mà không chặn luồng chính."""
+    from core.database import AsyncSessionLocal
+    from repositories.missing_knowledge_repo import MissingKnowledgeRepository
+    
+    async with AsyncSessionLocal() as db:
+        repo = MissingKnowledgeRepository(db)
+        await repo.log_missing_query(user_id=user_id, thread_id=thread_id, query=query)
+        logger.info(f"Background task: Logged missing knowledge for query: '{query}'")
+
+
+# --- Wrapper Tool ---
+@tool("tavily_search_results_json")
+async def tavily_search_results_json(query: str, config: RunnableConfig):
+    """
+    CÔNG CỤ TÌM KIẾM WEB DỰ PHÒNG (FALLBACK).
+    BẠN CHỈ ĐƯỢC PHÉP SỬ DỤNG CÔNG CỤ NÀY KHI VÀ CHỈ KHI: 
+    Bạn đã gọi tool 'lookup_hcmut_info' nhưng các tài liệu trả về KHÔNG LIÊN QUAN hoặc KHÔNG ĐỦ THÔNG TIN để trả lời câu hỏi.
+    """
+    
+    # 1. Trích xuất metadata từ config
+    thread_id = config.get("configurable", {}).get("thread_id", "unknown_thread")
+    user_id = config.get("configurable", {}).get("user_id", "unknown_user")
+
+    # 2. FIRE-AND-FORGET: Đẩy việc ghi DB ra một task chạy ngầm
+    # Agent sẽ đi tiếp ngay lập tức mà không cần đợi DB lưu xong
+    asyncio.create_task(background_log_missing_knowledge(
+        user_id=user_id, 
+        thread_id=thread_id, 
+        query=query
+    ))
+
+    # 3. Kích hoạt tool Web Search thật (Đã định nghĩa web_search_tool từ trước)
+    try:
+        result = await web_search_tool.ainvoke({"query": query}, config)
+        return result
+    except Exception as e:
+        logger.exception("Web Search Tool Error")
+        return "SYSTEM_ERROR: Không thể truy cập Internet lúc này."
+
 # Agent được nhìn thấy cả 2 tool
-tools = [lookup_hcmut_info, web_search_tool]
+tools = [lookup_hcmut_info, tavily_search_results_json]
 tool_node = ToolNode(tools)
 
 # ==============================================================================
@@ -126,15 +252,14 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
        - Đọc kỹ kết quả trả về từ tool nội bộ.
        - Đánh giá nội dung cung cấp từ `lookup_hcmut_info` có đủ để trả lời câu hỏi không.
        - NẾU tài liệu có ĐỦ THÔNG TIN trả lời đúng câu hỏi -> Trả lời người dùng NGAY và TRÍCH DẪN nguồn tài liệu.
-       - NẾU nội dung KHÔNG ĐỦ THÔNG TIN ĐỂ ĐƯA CÂU TRẢ LỜI -> **HÃY GỌI TIẾP TOOL `tavily_search_results_json`**.
+       - NẾU tài liệu KHÔNG LIÊN QUAN hoặc không đủ để đưa ra câu trả lời chính xác -> BẠN KHÔNG ĐƯỢC TRẢ LỜI NGAY. Bắt buộc phải gọi công cụ `tavily_search_results_json` để tìm kiếm trên internet.
     
     3. **Bước 3: Tổng hợp:**
        - Nếu phải dùng Web Search, hãy trả lời kèm cảnh báo: "⚠️ Thông tin tham khảo từ internet".
-       - Nếu cả 2 nguồn đều bế tắc, hãy xin lỗi người dùng.
+       - Nếu cả 2 nguồn đều bế tắc, hãy xin lỗi người dùng và nói không có thông tin.
 
     LƯU Ý QUAN TRỌNG:
     - KHÔNG BỊA ĐẶT thông tin.
-    - Không gọi lại tool `lookup_hcmut_info` sau khi đã search web.
     """)
 
     # Đảm bảo System Message luôn ở đầu
@@ -145,6 +270,11 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
         current_messages[0] = sys_msg # Cập nhật prompt mới nhất
 
     response = await m_with_tools.ainvoke(current_messages, config)
+
+    # Add time to 
+    current_time = datetime.now(timezone.utc).isoformat()
+    response.additional_kwargs["timestamp"] = current_time
+
     return {"messages": [response]}
 
 async def handle_error(state: AgentState):
@@ -197,11 +327,18 @@ def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
     current_tool_calls = [tc["name"] for tc in last_message.tool_calls]
     logger.info(f"TOOL: {current_tool_calls}")
 
-    
-    # Lấy danh sách tool ĐÃ từng gọi trong quá khứ (từ lịch sử message)
-    # Lưu ý: ToolMessage thường có field 'name'
+    last_human_index = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            last_human_index = i
+            break
+            
+    # Chỉ lấy các tin nhắn trong lượt hội thoại hiện tại (từ lúc user hỏi đến giờ)
+    current_turn_messages = messages[last_human_index:]
+
+    # Lấy danh sách tool ĐÃ từng gọi trong lượt này
     past_tools_called = [
-        msg.name for msg in messages 
+        msg.name for msg in current_turn_messages 
         if isinstance(msg, ToolMessage)
     ]
 
