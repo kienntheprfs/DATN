@@ -6,6 +6,9 @@ checkpoints.db-*
 # Langgraph
 .langgraph_api/
 
+.claude
+convention.md
+
 # VSCode
 .vscode
 .DS_Store
