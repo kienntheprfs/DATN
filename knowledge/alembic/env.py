@@ -10,6 +10,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.models.models import Base
+import src.models.models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -25,6 +26,15 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
+def include_object(object, name, type_, reflected, compare_to):
+    # Bỏ qua các bảng không thuộc service này
+    if type_ == "table" and (
+        name.startswith("lightrag")
+        or name.startswith("checkpoint")
+        or name.startswith("store")
+    ):
+        return False
+    return True
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -50,6 +60,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -71,7 +82,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

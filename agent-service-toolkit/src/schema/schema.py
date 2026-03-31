@@ -2,6 +2,7 @@ from typing import Any, Literal, NotRequired
 
 from pydantic import BaseModel, Field, SerializeAsAny
 from typing_extensions import TypedDict
+from typing import Optional
 
 from schema.models import AllModelEnum, AnthropicModelName, OpenAIModelName
 
@@ -65,6 +66,11 @@ class UserInput(BaseModel):
         default={},
         examples=[{"spicy_level": 0.8}],
     )
+    query_mode: str | None = Field(
+        description="Mode for query: normal or deep",
+        default="normal",
+        examples=["normal", "deep"],
+    )
 
 
 class StreamInput(UserInput):
@@ -121,6 +127,7 @@ class ChatMessage(BaseModel):
         description="Custom message data.",
         default={},
     )
+    timestamp: Optional[str] = None
 
     def pretty_repr(self) -> str:
         """Get a pretty representation of the message."""
