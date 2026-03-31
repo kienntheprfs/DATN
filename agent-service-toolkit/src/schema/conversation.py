@@ -1,8 +1,6 @@
 from sqlalchemy import Column, String, DateTime, Boolean
 from sqlalchemy.sql import func
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from core.database import Base
 
 class Conversation(Base):
     __tablename__ = "conversations"
