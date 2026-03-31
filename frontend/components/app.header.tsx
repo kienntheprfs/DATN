@@ -14,7 +14,13 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAgent } from "@/contexts/agent-context";
 import { Loader2 } from "lucide-react";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
 const routeDictionary: Record<string, string> = {
@@ -71,33 +77,34 @@ function SettingsPanel() {
 					<div className="absolute right-0 top-full mt-1 z-50 w-64 bg-popover border rounded-lg shadow-lg p-3">
 						<div className="mb-3">
 							<label className="text-xs font-semibold mb-2 block">LLM Model</label>
-							<NativeSelect 
-								value={model} 
-								onChange={(e) => setModel(e.target.value)}
-								className="w-full px-2 py-1.5 text-xs bg-surface-bg border border-border-color rounded-sm"
-							>
-								<NativeSelectOption value="azure-gpt-4o">Default</NativeSelectOption>
-								{models.map((m) => (
-									<NativeSelectOption key={m.id} value={m.id}>
-										{m.name}
-									</NativeSelectOption>
-								))}
-							</NativeSelect>
+							<Select value={model} onValueChange={setModel}>
+								<SelectTrigger className="w-full">
+									<SelectValue placeholder="Chọn model" />
+								</SelectTrigger>
+								<SelectContent>
+									{models.map((m) => (
+										<SelectItem key={m.id} value={m.id}>
+											{m.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						</div>
 
 						<div>
 							<label className="text-xs font-semibold mb-2 block">Agent</label>
-							<NativeSelect 
-								value={agent} 
-								onChange={(e) => setAgent(e.target.value)}
-								className="w-full px-2 py-1.5 text-xs bg-surface-bg border border-border-color rounded-sm"
-							>
-								{agents.map((a) => (
-									<NativeSelectOption key={a.key} value={a.key}>
-										{a.key}
-									</NativeSelectOption>
-								))}
-							</NativeSelect>
+							<Select value={agent} onValueChange={setAgent}>
+								<SelectTrigger className="w-full">
+									<SelectValue placeholder="Chọn agent" />
+								</SelectTrigger>
+								<SelectContent>
+									{agents.map((a) => (
+										<SelectItem key={a.key} value={a.key}>
+											{a.key}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						</div>
 					</div>
 				</>

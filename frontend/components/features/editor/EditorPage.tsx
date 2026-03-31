@@ -11,6 +11,13 @@ import { BuildingModal } from './BuildingModal';
 import { EditorInspector } from './EditorInspector';
 import { MapOverlay } from './MapOverlay';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -890,20 +897,22 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
 
             <div>
               <label className="text-xs font-bold text-foreground mb-2 block">Loại địa điểm</label>
-              <select
+              <Select
                 disabled={!isEditing}
                 value={nodeData.type}
-                onChange={(e) => handleChange('type', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border text-sm text-foreground outline-none appearance-none ${
-                  isEditing ? 'bg-background border-input focus:border-primary' : 'bg-muted border-transparent cursor-not-allowed'
-                }`}
+                onValueChange={(value) => handleChange('type', value)}
               >
-                <option value="path">Điểm trung gian (Path)</option>
-                <option value="room">Phòng (Room)</option>
-                <option value="stairs">Cầu thang</option>
-                <option value="elevator">Thang máy</option>
-                <option value="entrance">Cổng ra vào</option>
-              </select>
+                <SelectTrigger className={`w-full ${isEditing ? 'bg-background border-input' : 'bg-muted border-transparent cursor-not-allowed'}`}>
+                  <SelectValue placeholder="Chọn loại địa điểm" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="path">Điểm trung gian (Path)</SelectItem>
+                  <SelectItem value="room">Phòng (Room)</SelectItem>
+                  <SelectItem value="stairs">Cầu thang</SelectItem>
+                  <SelectItem value="elevator">Thang máy</SelectItem>
+                  <SelectItem value="entrance">Cổng ra vào</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="pt-4 border-t border-border">
@@ -1086,18 +1095,20 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
               </div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Type</label>
-                <select
+                <Select
                   disabled={!isEditing}
                   value={edgeData.type}
-                  onChange={(e) => handleChange('type', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm text-foreground outline-none ${
-                    isEditing ? 'bg-background border-input focus:border-primary' : 'bg-muted border-transparent'
-                  }`}
+                  onValueChange={(value) => handleChange('type', value)}
                 >
-                  <option value="walk">Đi bộ</option>
-                  <option value="stairs">Thang bộ</option>
-                  <option value="elevator">Thang máy</option>
-                </select>
+                  <SelectTrigger className={`w-full ${isEditing ? 'bg-background border-input' : 'bg-muted border-transparent'}`}>
+                    <SelectValue placeholder="Chọn loại" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="walk">Đi bộ</SelectItem>
+                    <SelectItem value="stairs">Thang bộ</SelectItem>
+                    <SelectItem value="elevator">Thang máy</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware'
 import type { AppState} from '@/types/state'
 import type { HistoryItem } from '@/types/history'
 
+const MOCK_USERS = [
+  { name: "Nguyễn Văn A", email: "nguyen.van.a@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=nguyenvana" },
+  { name: "Trần Thị Bảo Trân", email: "tran.thi.bao.tran@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=baotran" },
+  { name: "Lê Hoàng Nam", email: "le.hoang.nam@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=nam" },
+]
+
 export const useAppStore = create<AppState>()(
     (set, get) => ({ // Dùng thêm hàm get() để lấy state hiện tại lúc đang ở trong action
       user: null, 

@@ -26,6 +26,7 @@ import {
     LogIn,
     Loader2,
     GraduationCap,
+    User,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -220,6 +221,14 @@ export function AppSidebar() {
                         <SidebarMenuItem>
                             {/* Thêm hover cho nút Cấu hình */}
                             <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
+                                <Link href="/profile">
+                                    <User />
+                                    <span>Hồ sơ cá nhân</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
                                 <Link href="#">
                                     <Settings />
                                     <span>Cấu hình hệ thống</span>
@@ -261,10 +270,11 @@ export function AppSidebar() {
                             <SidebarMenuButton
                                 size="lg"
                                 className="bg-transparent text-white border border-white/50 hover:bg-white/15 hover:border-white font-medium shadow-none transition-all"
-                                onClick={() => login({ name: "Bảo Trân", email: "tran.le@hcmut.edu.vn", avatar: "https://github.com/shadcn.png" })}
                             >
-                                <LogIn className="size-4" />
-                                <span>Đăng nhập hệ thống</span>
+                                <Link href="/auth" className="flex items-center gap-2">
+                                    <LogIn className="size-4" />
+                                    <span>Đăng nhập hệ thống</span>
+                                </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     )}
