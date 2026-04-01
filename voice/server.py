@@ -40,12 +40,21 @@ small_webrtc_handler: SmallWebRTCRequestHandler = SmallWebRTCRequestHandler()
 
 
 @app.post("/api/offer")
-async def offer(request: SmallWebRTCRequest, background_tasks: BackgroundTasks):
+async def offer(request: SmallWebRTCRequest, background_tasks: BackgroundTasks, req: Request):
     """Handle WebRTC offer requests via SmallWebRTCRequestHandler."""
+
+    # Extract agent_id and user_id from request_data if provided
+    agent_id = "chatbot"
+    user_id = "web-user-123"
+
+    request_data = getattr(request, "request_data", None)
+    if request_data:
+        agent_id = request_data.get("agent_id", agent_id)
+        user_id = request_data.get("user_id", user_id)
 
     # Prepare runner arguments with the callback to run your bot
     async def webrtc_connection_callback(connection):
-        background_tasks.add_task(run_bot, connection)
+        background_tasks.add_task(run_bot, connection, agent_id, user_id)
 
     # Delegate handling to SmallWebRTCRequestHandler
     answer = await small_webrtc_handler.handle_web_request(

@@ -26,6 +26,7 @@ import {
     LogIn,
     Loader2,
     GraduationCap,
+    User,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -67,6 +68,9 @@ export function AppSidebar() {
     const { user, history, isLoadingHistory, hasMoreHistory, login, logout, fetchMoreHistory } = useAppStore();
 
     useEffect(() => {
+        // Check if user is already logged in
+        login();
+        
         if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
             fetchMoreHistory();
         }
@@ -220,6 +224,14 @@ export function AppSidebar() {
                         <SidebarMenuItem>
                             {/* Thêm hover cho nút Cấu hình */}
                             <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
+                                <Link href="/profile">
+                                    <User />
+                                    <span>Hồ sơ cá nhân</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
                                 <Link href="#">
                                     <Settings />
                                     <span>Cấu hình hệ thống</span>
@@ -242,9 +254,15 @@ export function AppSidebar() {
                                         size="lg"
                                         className="hover:bg-white/15 hover:text-white data-[state=open]:bg-white/15 data-[state=open]:text-white transition-colors"
                                     >
-                                        <img src={user.avatar} alt={user.name} className="h-8 w-8 rounded-lg" />
+                                        {user.avatar_url ? (
+                                            <img src={user.avatar_url} alt={user.display_name || user.email} className="h-8 w-8 rounded-lg" />
+                                        ) : (
+                                            <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
+                                                <User className="size-4" />
+                                            </div>
+                                        )}
                                         <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">{user.name}</span>
+                                            <span className="truncate font-semibold">{user.display_name || user.email}</span>
                                             <span className="truncate text-xs text-primary-foreground/70">{user.email}</span>
                                         </div>
                                         <ChevronsUpDown className="ml-auto size-4 text-primary-foreground/70" />
@@ -261,10 +279,11 @@ export function AppSidebar() {
                             <SidebarMenuButton
                                 size="lg"
                                 className="bg-transparent text-white border border-white/50 hover:bg-white/15 hover:border-white font-medium shadow-none transition-all"
-                                onClick={() => login({ name: "Bảo Trân", email: "tran.le@hcmut.edu.vn", avatar: "https://github.com/shadcn.png" })}
                             >
-                                <LogIn className="size-4" />
-                                <span>Đăng nhập hệ thống</span>
+                                <Link href="/auth" className="flex items-center gap-2">
+                                    <LogIn className="size-4" />
+                                    <span>Đăng nhập hệ thống</span>
+                                </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     )}

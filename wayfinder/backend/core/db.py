@@ -29,4 +29,6 @@ else:
 
 
 def init_db():
-    SQLModel.metadata.create_all(engine)
+    from backend.models.entities import metadata
+
+    metadata.create_all(engine)

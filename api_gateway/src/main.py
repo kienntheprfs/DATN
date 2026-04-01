@@ -6,6 +6,7 @@ Simplified architecture with JWT + Python-based authorization:
 - SQLModel for models + Pydantic DTOs
 - Role-based access control (RBAC)
 """
+
 from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI, Request, status
@@ -16,7 +17,14 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from src.config import settings
 from src.middleware.auth_middleware import AuthMiddleware
-from src.routes import auth, agent_proxy, knowledge_proxy, wayfinder_proxy, threads
+from src.routes import (
+    auth,
+    agent_proxy,
+    knowledge_proxy,
+    wayfinder_proxy,
+    threads,
+    voice_proxy,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -38,10 +46,11 @@ async def lifespan(app: FastAPI):
     print(f"Agent Service: {settings.agent_service_url}")
     print(f"Knowledge Service: {settings.knowledge_service_url}")
     print(f"Wayfinder Service: {settings.wayfinder_service_url}")
+    print(f"Voice Service: {settings.voice_service_url}")
     print("=" * 60)
-    
+
     yield
-    
+
     # Shutdown
     print("Shutting down gracefully")
 
@@ -69,14 +78,14 @@ from fastapi.openapi.utils import get_openapi
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title=settings.app_name,
         version=settings.app_version,
         description=app.description,
         routes=app.routes,
     )
-    
+
     # Add security scheme
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
@@ -86,11 +95,11 @@ def custom_openapi():
             "description": "JWT token from /auth/login endpoint",
         }
     }
-    
+
     # Make security optional (for guest endpoints)
     # Specific endpoints will override this in fastapiDI
     openapi_schema["security"] = [{"BearerAuth": []}]
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -109,8 +118,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
 
 
 # Global Exception Handlers
@@ -133,7 +140,9 @@ async def integrity_exception_handler(request: Request, exc: IntegrityError):
     logger.error(f"Database integrity error on {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": "Data integrity error. Please check your input and try again."},
+        content={
+            "detail": "Data integrity error. Please check your input and try again."
+        },
     )
 
 
@@ -166,6 +175,7 @@ app.include_router(threads.router)
 app.include_router(agent_proxy.router)
 app.include_router(knowledge_proxy.router)
 app.include_router(wayfinder_proxy.router)
+app.include_router(voice_proxy.router)
 
 
 @app.get(
@@ -210,11 +220,10 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host=settings.api_gateway_host,
         port=settings.api_gateway_port,
         reload=settings.debug,
     )
-

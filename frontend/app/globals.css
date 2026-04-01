@@ -46,6 +46,10 @@
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
+	--color-background-light: #F8F9FA;
+	--color-surface: #FFFFFF;
+	--color-text-main: #1A1D1F;
+	--color-text-secondary: #64748B;
 }
 
 :root {
@@ -74,6 +78,10 @@
 	--chart-3: hsl(197 37% 24%);
 	--chart-4: hsl(43 74% 66%);
 	--chart-5: hsl(27 87% 67%);
+	--background-light: #F8F9FA;
+	--surface: #FFFFFF;
+	--text-main: #1A1D1F;
+	--text-secondary: #64748B;
 }
 
 .dark {
@@ -117,4 +125,10 @@
 
 .material-symbols-outlined {
 	font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.bg-academic-overlay {
+	background: linear-gradient(rgba(3, 3, 145, 0.65), rgba(3, 3, 145, 0.65)), url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80');
+	background-size: cover;
+	background-position: center;
 }

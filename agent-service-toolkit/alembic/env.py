@@ -13,6 +13,7 @@ from alembic import context
 from core.settings import settings
 # BẮT BUỘC: Import tất cả các model bạn có ở đây để Alembic có thể quét được
 from schema.conversation import Base, Conversation
+from schema.missing_knowledge import MissingKnowledgeLog
 
 # 2. Xây dựng DATABASE_URL động từ settings
 DATABASE_URL = (

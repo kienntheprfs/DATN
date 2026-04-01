@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     REDIS_BACKEND_URL: str = "redis://localhost:6379/1"
 
     LLAMA_CLOUD_API_KEY: str | None = None
+    LIGHTRAG_BASE_URL: str | None = "http://localhost:9621"
+    LIGHTRAG_API_KEY: str | None = None
+    LIGHTRAG_UPLOAD_PATH: str = "/documents/upload"
+    LIGHTRAG_TRACK_PATH: str = "/documents/track_status/{track_id}"
+    LIGHTRAG_DELETE_PATH: str = "/documents/delete_document"
 
     @computed_field
     @property

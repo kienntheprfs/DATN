@@ -24,7 +24,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	});
 
 	const voice = useVoice({
-		voiceServerUrl: "http://localhost:7860",
+		apiGatewayUrl: "http://localhost:8002",
 		agentId: agent || "chatbot",
 		model,
 		onTranscript: (text) => {
@@ -96,7 +96,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 					<ChatInput
 						isLoading={isLoading}
 						onSubmitMessage={sendMessage}
-						voiceServerUrl="http://localhost:7860"
+						apiGatewayUrl="http://localhost:8002"
 						voiceAgentId={agent || "chatbot"}
 						voiceModel={model}
 						voiceState={voice.state}

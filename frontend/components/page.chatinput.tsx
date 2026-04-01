@@ -12,8 +12,9 @@ import { VoiceConnectionState } from "@/hooks/use-voice";
 interface ChatInputProps {
   onSubmitMessage?: (message: string) => void;
   isLoading?: boolean;
-  voiceServerUrl?: string;
+  apiGatewayUrl?: string;
   voiceAgentId?: string;
+  userId?: string;
   voiceModel?: string;
   voiceState?: VoiceConnectionState;
   isListening?: boolean;
@@ -28,8 +29,9 @@ interface ChatInputProps {
 export function ChatInput({
   onSubmitMessage,
   isLoading = false,
-  voiceServerUrl = "http://localhost:7860",
+  apiGatewayUrl = "http://localhost:8002",
   voiceAgentId = "chatbot",
+  userId,
   voiceModel,
   voiceState = "idle",
   isListening = false,
@@ -115,8 +117,9 @@ export function ChatInput({
             )}
 
             <VoiceButton
-              voiceServerUrl={voiceServerUrl}
+              apiGatewayUrl={apiGatewayUrl}
               agentId={voiceAgentId}
+              userId={userId}
               model={voiceModel}
               onTranscript={onVoiceTranscript}
               onBotOutput={onVoiceBotOutput}

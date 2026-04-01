@@ -26,17 +26,20 @@ def convert_message_content_to_string(content: str | list[str | dict]) -> str:
 
 def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
     """Create a ChatMessage from a LangChain message."""
+    timestamp = message.additional_kwargs.get("timestamp")
     match message:
         case HumanMessage():
             human_message = ChatMessage(
                 type="human",
                 content=convert_message_content_to_string(message.content),
+                timestamp=timestamp,
             )
             return human_message
         case AIMessage():
             ai_message = ChatMessage(
                 type="ai",
                 content=convert_message_content_to_string(message.content),
+                timestamp=timestamp,
             )
             if message.tool_calls:
                 ai_message.tool_calls = message.tool_calls
@@ -48,6 +51,7 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
                 type="tool",
                 content=convert_message_content_to_string(message.content),
                 tool_call_id=message.tool_call_id,
+                timestamp=timestamp,
             )
             return tool_message
         case LangchainChatMessage():
@@ -56,6 +60,7 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
                     type="custom",
                     content="",
                     custom_data=message.content[0],
+                    timestamp=timestamp,
                 )
                 return custom_message
             else:

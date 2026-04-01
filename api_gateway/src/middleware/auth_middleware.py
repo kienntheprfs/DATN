@@ -48,18 +48,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         token = auth_header.split(" ")[1]
         logger.debug(f"Token found: path={path}, token_prefix={token[:20]}...")
-        
+
         # Try cache first
         user_info = jwt_cache.get(token)
         if user_info:
-            logger.debug(f"Token from cache: {user_info.email}, roles={user_info.roles}")
-        
+            logger.debug(
+                f"Token from cache: {user_info.email}, roles={user_info.roles}"
+            )
+
         if user_info is None:
             # Decode and validate JWT
             try:
                 token_payload = jwt_handler.decode_token(token)
-                logger.debug(f"Token decoded: sub={token_payload.sub}, email={token_payload.email}, roles={token_payload.roles}, type={token_payload.type}")
-                
+                logger.debug(
+                    f"Token decoded: sub={token_payload.sub}, email={token_payload.email}, roles={token_payload.roles}, type={token_payload.type}"
+                )
+
                 # Verify it's an access token
                 if not jwt_handler.verify_token_type(token_payload, "access"):
                     logger.warning(
@@ -75,11 +79,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     email=token_payload.email,
                     roles=token_payload.roles,
                 )
-                logger.debug(f"UserInfo created: {user_info.email}, roles={user_info.roles}")
-                
+                logger.debug(
+                    f"UserInfo created: {user_info.email}, roles={user_info.roles}"
+                )
+
                 # Cache user info
                 jwt_cache[token] = user_info
-                
+
             except ValueError as e:
                 logger.warning(f"Ignoring invalid token: path={path}, error={str(e)}")
                 return await call_next(request)

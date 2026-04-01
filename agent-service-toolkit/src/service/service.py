@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID, uuid4
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -74,6 +75,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     and agents with async loading - for example for starting up MCP clients.
     """
     try:
+        from core.database import Base, engine
+        async with engine.begin() as conn:
+            # Lệnh này sẽ quét các model kế thừa từ Base và tạo bảng nếu chưa có
+            await conn.run_sync(Base.metadata.create_all)
+
         # Initialize both checkpointer (for short-term memory) and store (for long-term memory)
         async with initialize_database() as saver, initialize_store() as store:
             # Set up both components
@@ -140,6 +146,10 @@ async def _handle_input(
     configurable = {"thread_id": thread_id, "user_id": user_id}
     if user_input.model is not None:
         configurable["model"] = user_input.model
+    
+    # Config query mode
+    if getattr(user_input, "query_mode", None) is not None:
+        configurable["query_mode"] = user_input.query_mode
 
     callbacks: list[Any] = []
     if settings.LANGFUSE_TRACING:
@@ -175,7 +185,8 @@ async def _handle_input(
         # assume user input is response to resume agent execution from interrupt
         input = Command(resume=user_input.message)
     else:
-        input = {"messages": [HumanMessage(content=user_input.message)]}
+        current_time = datetime.now(timezone.utc).isoformat()
+        input = {"messages": [HumanMessage(content=user_input.message, additional_kwargs={"timestamp": current_time})]}
 
     kwargs = {
         "input": input,
