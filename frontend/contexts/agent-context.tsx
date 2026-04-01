@@ -72,7 +72,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, []);
 
-		const fetchInfo = useCallback(async () => {
+	const fetchInfo = useCallback(async () => {
 		try {
 			const data: ServiceInfo = await agentClient.getInfo();
 			setIsOnline(true);
@@ -113,7 +113,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 		fetchInfo();
 		const interval = setInterval(fetchInfo, 30000);
 		return () => clearInterval(interval);
-	}, [fetchInfo]);
+	}, []);
 
 	return (
 		<AgentContext.Provider

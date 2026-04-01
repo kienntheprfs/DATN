@@ -5,3 +5,4 @@ export * from './wayfinding-map-api';
 export * from './wayfinding-api';
 export * from './building-api';
 export * from './editor-api';
+export * from './agent';

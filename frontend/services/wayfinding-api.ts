@@ -1,4 +1,4 @@
-import { apiClient } from './wayfinding-client';
+import { apiClient } from './auth-api';
 import { RouteResponse } from '@/types';
 
 export interface FindRouteParams {
@@ -16,18 +16,18 @@ export interface QueryRouteParams {
 
 export const wayfindingApi = {
   findRoute: async (params: FindRouteParams): Promise<RouteResponse> => {
-    const res = await apiClient.get<RouteResponse>("/api/find", { params });
+    const res = await apiClient.get<RouteResponse>("/wayfinder/api/find", { params });
     return res.data;
   },
 
   queryRoute: async (params: QueryRouteParams): Promise<RouteResponse> => {
-    const res = await apiClient.get<RouteResponse>("/api/query", { params });
+    const res = await apiClient.get<RouteResponse>("/wayfinder/api/query", { params });
     return res.data;
   },
 
   findNearestNode: async (mapId: number, x: number, y: number): Promise<number[] | null> => {
     try {
-      const res = await apiClient.get<RouteResponse>("/api/query", {
+      const res = await apiClient.get<RouteResponse>("/wayfinder/api/query", {
         params: {
           map_id: mapId,
           q: "",
@@ -43,7 +43,7 @@ export const wayfindingApi = {
   },
 
   refreshCache: async (): Promise<{ message: string; node_count: number }> => {
-    const res = await apiClient.post("/api/refresh-cache");
+    const res = await apiClient.post("/wayfinder/api/refresh-cache");
     return res.data;
   },
 };

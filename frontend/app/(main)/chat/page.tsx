@@ -7,7 +7,7 @@ import { useAgent } from "@/contexts/agent-context";
 import { useVoice } from "@/hooks/use-voice";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ChatWindow } from "@/components/chat/chat-window";
-import { ChatInput } from "@/components/page.chatinput";
+import { ChatInput, QueryMode } from "@/components/page.chatinput";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
@@ -24,7 +24,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	});
 
 	const voice = useVoice({
-		apiGatewayUrl: "http://localhost:8002",
+		apiGatewayUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
 		agentId: agent || "chatbot",
 		model,
 		onTranscript: (text) => {
@@ -55,6 +55,10 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		} else if (voice.state === "idle" || voice.state === "disconnected" || voice.state === "error") {
 			onVoiceToggle();
 		}
+	};
+
+	const handleSendMessage = (message: string, queryMode?: QueryMode) => {
+		sendMessage(message, queryMode);
 	};
 
 	useEffect(() => {
@@ -95,8 +99,8 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 				<div className="mx-auto w-full max-w-4xl">
 					<ChatInput
 						isLoading={isLoading}
-						onSubmitMessage={sendMessage}
-						apiGatewayUrl="http://localhost:8002"
+						onSubmitMessage={handleSendMessage}
+						apiGatewayUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002"}
 						voiceAgentId={agent || "chatbot"}
 						voiceModel={model}
 						voiceState={voice.state}

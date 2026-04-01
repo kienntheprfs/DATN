@@ -26,7 +26,7 @@ interface MessageChunk {
 
 interface UseChatReturn {
 	messages: ChatMessage[];
-	sendMessage: (message: string) => Promise<void>;
+	sendMessage: (message: string, queryMode?: "normal" | "deep") => Promise<void>;
 	addUserMessage: (content: string) => string;
 	addBotMessage: (content: string) => string;
 	appendBotMessage: (content: string) => void;
@@ -75,7 +75,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	}, []);
 
 	const sendMessage = useCallback(
-		async (message: string) => {
+		async (message: string, queryMode?: "normal" | "deep") => {
 			if (processingRef.current) {
 				if (abortControllerRef.current) {
 					abortControllerRef.current.abort();
@@ -111,6 +111,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					agent,
 					threadId: threadId,
 					streamTokens: true,
+					queryMode,
 				}, abortControllerRef.current.signal)) {
 					if (abortControllerRef.current?.signal.aborted) {
 						break;

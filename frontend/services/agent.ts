@@ -1,3 +1,5 @@
+import { apiClient, refreshAccessToken } from './auth-api';
+
 export interface ServiceInfo {
 	models: string[];
 	agents: Array<{ key: string; description: string }>;
@@ -38,16 +40,46 @@ export class AgentClientError extends Error {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
 
+const getUserId = (): string => {
+  if (typeof window === "undefined") return "guest";
+  const user = localStorage.getItem("user");
+  if (user) {
+    try {
+      const parsed = JSON.parse(user);
+      return parsed.id?.toString() || parsed.sub?.toString() || "guest";
+    } catch {
+      return "guest";
+    }
+  }
+  return "guest";
+};
+
 const getAuthHeaders = (): HeadersInit => {
   const token = localStorage.getItem('access_token');
+  const userId = getUserId();
   return {
     'Content-Type': 'application/json',
+    'X-User-Id': userId,
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
   };
 };
 
+const ensureValidToken = async (): Promise<void> => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const now = Math.floor(Date.now() / 1000);
+    const expiresIn = payload.exp - now;
+    
+    if (expiresIn < 300) {
+      await refreshAccessToken();
+    }
+  }
+};
+
 class AgentClient {
 	async getInfo(): Promise<ServiceInfo> {
+    await ensureValidToken();
 		const response = await fetch(`${API_BASE}/agent/info`, {
 			headers: getAuthHeaders(),
 		});
@@ -60,6 +92,7 @@ class AgentClient {
 	}
 
 	async getHistory(threadId: string): Promise<ChatHistory> {
+    await ensureValidToken();
 		const response = await fetch(`${API_BASE}/agent/history/${threadId}`, {
 			headers: getAuthHeaders(),
 		});
@@ -78,35 +111,43 @@ class AgentClient {
 			agent?: string;
 			threadId?: string;
 			streamTokens?: boolean;
+			queryMode?: "normal" | "deep";
 		} = {},
 		signal?: AbortSignal
 	): AsyncGenerator<StreamChunk, void, unknown> {
-		const { model, agent = "chatbot", threadId, streamTokens = true } = options;
+		const { model, agent = "chatbot", threadId, streamTokens = true, queryMode = "normal" } = options;
+
+    await ensureValidToken();
 
 		const requestBody: Record<string, unknown> = {
 			message,
 			stream_tokens: streamTokens,
+			query_mode: queryMode,
 		};
 
 		if (threadId) requestBody.thread_id = threadId;
 		if (model) requestBody.model = model;
 		requestBody.agent = agent;
 
-		const response = await fetch(`${API_BASE}/agent/stream`, {
+		const response = await fetch(`${API_BASE}/agent/stream?agent_id=${agent}`, {
 			method: "POST",
 			headers: getAuthHeaders(),
 			body: JSON.stringify(requestBody),
 			signal,
 		});
 
+		console.log("Agent stream response:", response);
+
 		if (!response.ok) {
 			const error = await response.text();
+			console.error("API Error:", response.status, error);
 			yield { type: "error", content: error };
 			return;
 		}
 
 		const reader = response.body?.getReader();
 		if (!reader) {
+			console.error("No response body");
 			yield { type: "error", content: "No response body" };
 			return;
 		}
@@ -127,6 +168,7 @@ class AgentClient {
 
 				for (const line of lines) {
 					const trimmedLine = line.trim();
+					console.log("Received line:", trimmedLine);
 					if (!trimmedLine.startsWith("data: ")) continue;
 
 					const data = trimmedLine.slice(6);
@@ -137,12 +179,9 @@ class AgentClient {
 
 					try {
 						const parsed = JSON.parse(data);
-						console.log("Parsed:", parsed);
 						
-						// Check if content is an object with type field (ChatMessage format)
 						if (parsed.type === "message" && parsed.content && typeof parsed.content === "object") {
 							const content = parsed.content;
-							// content has: type, content (string), tool_calls?, tool_call_id?
 							if (content.type === "ai" || content.type === "tool") {
 								yield {
 									type: "message" as const,

@@ -11,7 +11,7 @@ DB_USER = os.getenv("WAYFINDER_DB_USER", "postgres")
 DB_PASSWORD = os.getenv("WAYFINDER_DB_PASSWORD", "postgres")
 DB_HOST = os.getenv("WAYFINDER_DB_HOST", "localhost")
 DB_PORT = os.getenv("WAYFINDER_DB_PORT", "5432")
-DB_NAME = os.getenv("WAYFINDER_DB_NAME", "wayfinder")
+DB_NAME = os.getenv("WAYFINDER_DB_NAME", "knowledge_db")
 DB_SCHEMA = os.getenv("WAYFINDER_DB_SCHEMA", "wayfinder")
 
 ENV_URL = os.getenv("WAYFINDER_DB_URL") or os.getenv("DATABASE_URL")
@@ -21,7 +21,9 @@ if ENV_URL:
     engine = create_engine(DB_URL, echo=False)
 else:
     DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    engine = create_engine(DB_URL, echo=False)
+    engine = create_engine(
+        DB_URL, echo=False, connect_args={"options": f"-c search_path={DB_SCHEMA}"}
+    )
 
     with engine.connect() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
@@ -29,6 +31,22 @@ else:
 
 
 def init_db():
-    from backend.models.entities import metadata
+    from backend.models.entities import (
+        Building,
+        Map,
+        Node,
+        Alias,
+        Edge,
+        Event,
+        MissingLocation,
+        MissingRoute,
+    )
 
-    metadata.create_all(engine)
+    for table in SQLModel.metadata.tables.values():
+        table.schema = DB_SCHEMA
+
+    SQLModel.metadata.create_all(engine)
+
+    print(
+        f"Created {len(SQLModel.metadata.tables)} tables in schema '{DB_SCHEMA}': {list(SQLModel.metadata.tables.keys())}"
+    )

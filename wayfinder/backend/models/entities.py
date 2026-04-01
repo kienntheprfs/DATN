@@ -126,7 +126,7 @@ class Event(SQLModel, table=True, metadata=metadata):
 
 
 class MissingLocation(SQLModel, table=True, metadata=metadata):
-    __tablename__ = "wayfinder_missing_location"
+    __tablename__ = "wayfinder_missing_location"  # type: ignore[assignment]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -146,7 +146,7 @@ class MissingLocation(SQLModel, table=True, metadata=metadata):
 
 
 class MissingRoute(SQLModel, table=True, metadata=metadata):
-    __tablename__ = "wayfinder_missing_route"
+    __tablename__ = "wayfinder_missing_route"  # type: ignore[assignment]
 
     id: Optional[int] = Field(default=None, primary_key=True)
 

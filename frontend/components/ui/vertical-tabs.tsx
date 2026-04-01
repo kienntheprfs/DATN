@@ -15,7 +15,7 @@ export function VerticalTabs({ defaultValue, className, children }: VerticalTabs
     <UITabs 
       orientation="vertical" 
       defaultValue={defaultValue}
-      className={cn("flex flex-col xl:flex-row gap-6 w-full", className)}
+      className={cn("flex flex-col xl:flex-row gap-3 w-full", className)}
     >
       {children}
     </UITabs>
@@ -30,7 +30,7 @@ interface VerticalTabsListProps {
 export function VerticalTabsList({ className, children }: VerticalTabsListProps) {
   return (
     <TabsList className={cn(
-      "inline-flex lg:flex-col gap-1 p-1 bg-muted/50 rounded-xl border border-border/50 w-fit lg:w-auto",
+      "inline-flex lg:flex-col gap-1 p-1 bg-muted rounded-lg w-fit lg:w-48 shrink-0",
       className
     )}>
       {children}
@@ -49,8 +49,9 @@ export function VerticalTabsTrigger({ value, className, children }: VerticalTabs
     <TabsTrigger 
       value={value} 
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium w-full lg:w-auto",
-        "data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm data-[state=active]:font-semibold",
+        "relative inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium w-full lg:w-auto text-muted-foreground",
+        "hover:bg-muted hover:text-foreground",
+        "data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=active]:shadow-sm",
         className
       )}
     >
