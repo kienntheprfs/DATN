@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     knowledge_service_url: str = "http://localhost:8000"
     wayfinder_service_url: str = "http://localhost:8001"
     voice_service_url: str = "http://localhost:7860"
+    dashboard_service_url: str = "http://localhost:8010"
 
     # Internal Security
     internal_secret: str = "your-internal-secret-for-service-to-service-auth"

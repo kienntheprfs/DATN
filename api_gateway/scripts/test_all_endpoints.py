@@ -152,7 +152,10 @@ class TestRunner:
             (is_expected, status_code, message)
         """
         headers = self.get_headers(role)
-        path = endpoint.path.replace("{thread_id}", self.test_thread_id or "test-thread-id")
+        path = endpoint.path
+        path = path.replace("{thread_id}", self.test_thread_id or "test-thread-id")
+        path = path.replace("{agent_id}", "test-agent")
+        path = path.replace("{rating_id}", "00000000-0000-0000-0000-000000000001")
         url = f"{self.base_url}{path}"
         
         # Prepare request body
@@ -323,6 +326,13 @@ def define_all_endpoints() -> List[EndpointTest]:
             body={},
         ),
         EndpointTest("GET", "/wayfinder/", ExpectedAccess.PUBLIC, "Wayfinder root (public GET)"),
+
+        # ==================== DASHBOARD RATINGS ENDPOINTS ====================
+        EndpointTest("POST", "/dashboard/ratings", ExpectedAccess.AUTH, "Create/update rating",
+                     body={"thread_id": "thread-test", "run_id": "11111111-1111-1111-1111-111111111111", "agent_id": "test-agent", "rating": "LIKE"}),
+        EndpointTest("DELETE", "/dashboard/ratings/{rating_id}", ExpectedAccess.AUTH, "Delete rating (owner/admin in downstream)"),
+        EndpointTest("GET", "/dashboard/ratings/thread/{thread_id}", ExpectedAccess.AUTH, "Get thread ratings"),
+        EndpointTest("GET", "/dashboard/ratings/stats/agent/{agent_id}", ExpectedAccess.ADMIN, "Get agent stats (admin only)"),
     ]
 
 

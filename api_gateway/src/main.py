@@ -24,6 +24,7 @@ from src.routes import (
     wayfinder_proxy,
     threads,
     voice_proxy,
+    dashboard_proxy
 )
 
 # Configure logging
@@ -176,7 +177,8 @@ app.include_router(agent_proxy.router)
 app.include_router(knowledge_proxy.router)
 app.include_router(wayfinder_proxy.router)
 app.include_router(voice_proxy.router)
-
+app.include_router(dashboard_proxy.router)
+app.include_router(dashboard_proxy.router)  
 
 @app.get(
     "/health",

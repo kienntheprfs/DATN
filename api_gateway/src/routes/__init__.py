@@ -1,5 +1,5 @@
 """Routes package."""
-from src.routes import auth, agent_proxy, knowledge_proxy, wayfinder_proxy, threads
+from src.routes import auth, agent_proxy, knowledge_proxy, wayfinder_proxy, threads, dashboard_proxy
 
 __all__ = [
     "auth",
@@ -7,4 +7,5 @@ __all__ = [
     "knowledge_proxy",
     "wayfinder_proxy",
     "threads",
+    "dashboard_proxy",
 ]

@@ -21,7 +21,7 @@ def build_downstream_headers(request: Request, user: Any | None = None) -> dict[
         user_roles = getattr(user, "roles", None) or []
 
         if user_id:
-            headers["X-User-ID"] = str(user_id)
+            headers["X-User-Id"] = str(user_id)
         if user_email:
             headers["X-User-Email"] = str(user_email)
         if user_roles:
