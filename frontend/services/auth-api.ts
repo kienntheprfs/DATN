@@ -76,27 +76,33 @@ const getCommonHeaders = (): Record<string, string> => {
     'Content-Type': 'application/json',
   };
   
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  const user = localStorage.getItem('user');
-  if (user) {
-    try {
-      const parsed = JSON.parse(user);
-      headers['X-User-Id'] = parsed.id?.toString() || parsed.sub?.toString() || 'guest';
-    } catch {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const parsed = JSON.parse(user);
+        headers['X-User-Id'] = parsed.id?.toString() || parsed.sub?.toString() || 'guest';
+      } catch {
+        headers['X-User-Id'] = 'guest';
+      }
+    } else {
       headers['X-User-Id'] = 'guest';
     }
-  } else {
-    headers['X-User-Id'] = 'guest';
   }
   
   return headers;
 };
 
 apiClient.interceptors.request.use(async (config) => {
+  if (typeof window === "undefined") {
+    return config;
+  }
+  
   const token = localStorage.getItem('access_token');
   
   if (token && isTokenExpiringSoon(token)) {

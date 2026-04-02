@@ -14,6 +14,7 @@ export type QueryMode = "normal" | "deep";
 
 interface ChatInputProps {
   onSubmitMessage?: (message: string, queryMode?: QueryMode) => void;
+  onSubmitAndRedirect?: (message: string, queryMode?: QueryMode) => void;
   isLoading?: boolean;
   apiGatewayUrl?: string;
   voiceAgentId?: string;
@@ -31,6 +32,7 @@ interface ChatInputProps {
 
 export function ChatInput({
   onSubmitMessage,
+  onSubmitAndRedirect,
   isLoading = false,
   apiGatewayUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
   voiceAgentId = "chatbot",
@@ -75,8 +77,12 @@ export function ChatInput({
     if (onSubmitMessage) {
       onSubmitMessage(message, queryMode);
       setMessage(""); 
+    } else if (onSubmitAndRedirect) {
+      onSubmitAndRedirect(message, queryMode);
+      setMessage("");
     } else {
-      const params = new URLSearchParams({ q: message });
+      const threadId = crypto.randomUUID();
+      const params = new URLSearchParams({ thread_id: threadId, message: message });
       router.push(`/chat?${params.toString()}`);
     }
   };

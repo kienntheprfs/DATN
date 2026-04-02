@@ -12,10 +12,18 @@ export interface ChatMessage {
 	role: "user" | "assistant";
 	content: string;
 	createdAt?: string;
+	run_id?: string;
+}
+
+interface BackendChatMessage {
+	id?: string;
+	type: "human" | "ai" | "tool";
+	content: string;
+	run_id?: string;
 }
 
 export interface ChatHistory {
-	messages: ChatMessage[];
+	messages: BackendChatMessage[];
 }
 
 export interface StreamChunk {
@@ -29,6 +37,7 @@ export interface StreamChunk {
 	}>;
 	toolCallId?: string;
 	raw?: unknown;
+	run_id?: string;
 }
 
 export class AgentClientError extends Error {
@@ -189,6 +198,7 @@ class AgentClient {
 									content: content.content || "",
 									toolCalls: content.tool_calls || null,
 									toolCallId: content.tool_call_id || null,
+									run_id: content.run_id || null,
 								};
 							} else {
 								yield {

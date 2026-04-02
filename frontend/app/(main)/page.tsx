@@ -5,7 +5,7 @@ import { BadgeCheckIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 import SuggestionSection from "@/components/page.suggest";
-import { ChatInput } from "@/components/page.chatinput";
+import { ChatInput, QueryMode } from "@/components/page.chatinput";
 
 export default function Home() {
 	const router = useRouter();
@@ -14,11 +14,23 @@ export default function Home() {
 		router.push("/chat?voice=true");
 	};
 
+	const handleSubmitAndRedirect = (message: string, queryMode?: QueryMode) => {
+		const threadId = crypto.randomUUID();
+		const params = new URLSearchParams({ 
+			thread_id: threadId, 
+			message: message,
+		});
+		if (queryMode === "deep") {
+			params.set("query_mode", "deep");
+		}
+		router.push(`/chat?${params.toString()}`);
+	};
+
 	return (
 		<div className="flex flex-col items-center justify-center w-full min-h-[85vh] px-4">
 			<div className="flex w-full max-w-3xl flex-col items-center gap-8">
 				<div className="flex flex-col items-center gap-4 mt-3">
-					<Badge className="flex items-center gap-1.5 rounded-full bg-blue-100 px-4 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-200">
+					<Badge className="flex items-center gap-1.5 rounded-full bg-blue-100 px-4 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100">
 						<BadgeCheckIcon className="size-10 fill-accent" />
 						CƠ SỞ DỮ LIỆU CHÍNH THỐNG
 					</Badge>
@@ -32,6 +44,7 @@ export default function Home() {
 					apiGatewayUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002"}
 					voiceAgentId="chatbot"
 					onVoiceToggle={handleVoiceToggle}
+					onSubmitAndRedirect={handleSubmitAndRedirect}
 				/>
 
 				<SuggestionSection />

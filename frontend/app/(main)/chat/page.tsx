@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import { useAgent } from "@/contexts/agent-context";
 import { useVoice } from "@/hooks/use-voice";
@@ -11,17 +11,39 @@ import { ChatInput, QueryMode } from "@/components/page.chatinput";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
-	const initialQuery = searchParams.get("q");
+	const urlThreadId = searchParams.get("thread_id");
+	const urlMessage = searchParams.get("message");
+	const urlQueryMode = searchParams.get("query_mode") as QueryMode | null;
 	const shouldStartVoice = searchParams.get("voice") === "true";
 	const hasAppended = useRef(false);
 	const voiceStarted = useRef(false);
+	const sendMessageRef = useRef<((message: string, queryMode?: QueryMode) => Promise<void>) | null>(null);
+	const router = useRouter();
 	const { model, agent } = useAgent();
 	const { state } = useSidebar();
 
-	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error } = useChat({
+	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error, threadId } = useChat({
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
+		threadId: urlThreadId || undefined,
+		initialMessage: urlMessage || undefined,
+		initialQueryMode: urlQueryMode || undefined,
 	});
+
+	useEffect(() => {
+		sendMessageRef.current = sendMessage;
+	}, [sendMessage]);
+
+	useEffect(() => {
+		if (urlMessage && !hasAppended.current && model && agent && threadId) {
+			hasAppended.current = true;
+			sendMessageRef.current?.(urlMessage, urlQueryMode || undefined);
+			
+			setTimeout(() => {
+				router.replace(`/chat?thread_id=${urlThreadId}`);
+			}, 100);
+		}
+	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router]);
 
 	const voice = useVoice({
 		apiGatewayUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
@@ -68,13 +90,6 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	}, [voice.state]);
 
 	useEffect(() => {
-		if (initialQuery && !hasAppended.current && model && agent) {
-			hasAppended.current = true;
-			sendMessage(initialQuery);
-		}
-	}, [initialQuery, sendMessage, model, agent]);
-
-	useEffect(() => {
 		if (shouldStartVoice && !voiceStarted.current && voice.state === "idle") {
 			voiceStarted.current = true;
 			voice.startConversation();
@@ -93,6 +108,8 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 					isListening={voice.isListening}
 					currentTools={currentTools}
 					partialText={voice.partialText}
+					threadId={threadId}
+					agentId={agent || "chatbot"}
 				/>
 			</div>
 			<div className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${state === "collapsed" ? "left-0" : "left-64"} right-0`}>

@@ -13,6 +13,7 @@ import { MapData, MapNode, Instruction } from "@/types";
 import { MiniNavigation } from "./MapPreview";
 import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
+import { RatingButtons } from "./RatingButtons";
 
 interface ToolCall {
 	id: string;
@@ -54,6 +55,8 @@ interface ChatWindowProps {
 	isListening?: boolean;
 	currentTools?: ToolCall[];
 	partialText?: string;
+	threadId?: string;
+	agentId?: string;
 }
 
 function TypingIndicator() {
@@ -266,7 +269,7 @@ interface GroupedMessages {
 	messages: ChatMessage[];
 }
 
-export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText }: ChatWindowProps) {
+export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId }: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	
@@ -393,6 +396,15 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 												{combinedContent}
 											</Markdown>
 										</div>
+									</div>
+								)}
+								{combinedContent && lastBotMessage?.run_id && threadId && (
+									<div className="flex items-center gap-1 pl-2">
+										<RatingButtons
+											runId={lastBotMessage.run_id}
+											threadId={threadId}
+											agentId={agentId}
+										/>
 									</div>
 								)}
 							</div>
