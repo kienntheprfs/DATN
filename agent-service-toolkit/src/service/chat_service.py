@@ -47,3 +47,17 @@ class ChatService:
             raise HTTPException(status_code=403, detail="Cấm truy cập.")
             
         return conversation
+    
+    async def get_all_threads(
+        self,
+        offset: int = 0,
+        limit: int = 20
+    ) -> list[Conversation]:
+
+        threads = await self.repo.get_all_thread_by_user_id(
+            user_id=self.user_id,
+            offset=offset,
+            limit=limit
+        )
+
+        return threads
