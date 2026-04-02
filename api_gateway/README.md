@@ -168,6 +168,37 @@ cd api_gateway
 uv run scripts/test_all_endpoints.py
 ```
 
+### Test SSE token-by-token (kiểm tra gateway buffering)
+
+1) Chạy mock SSE server (trả token theo từng nhịp):
+
+```bash
+cd api_gateway
+uv run python scripts/mock_sse_server.py
+```
+
+Mock server mặc định chạy ở `http://localhost:18080`.
+
+Nếu muốn test qua gateway ngay với cấu hình mặc định `AGENT_UPSTREAM_ADDR=host.docker.internal:8080`, chạy mock server ở port `8080`:
+
+```bash
+cd api_gateway
+$env:MOCK_SSE_PORT=8080; uv run python scripts/mock_sse_server.py
+```
+
+2) Trỏ APISIX agent upstream về mock server (nếu cần):
+- Set `AGENT_UPSTREAM_ADDR=host.docker.internal:18080` trong file env của APISIX
+- Restart/reload APISIX để áp dụng cấu hình
+
+3) Chạy test stream qua gateway và in từng token nhận được:
+
+```bash
+cd api_gateway
+uv run python scripts/test_sse_stream_token_by_token.py --url http://localhost:8002/agent/stream --delay-sec 0.05 --repeat 200
+```
+
+Script sẽ in từng token kèm độ trễ giữa 2 token liên tiếp và summary cuối để nhận biết có dấu hiệu bị buffer hay không.
+
 ## Development
 
 Tạo migration mới:

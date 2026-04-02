@@ -1,7 +1,7 @@
 services:
   # APISIX standalone gateway (file-driven YAML config)
   apisix:
-    image: apache/apisix:3.11.0-debian
+    image: apache/apisix:3.14.1-debian
     container_name: api_gateway_apisix
     ports:
       - "8002:9080"

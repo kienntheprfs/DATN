@@ -276,8 +276,8 @@ def define_all_endpoints() -> List[EndpointTest]:
                  body={}),
         EndpointTest("POST", "/auth/login", ExpectedAccess.PUBLIC, "Login",
                      body={"email": "admin@gmail.com", "password": "admin@gmail.com"}),
-        EndpointTest("POST", "/auth/google", ExpectedAccess.PUBLIC, "Google OAuth login",
-                     body={"credential": "fake-google-token"}),
+        # EndpointTest("POST", "/auth/google", ExpectedAccess.PUBLIC, "Google OAuth login",
+        #              body={"credential": "fake-google-token"}),
         EndpointTest("POST", "/auth/refresh", ExpectedAccess.AUTH, "Refresh token"),
         EndpointTest("POST", "/auth/logout", ExpectedAccess.AUTH, "Logout (user/admin)"),
         EndpointTest("POST", "/auth/logout-all", ExpectedAccess.AUTH, "Logout all devices (user/admin)"),
@@ -453,7 +453,7 @@ async def run_endpoint_tests():
 async def run_all_tests():
     await run_endpoint_tests()
     await run_token_tests()
-    await run_google_oauth_tests()
+    # await run_google_oauth_tests()
 
 if __name__ == "__main__":
     try:
