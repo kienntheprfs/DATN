@@ -1,11 +1,4 @@
-"""API Gateway main application.
-
-Simplified architecture with JWT + Python-based authorization:
-- No OPA (replaced with fastapiDI)
-- Optional Redis (using in-memory cache)
-- SQLModel for models + Pydantic DTOs
-- Role-based access control (RBAC)
-"""
+"""Auth service main application for APISIX forward-auth deployment."""
 
 from contextlib import asynccontextmanager
 import logging
@@ -17,15 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from src.config import settings
 from src.middleware.auth_middleware import AuthMiddleware
-from src.routes import (
-    auth,
-    agent_proxy,
-    knowledge_proxy,
-    wayfinder_proxy,
-    threads,
-    voice_proxy,
-    dashboard_proxy
-)
+from src.routes import auth
 
 # Configure logging
 logging.basicConfig(
@@ -44,10 +29,6 @@ async def lifespan(app: FastAPI):
     print("=" * 60)
     print(f"Database: {settings.database_url.split('@')[-1]}")
     print(f"JWT Auth: Enabled (in-memory cache)")
-    print(f"Agent Service: {settings.agent_service_url}")
-    print(f"Knowledge Service: {settings.knowledge_service_url}")
-    print(f"Wayfinder Service: {settings.wayfinder_service_url}")
-    print(f"Voice Service: {settings.voice_service_url}")
     print("=" * 60)
 
     yield
@@ -61,11 +42,11 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description=(
-        "API Gateway with JWT Authentication and Python-based Authorization.\n\n"
+        "Auth service for APISIX forward-auth and JWT authentication.\n\n"
         "**Roles:**\n"
-        "- **Admin**: Full access to all services\n"
-        "- **User**: Access to own threads and agent service\n"
-        "- **Guest**: Temporary agent invocations (no history)"
+        "- **Admin**: Full access to protected APIs\n"
+        "- **User**: Access to own threads\n"
+        "- **Guest**: Public endpoints only"
     ),
     lifespan=lifespan,
     swagger_ui_parameters={"persistAuthorization": True, "docExpansion": "list"},
@@ -172,52 +153,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(auth.router)
-app.include_router(threads.router)
-app.include_router(agent_proxy.router)
-app.include_router(knowledge_proxy.router)
-app.include_router(wayfinder_proxy.router)
-app.include_router(voice_proxy.router)
-app.include_router(dashboard_proxy.router)
-app.include_router(dashboard_proxy.router)  
-
-@app.get(
-    "/health",
-    tags=["System"],
-    summary="Health check",
-    description="Check if API Gateway is running",
-)
-async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "api-gateway",
-        "version": settings.app_version,
-        "database": "connected",
-    }
-
-
-@app.get(
-    "/",
-    tags=["System"],
-    summary="Root endpoint",
-    description="API Gateway information",
-)
-async def root():
-    """Root endpoint."""
-    return {
-        "service": "API Gateway",
-        "version": settings.app_version,
-        "architecture": "JWT + Python-based Authorization",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "auth": "/auth",
-            "threads": "/threads",
-            "agent": "/agent",
-            "knowledge": "/kb (admin only)",
-            "wayfinder": "/wayfinder (admin only)",
-        },
-    }
 
 
 if __name__ == "__main__":

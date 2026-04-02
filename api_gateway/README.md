@@ -1,16 +1,25 @@
 # API Gateway
 
-API Gateway cho DATN Chatbot với JWT authentication, refresh token rotation, và authorization theo role/ownership bằng Python (fastapiDI).
+API Gateway cho DATN Chatbot chạy theo kiến trúc **APISIX standalone (YAML file-driven)** + **Auth service FastAPI chạy riêng trên host**.
+
+- APISIX chịu trách nhiệm routing/proxy (`8002:9080`) và được chạy bằng `docker compose`
+- FastAPI auth service chịu trách nhiệm auth business logic + forward-auth endpoint (`/auth/forward-auth`) và chạy riêng trên host ở `:8008`
+- Hỗ trợ SSE cho luồng `/agent/stream`
+- APISIX cũng trả trực tiếp `/` và `/health` bằng cấu hình YAML
 
 ## Tổng quan kiến trúc
 
+- Gateway Data Plane: APISIX standalone đọc cấu hình từ `apisix/conf/apisix.yaml`
 - Authentication: JWT access token + refresh token
-- Authorization: Python-based dependencies (`require_auth`, `require_roles`, `require_ownership`)
-- JWT cache: in-memory TTL cache trong middleware
-- Routing: proxy request đến các service downstream
-  - Agent service: `AGENT_SERVICE_URL` (mặc định `http://localhost:8080`)
-  - Knowledge service: `KNOWLEDGE_SERVICE_URL` (mặc định `http://localhost:8000`)
-  - Wayfinder service: `WAYFINDER_SERVICE_URL` (mặc định `http://localhost:8001`)
+- Authorization: APISIX `forward-auth` plugin gọi `GET /auth/forward-auth`
+- JWT cache: in-memory TTL cache trong auth service middleware
+- Routing: APISIX proxy request đến các service downstream
+  - Auth service: `host.docker.internal:8008`
+  - Agent service: `AGENT_UPSTREAM_ADDR` (mặc định `host.docker.internal:8080`)
+  - Knowledge service: `KNOWLEDGE_UPSTREAM_ADDR` (mặc định `host.docker.internal:8000`)
+  - Wayfinder service: `WAYFINDER_UPSTREAM_ADDR` (mặc định `host.docker.internal:8001`)
+  - Dashboard service: `DASHBOARD_UPSTREAM_ADDR` (mặc định `host.docker.internal:8010`)
+  - Voice service: `VOICE_UPSTREAM_ADDR` (mặc định `host.docker.internal:7860`)
 
 Lưu ý: phiên bản hiện tại không dùng OPA runtime và không cần Redis để chạy luồng auth cơ bản.
 
@@ -45,30 +54,59 @@ Các biến quan trọng:
 - `REFRESH_TOKEN_EXPIRE_DAYS`
 - `INTERNAL_SECRET`
 
-- `AGENT_SERVICE_URL`
-- `KNOWLEDGE_SERVICE_URL`
-- `WAYFINDER_SERVICE_URL`
+- `AGENT_SERVICE_URL` (default đã có giá trị phù hợp cho local dev)
+- `KNOWLEDGE_SERVICE_URL` (default đã có giá trị phù hợp cho local dev)
+- `WAYFINDER_SERVICE_URL` (default đã có giá trị phù hợp cho local dev)
 
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
 
-### 3. Run API Gateway
+### 3. Run auth service on host
+
+Mở một terminal riêng và chạy auth service FastAPI trên host:
 
 ```bash
 cd api_gateway
-uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8002
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008
+```
+
+Auth service chạy tại `http://localhost:8008`
+- Docs: `http://localhost:8008/docs`
+- Health: `http://localhost:8008/health`
+
+### 4. Run APISIX standalone gateway bằng Docker Compose
+
+```bash
+cd api_gateway
+docker-compose up -d
 ```
 
 Gateway chạy tại `http://localhost:8002`
-- Docs: `http://localhost:8002/docs`
-- Health: `http://localhost:8002/health`
+Compose này chỉ chạy APISIX. Auth service và các service downstream chạy riêng trên máy host.
+
+### 5. Kiểm tra routing
+
+- Mở `http://localhost:8002`
+- Gọi `GET /auth/me` qua gateway sau khi đăng nhập
+- Gọi `POST /agent/invoke` và `POST /agent/stream` nếu agent service đã chạy trên host
+
+## APISIX config files
+
+- `apisix/conf/config.yaml`: bật standalone data plane với `config_provider: yaml`
+- `apisix/conf/apisix.yaml`: toàn bộ routes/upstreams/plugins (`#END` bắt buộc ở cuối file)
+
+Các điểm chính đã cấu hình:
+- `forward-auth` cho protected routes (threads, kb, dashboard, protected agent/wayfinder, auth protected)
+- SSE route `/agent/stream` với upstream read timeout dài (`3600s`)
+- Header propagation từ auth service: `X-User-ID`, `X-User-Email`, `X-User-Roles`
+- Inject `X-Internal-Secret` cho downstream internal services
 
 ## API endpoints
 
 ### System
-- `GET /` - thông tin service
-- `GET /health` - health check
+- `GET /` - thông tin service do APISIX trả trực tiếp
+- `GET /health` - health check do APISIX trả trực tiếp
 
 ### Authentication (`/auth`)
 - `POST /auth/register` - đăng ký user
@@ -104,8 +142,8 @@ Toàn bộ endpoint yêu cầu role `admin`.
 
 ## Auth behavior
 
-- Public paths: `/`, `/docs`, `/redoc`, `/openapi.json`, `/health`, và một số endpoint auth
-- Guest-allowed path: `/agent/invoke`
+- APISIX forward-auth sẽ gọi `http://host.docker.internal:8008/auth/forward-auth`
+- Public auth endpoints như `/auth/register`, `/auth/login`, `/auth/google`, `/auth/refresh` vẫn đi qua APISIX nhưng không cần forward-auth
 - Các path còn lại: yêu cầu header `Authorization: Bearer <access_token>`
 
 Optional: Khi authenticated, gateway inject các header cho downstream service:
@@ -147,13 +185,14 @@ alembic downgrade base
 alembic upgrade head
 ```
 
-Dừng service db postgres local (nếu dùng docker):
+Dừng APISIX:
 
 ```bash
 cd api_gateway
 docker-compose down
 ```
-ctrl + C (dừng uvicorn)
+
+Auth service đang chạy trên host thì dừng bằng `Ctrl + C` ở terminal đã chạy uvicorn.
 
 Xóa data volume:
 

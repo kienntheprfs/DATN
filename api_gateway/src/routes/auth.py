@@ -1,10 +1,12 @@
 """Authentication routes."""
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from urllib.parse import urlsplit
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.dependencies import get_db, get_current_user
-from src.shared.auth.fastapiDI import require_roles
+from src.utils import has_any_role, is_admin_only_route, requires_ownership_check
+
 from src.schemas import (
     LoginRequest,
     GoogleLoginRequest,
@@ -23,6 +25,7 @@ from src.schemas import (
 from src.services.auth_service import auth_service
 from src.services.google_auth_service import google_auth_service
 from src.services.token_service import token_service
+from src.services.thread_service import ThreadService
 from src.models import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -119,7 +122,7 @@ async def refresh_token(
     return tokens
 
 
-@router.post("/logout", response_model=LogoutResponse, dependencies=[Depends(require_roles(["user", "admin"]))])
+@router.post("/logout", response_model=LogoutResponse)
 async def logout(
     logout_data: LogoutRequest,
     db: AsyncSession = Depends(get_db),
@@ -137,13 +140,19 @@ async def logout(
         current_user.id,
         db
     )
+    revoked_at = revoked_token.revoked_at
+    if revoked_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token revocation timestamp is missing",
+        )
     return LogoutResponse(
         message="Logged out successfully",
-        revoked_at=revoked_token.revoked_at
+        revoked_at=revoked_at
     )
 
 
-@router.post("/logout-all", response_model=LogoutAllResponse, dependencies=[Depends(require_roles(["user", "admin"]))])
+@router.post("/logout-all", response_model=LogoutAllResponse)
 async def logout_all(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -162,7 +171,7 @@ async def logout_all(
     )
 
 
-@router.post("/revoke", response_model=RevokeTokenResponse, dependencies=[Depends(require_roles(["admin"]))])
+@router.post("/revoke", response_model=RevokeTokenResponse)
 async def revoke_token(
     revoke_data: RevokeTokenRequest,
     db: AsyncSession = Depends(get_db)
@@ -176,13 +185,19 @@ async def revoke_token(
         revoke_data.refresh_token,
         db
     )
+    revoked_at = revoked_token.revoked_at
+    if revoked_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token revocation timestamp is missing",
+        )
     return RevokeTokenResponse(
         message="Token revoked successfully",
-        revoked_at=revoked_token.revoked_at
+        revoked_at=revoked_at
     )
 
 
-@router.post("/revoke-all", response_model=RevokeAllTokensResponse, dependencies=[Depends(require_roles(["admin"]))])
+@router.post("/revoke-all", response_model=RevokeAllTokensResponse)
 async def revoke_all_tokens(
     revoke_data: RevokeAllTokensRequest,
     db: AsyncSession = Depends(get_db),
@@ -204,4 +219,68 @@ async def revoke_all_tokens(
         message=f"All tokens revoked successfully for user {target_user_id}",
         tokens_revoked=count
     )
+
+
+@router.get("/forward-auth")
+async def forward_auth_verify(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """External auth endpoint for APISIX forward-auth plugin.
+
+    APISIX sends `X-Forwarded-Uri` and `X-Forwarded-Method` so this endpoint can
+    apply route-based authorization before requests reach upstream services.
+    """
+    forwarded_uri = request.headers.get("X-Forwarded-Uri", "/")
+    forwarded_method = request.headers.get("X-Forwarded-Method", request.method).upper()
+    path = urlsplit(forwarded_uri).path or "/"
+
+    user_info = getattr(request.state, "user", None)
+    if user_info is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    result = await db.execute(select(User).where(User.id == user_info.id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive",
+        )
+
+    if is_admin_only_route(forwarded_method, path) and not has_any_role(user, ["admin"]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+
+    requires_ownership, resource_id = requires_ownership_check(path)
+    if requires_ownership and resource_id and not has_any_role(user, ["admin"]):
+        owner_id = await ThreadService.get_thread_owner(db=db, thread_id=resource_id)
+        if owner_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Thread not found",
+            )
+        if owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: resource ownership required",
+            )
+
+    response_headers = {
+        "X-User-ID": user.id,
+        "X-User-Email": user.email,
+        "X-User-Roles": ",".join(sorted(user.get_role_names())),
+    }
+    return Response(status_code=status.HTTP_200_OK, headers=response_headers)
 

@@ -2,340 +2,267 @@
 
 ## Overview
 
-Simplified API Gateway with JWT authentication and Python-based authorization (no OPA, optional Redis).
+Current architecture:
 
-**Architecture:**
-- **Authentication**: JWT tokens with in-memory cache
-- **Authorization**: Python decorators (@require_roles, @require_ownership)
-- **Database**: PostgreSQL with SQLModel (SQLAlchemy + Pydantic)
-- **Roles**: Admin (full access), User (own resources), Guest (temporary)
+- APISIX runs in Docker Compose and listens on `http://localhost:8002` (forwarded from `9080` in the container)
+- FastAPI auth service runs separately on the host and listens on `http://localhost:8008`
+- APISIX handles routing, `/`, `/health`, and forward-auth calls to the auth service
+- The auth service handles JWT login, refresh, logout, threads, and ownership checks
+
+This setup replaces the old custom gateway runtime. The gateway container no longer runs FastAPI, and the auth service is not part of the compose stack.
 
 ## Prerequisites
 
 - Python 3.11+
-- PostgreSQL 12+
-- uv (Python package manager) or pip
+- Docker and Docker Compose
+- `uv`
+- PostgreSQL reachable from the host, typically on `localhost:5433` for local development
+- Downstream services running on the host, if you want to use `/agent`, `/kb`, `/wayfinder`, `/dashboard`, or `/voice`
 
 ## Quick Start
 
-### 1. Start PostgreSQL
+### 1. Install dependencies
 
 ```bash
 cd api_gateway
+uv sync
+```
 
-# Using docker-compose (recommended)
-docker-compose up -d
+### 2. Configure environment
 
-# Or manually with docker
+```bash
+cd api_gateway
+cp .env.example .env
+```
+
+Key variables:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_ALGORITHM`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `REFRESH_TOKEN_EXPIRE_DAYS`
+- `INTERNAL_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+### 3. Start PostgreSQL
+
+If you already have a local PostgreSQL instance, use that instead. Otherwise, start one on the host, for example:
+
+```bash
 docker run -d \
   --name postgres-gateway \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=authdb \
   -p 5433:5432 \
-  postgres:15-alpine
-
-# Or connect to existing PostgreSQL instance
-# Update DATABASE_URL in step 3 below
+  postgres:16-alpine
 ```
 
-### 2. Install Dependencies
+Use a `DATABASE_URL` like:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/authdb
+```
+
+### 4. Run migrations
 
 ```bash
 cd api_gateway
-
-# Using uv (recommended)
-uv sync
-
-# Or using pip
-pip install -e .
-```
-
-### 3. Configure Environment
-
-```bash
-# Copy example env file
-cp .env.example .env
-
-# Edit .env with your settings
-# DATABASE_URL=postgresql://postgres:postgres@localhost:5433/authdb
-# JWT_SECRET=your-secret-key-change-this-in-production
-# INTERNAL_SECRET=your-internal-secret-for-service-to-service-auth
-```
-
-### 4. Run Migrations
-
-```bash
-# Apply database migrations
 uv run alembic upgrade head
-
-# Verify migrations
-uv run alembic current
 ```
 
-### 5. Seed Initial Data
+### 5. Seed initial data
 
 ```bash
-# Create default roles (admin, user, guest) and admin user
+cd api_gateway
 uv run python scripts/seed_data.py
-
-# Follow prompts to set admin email/password
-# Default: admin@example.com / admin123
 ```
 
-### 6. Start API Gateway
+### 6. Start the FastAPI auth service on the host
+
+Open a separate terminal and run:
 
 ```bash
-# Development mode (hot reload)
-uv run uvicorn src.main:app --reload --port 8002
-
-# Production mode
-uv run uvicorn src.main:app --host 0.0.0.0 --port 8002
+cd api_gateway
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008
 ```
 
-### 7. Access Swagger UI
+Auth service endpoints:
 
-Open browser: http://localhost:8002/docs
+- Docs: `http://localhost:8008/docs`
+- Health: `http://localhost:8008/health`
+
+### 7. Start APISIX with Docker Compose
+
+```bash
+cd api_gateway
+docker compose up -d
+```
+
+APISIX endpoints:
+
+- Gateway: `http://localhost:8002`
+- Root: `http://localhost:8002/`
+- Health: `http://localhost:8002/health`
+
+### 8. Verify the setup
+
+```bash
+curl http://localhost:8002/
+curl http://localhost:8002/health
+curl http://localhost:8008/health
+```
+
+## Request Flow
+
+### Authentication flow
+
+1. Client logs in against the auth service on `http://localhost:8008`
+2. Auth service returns JWT access and refresh tokens
+3. Client sends requests to APISIX on `http://localhost:8002`
+4. APISIX calls `http://host.docker.internal:8008/auth/forward-auth` for protected routes
+5. APISIX forwards the request to the correct upstream with auth headers
+
+### System endpoints
+
+These are served directly by APISIX:
+
+- `GET /` - service information
+- `GET /health` - gateway health check
 
 ## API Endpoints
 
-### Public Endpoints (No Auth)
+### Auth service (`http://localhost:8008`)
 
-- `POST /auth/login` - Login with email/password
-- `POST /auth/register` - Register new user
-- `POST /auth/refresh` - Refresh access token
-- `GET /health` - Health check
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/google`
+- `GET /auth/me`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/logout-all`
+- `POST /auth/revoke`
+- `POST /auth/revoke-all`
+- `GET /auth/forward-auth`
 
-### Guest Endpoints (Optional Auth)
+### Threads (`http://localhost:8002` through APISIX)
 
-- `POST /agent/invoke` - Invoke agent (works without JWT)
+- `POST /threads`
+- `GET /threads`
+- `GET /threads/{thread_id}`
+- `PATCH /threads/{thread_id}`
+- `DELETE /threads/{thread_id}`
 
-### User Endpoints (Auth Required)
+### Agent proxy (`http://localhost:8002` through APISIX)
 
-- `GET /threads` - List user's threads
-- `POST /threads` - Create new thread
-- `GET /threads/{id}` - Get thread details (ownership check)
-- `PATCH /threads/{id}` - Update thread (ownership check)
-- `DELETE /threads/{id}` - Delete thread (ownership check)
-- `GET /agent/history/{thread_id}` - Get thread history (ownership check)
+- `POST /agent/invoke`
+- `POST /agent/stream`
+- `GET /agent/history/{thread_id}`
+- `GET|POST|PUT|PATCH|DELETE /agent/{path:path}`
 
-### Admin Endpoints (Admin Role Required)
+### Knowledge proxy (`http://localhost:8002` through APISIX)
 
-- `GET /kb/*` - Knowledge service (all operations)
-- `POST /kb/*` - Knowledge service (all operations)
-- `GET /wayfinder/*` - Wayfinder service (all operations)
-- `POST /wayfinder/*` - Wayfinder service (all operations)
+- `GET|POST|PUT|PATCH|DELETE /kb/{path:path}`
+
+### Wayfinder proxy (`http://localhost:8002` through APISIX)
+
+- `GET|POST|PUT|PATCH|DELETE /wayfinder/{path:path}`
+
+### Dashboard proxy (`http://localhost:8002` through APISIX)
+
+- `GET|POST|PUT|PATCH|DELETE /dashboard/{path:path}`
+
+### Voice proxy (`http://localhost:8002` through APISIX)
+
+- `POST /voice/offer`
+- `GET /voice/health`
 
 ## Authorization Flow
 
 ### 1. Login
 
 ```bash
-curl -X POST http://localhost:8002/auth/login \
+curl -X POST http://localhost:8008/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@example.com", "password": "admin123"}'
-
-# Response: {"access_token": "eyJ...", "refresh_token": "eyJ...", ...}
 ```
 
-### 2. Use JWT Token
+### 2. Use JWT token
 
 ```bash
-# Add Bearer token to Authorization header
 curl -X GET http://localhost:8002/threads \
   -H "Authorization: Bearer eyJ..."
 ```
 
-### 3. Guest Mode (No JWT)
+### 3. Check forward-auth directly
 
 ```bash
-# Works without Authorization header
-curl -X POST http://localhost:8002/agent/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Hello"}]}'
+curl -X GET http://localhost:8008/auth/forward-auth \
+  -H "Authorization: Bearer eyJ..." \
+  -H "X-Forwarded-Uri: /threads"
 ```
 
-## Role-Based Access Control (RBAC)
+## Role-Based Access Control
 
 | Role | Knowledge | Wayfinder | Agent Invoke | Agent History | Thread CRUD |
 |------|-----------|-----------|--------------|---------------|-------------|
-| **Admin** | ✅ Full | ✅ Full | ✅ All | ✅ All | ✅ All |
-| **User** | ❌ 403 | ❌ 403 | ✅ Public | ✅ Own | ✅ Own |
-| **Guest** | ❌ 401 | ❌ 401 | ✅ Public | ❌ 401 | ❌ 401 |
-
-> **Note**: `/agent/invoke` is public endpoint—no JWT required, works in guest mode
+| Admin | Full | Full | All | All | All |
+| User | 403 | 403 | Public | Own | Own |
+| Guest | 401 | 401 | Public | 401 | 401 |
 
 ## Development
 
-### Database Migrations
+### Run the auth service only
 
 ```bash
-# Create new migration
+cd api_gateway
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008
+```
+
+### Run APISIX only
+
+```bash
+cd api_gateway
+docker compose up -d
+```
+
+### Stop APISIX
+
+```bash
+cd api_gateway
+docker compose down
+```
+
+### Stop the auth service
+
+Press `Ctrl + C` in the terminal running `uvicorn`.
+
+### Database migration commands
+
+```bash
+cd api_gateway
 uv run alembic revision --autogenerate -m "description"
-
-# Apply migrations
 uv run alembic upgrade head
-
-# Rollback one version
 uv run alembic downgrade -1
-
-# Show migration history
-uv run alembic history
 ```
 
 ### Testing
 
 ```bash
-# Run unit tests
-uv run pytest tests/
-
-# Run with coverage
-uv run pytest --cov=src --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_decorators.py
+cd api_gateway
+uv run pytest
+uv run scripts/test_all_endpoints.py
 ```
-
-### Code Quality
-
-```bash
-# Format code (if using ruff)
-uv run ruff format src/
-
-# Lint code
-uv run ruff check src/
-```
-
-## Deployment
-
-### Using Docker
-
-```bash
-# Build image
-docker build -f docker/Dockerfile -t api-gateway:latest .
-
-# Run container
-docker run -d \
-  --name api-gateway \
-  -p 8002:8002 \
-  -e DATABASE_URL=postgresql://... \
-  -e JWT_SECRET=... \
-  api-gateway:latest
-```
-
-### Using Docker Compose
-
-```bash
-# Start all services (PostgreSQL + API Gateway)
-docker compose up -d
-
-# View logs
-docker compose logs -f api-gateway
-
-# Stop services
-docker compose down
-```
-
-## Troubleshooting
-
-### Database Connection Issues
-
-```bash
-# Check PostgreSQL is running
-docker ps | grep postgres
-
-# Test connection
-psql -h localhost -p 5433 -U postgres -d authdb
-
-# Verify migrations
-uv run alembic current
-```
-
-### Database URL Compatibility
-
-**Issue**: `sqlalchemy.exc.NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:postgres`
-
-**Cause**: DATABASE_URL uses `postgres://` scheme instead of `postgresql://`
-
-**Solution**: API Gateway auto-normalizes URL schemes:
-```bash
-# Both work fine (gateway converts postgres:// to postgresql://)
-DATABASE_URL=postgres://user:pass@host:port/dbname
-DATABASE_URL=postgresql://user:pass@host:port/dbname
-```
-
-### asyncpg SSL Parameter Issue
-
-**Issue**: `TypeError: connect() got an unexpected keyword argument 'sslmode'`
-
-**Cause**: Cloud databases (Aiven, AWS RDS) use `sslmode` parameter, but asyncpg driver expects `ssl`
-
-**Solution**: Gateway auto-converts query parameters:
-```bash
-# This works - gateway converts sslmode=require to ssl=require for asyncpg
-DATABASE_URL=postgresql://... ?sslmode=require
-```
-
-**How it works**:
-- Runtime uses asyncpg (async driver) + auto-converts `sslmode` → `ssl`
-- Migrations use psycopg2 (sync driver) + keeps `sslmode` parameter
-
-### JWT Token Issues
-
-```bash
-# Verify JWT_SECRET is set in .env
-cat .env | grep JWT_SECRET
-
-# Check token expiration
-# Access tokens expire after 15 minutes (default)
-# Refresh tokens expire after 7 days (default)
-```
-
-### Authorization Errors
-
-- **401 Unauthorized**: Missing or invalid JWT token
-- **403 Forbidden**: User doesn't have required role or ownership
-- **404 Not Found**: Resource not found
-
-### Seed Script Fails
-
-**Issue**: `seed_data.py` fails with database errors
-
-**Debug**:
-```bash
-# Verify database connection
-uv run python -c "from src.config import settings; print(settings.database_url_async)"
-
-# Run seed with debugging
-uv run python scripts/seed_data.py
-```
-
-## Architecture Comparison
-
-### Before (Complex)
-- Components: Gateway + OPA + Redis + PostgreSQL
-- Authorization: REST API calls to OPA (Rego policies)
-- Latency: ~10ms per authorization check
-
-### After (Simplified)
-- Components: Gateway + PostgreSQL + in-memory cache
-- Authorization: Python decorators (in-process)
-- Latency: <1ms per authorization check
-
-**Benefits:**
-- ✅ 70% less code
-- ✅ 2 fewer containers (OPA, Redis)
-- ✅ 10x faster authorization
-- ✅ Easier to debug (Python vs Rego)
-- ✅ Simpler deployment
 
 ## Configuration Reference
 
-### Environment Variables
+### Environment variables
 
 ```bash
 # Database
-DATABASE_URL=postgresql://user:pass@host:port/dbname
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/authdb
 
 # JWT
 JWT_SECRET=your-secret-key-min-32-chars
@@ -343,52 +270,62 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# Services
-AGENT_SERVICE_URL=http://localhost:8080
-KNOWLEDGE_SERVICE_URL=http://localhost:8000
-WAYFINDER_SERVICE_URL=http://localhost:8001
-
-# Internal Security
+# Internal security
 INTERNAL_SECRET=your-internal-secret
 
-# CORS
-CORS_ORIGINS=http://localhost:3000,http://localhost:8501
+# Google OAuth
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 
 # Application
 APP_NAME=API Gateway
 APP_VERSION=0.1.0
 DEBUG=false
 API_GATEWAY_HOST=0.0.0.0
-API_GATEWAY_PORT=8002
+API_GATEWAY_PORT=8008
 ```
 
-## Best Practices
+### APISIX environment variables
 
-### Security
+When running via Compose, APISIX uses:
 
-1. **Change default secrets** in production
-2. **Use HTTPS** in production (TLS termination at load balancer)
-3. **Rotate JWT secrets** periodically
-4. **Set short token expiration** (15 min for access token)
-5. **Validate internal secret** in downstream services
+- `AUTH_SERVICE_URL=http://host.docker.internal:8008`
+- `AUTH_UPSTREAM_ADDR=host.docker.internal:8008`
+- `AGENT_UPSTREAM_ADDR=host.docker.internal:8080`
+- `KNOWLEDGE_UPSTREAM_ADDR=host.docker.internal:8000`
+- `WAYFINDER_UPSTREAM_ADDR=host.docker.internal:8001`
+- `DASHBOARD_UPSTREAM_ADDR=host.docker.internal:8010`
+- `VOICE_UPSTREAM_ADDR=host.docker.internal:7860`
 
-### Performance
+## Troubleshooting
 
-1. **Use connection pooling** (SQLAlchemy default)
-2. **Enable database indexes** (user_id, created_at)
-3. **Monitor JWT cache hit rate** (cachetools TTLCache)
-4. **Scale horizontally** (stateless JWT design)
+### APISIX cannot reach auth service
 
-### Monitoring
+- Confirm the auth service is running on `http://localhost:8008`
+- Confirm `host.docker.internal` resolves inside the APISIX container
+- On Linux, make sure Docker is configured to support host gateway access
 
-1. **Log authentication failures** (security audit)
-2. **Track authorization denials** (403 errors)
-3. **Monitor endpoint latency** (p50, p95, p99)
-4. **Alert on database connection errors**
+### Database connection issues
+
+- Confirm PostgreSQL is running on `localhost:5433`
+- Confirm `DATABASE_URL` points to the correct host and port
+- Run `uv run alembic upgrade head` again after fixing the DB connection
+
+### Gateway health check fails
+
+- Check `http://localhost:8002/health`
+- Check APISIX container logs with `docker compose logs -f apisix`
+
+### Auth docs not available
+
+- Check `http://localhost:8008/docs`
+- If docs fail, confirm the auth service started successfully and imports are valid
 
 ## Support
 
-For issues or questions:
-1. Check Swagger UI: http://localhost:8002/docs
-2. Review logs: `docker compose logs -f api-gateway`
-3. Check database: `psql -h localhost -p 5433 -U postgres -d authdb`
+Useful URLs:
+
+1. APISIX gateway: `http://localhost:8002`
+2. APISIX health: `http://localhost:8002/health`
+3. Auth service docs: `http://localhost:8008/docs`
+4. Auth service health: `http://localhost:8008/health`

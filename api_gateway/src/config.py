@@ -37,14 +37,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     api_gateway_host: str = "0.0.0.0"
-    api_gateway_port: int = 8002
-
-    # Downstream Services
-    agent_service_url: str = "http://localhost:8080"
-    knowledge_service_url: str = "http://localhost:8000"
-    wayfinder_service_url: str = "http://localhost:8001"
-    voice_service_url: str = "http://localhost:7860"
-    dashboard_service_url: str = "http://localhost:8010"
+    api_gateway_port: int = 8008
 
     # Internal Security
     internal_secret: str = "your-internal-secret-for-service-to-service-auth"

@@ -1,23 +1,21 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: api_gateway_postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: authdb
+  # APISIX standalone gateway (file-driven YAML config)
+  apisix:
+    image: apache/apisix:3.11.0-debian
+    container_name: api_gateway_apisix
     ports:
-      - "5433:5432"
+      - "8002:9080"
+    environment:
+      AUTH_SERVICE_URL: http://host.docker.internal:8008
+      AUTH_UPSTREAM_ADDR: host.docker.internal:8008
+      AGENT_UPSTREAM_ADDR: host.docker.internal:8080
+      KNOWLEDGE_UPSTREAM_ADDR: host.docker.internal:8000
+      WAYFINDER_UPSTREAM_ADDR: host.docker.internal:8001
+      DASHBOARD_UPSTREAM_ADDR: host.docker.internal:8010
+      VOICE_UPSTREAM_ADDR: host.docker.internal:7860
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-your-internal-secret-for-service-to-service-auth}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
-volumes:
-  postgres_data:
+      - ./apisix/conf/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./apisix/conf/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro

@@ -2,7 +2,6 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import select
 from fastapi import Depends, HTTPException, status, Request
-import httpx
 import logging
 
 from src.config import settings
@@ -95,11 +94,3 @@ async def get_current_user(
     return user
 
 
-async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
-    """Dependency for HTTP client (for proxying requests).
-    
-    follow_redirects=True: Auto-follow 307/308 redirects from backend services
-    This handles trailing slash redirects from knowledge/wayfinder services
-    """
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        yield client
