@@ -17,15 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from src.config import settings
 from src.middleware.auth_middleware import AuthMiddleware
-from src.routes import (
-    auth,
-    agent_proxy,
-    knowledge_proxy,
-    wayfinder_proxy,
-    threads,
-    voice_proxy,
-    dashboard_proxy
-)
+from src.routes import auth, agent_proxy, knowledge_proxy, wayfinder_proxy, threads, voice_proxy, dashboard_proxy
 
 # Configure logging
 logging.basicConfig(
@@ -48,6 +40,7 @@ async def lifespan(app: FastAPI):
     print(f"Knowledge Service: {settings.knowledge_service_url}")
     print(f"Wayfinder Service: {settings.wayfinder_service_url}")
     print(f"Voice Service: {settings.voice_service_url}")
+    print(f"Dashboard Service: {settings.dashboard_service_url}")
     print("=" * 60)
 
     yield
@@ -141,9 +134,7 @@ async def integrity_exception_handler(request: Request, exc: IntegrityError):
     logger.error(f"Database integrity error on {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "detail": "Data integrity error. Please check your input and try again."
-        },
+        content={"detail": "Data integrity error. Please check your input and try again."},
     )
 
 
@@ -178,7 +169,8 @@ app.include_router(knowledge_proxy.router)
 app.include_router(wayfinder_proxy.router)
 app.include_router(voice_proxy.router)
 app.include_router(dashboard_proxy.router)
-app.include_router(dashboard_proxy.router)  
+app.include_router(dashboard_proxy.router)
+
 
 @app.get(
     "/health",
