@@ -18,3 +18,25 @@ class ChatRepository:
         self.db.add(conversation)
         await self.db.commit()
         return conversation
+    
+    async def get_all_thread_by_user_id(
+        self,
+        user_id: str,
+        offset: int = 0,
+        limit: int = 20
+    ) -> list[Conversation]:
+
+        query = (
+            select(Conversation)
+            .where(
+                Conversation.user_id == user_id,
+                Conversation.is_archived == False
+            )
+            .order_by(Conversation.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        result = await self.db.execute(query)
+
+        return result.scalars().all()

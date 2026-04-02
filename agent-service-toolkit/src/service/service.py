@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -35,6 +35,7 @@ from schema import (
     ServiceMetadata,
     StreamInput,
     UserInput,
+    ThreadListResponse
 )
 from service.utils import (
     convert_message_content_to_string,
@@ -454,7 +455,33 @@ async def history(
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error")
+    
 
+@router.get(
+    "/threads", 
+    response_model=ThreadListResponse, 
+    summary="Lấy danh sách lịch sử hội thoại",
+    description="Lấy tất cả các threads đang hoạt động của user hiện tại, có hỗ trợ phân trang."
+)
+async def get_history_threads(
+    chat_service: ChatService = Depends(get_chat_service),
+    limit: int = Query(20, ge=1, le=100, description="Limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset (pagination)")
+):
+    try:
+        threads = await chat_service.get_all_threads(offset=offset, limit=limit)
+        
+        # Trả về theo format của ThreadListResponse
+        return ThreadListResponse(
+            items=threads,
+            limit=limit,
+            offset=offset
+        )
+        
+    except Exception as e:
+        logger.error(f"An exception occurred while fetching threads: {e}")
+        # Không nên throw chi tiết lỗi hệ thống ra cho client, chỉ trả về 500
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/health")
 async def health_check():
