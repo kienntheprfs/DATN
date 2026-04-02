@@ -49,6 +49,10 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		apiGatewayUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
 		agentId: agent || "chatbot",
 		model,
+		threadId: threadId,
+		createThread: async () => {
+			return crypto.randomUUID();
+		},
 		onTranscript: (text) => {
 			if (text.trim()) {
 				addUserMessage(text);
@@ -99,7 +103,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	return (
 		<>
 			<div className="flex flex-1 flex-col overflow-hidden bg-background pb-32">
-				<ChatWindow 
+			<ChatWindow 
 					messages={messages} 
 					error={error} 
 					isStreaming={isLoading} 
@@ -110,6 +114,9 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 					partialText={voice.partialText}
 					threadId={threadId}
 					agentId={agent || "chatbot"}
+					lastRunId={voice.lastRunId || undefined}
+					voiceThreadId={voice.threadId || undefined}
+					voiceState={voice.state}
 				/>
 			</div>
 			<div className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${state === "collapsed" ? "left-0" : "left-64"} right-0`}>
