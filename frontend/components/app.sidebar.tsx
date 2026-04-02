@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/sidebar";
 import {
     ChevronRight,
-    ChevronsUpDown,
     MessageSquare,
     ScrollText,
     History,
@@ -27,12 +26,16 @@ import {
     Loader2,
     GraduationCap,
     User,
+    LogOut,
+    ChevronDown,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAppStore } from "@/stores/app.store";
+import { authService } from "@/services/auth-api";
 
 const data = {
     navMain: [
@@ -50,14 +53,13 @@ const data = {
         },
         {
             title: "Lịch sử tra cứu",
-            url: "#",
             icon: History,
             isActive: true,
             isDynamicHistory: true,
         },
         {
-            title: "Đã lưu",
-            url: "#",
+            title: "Chi tiết lịch sử",
+            url: "/history",
             icon: Bookmark,
             isActive: true,
         },
@@ -65,66 +67,64 @@ const data = {
 };
 
 export function AppSidebar() {
-    const { user, history, isLoadingHistory, hasMoreHistory, login, logout, fetchMoreHistory } = useAppStore();
+    const router = useRouter();
+    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory } = useAppStore();
 
     useEffect(() => {
-        // Check if user is already logged in
         login();
         
         if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
             fetchMoreHistory();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const handleLogout = async () => {
+        await authService.logout();
+        router.push("/auth");
+    };
+
+    const getInitials = (name: string | undefined, email: string) => {
+        if (name) {
+            return name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2);
+        }
+        return email[0]?.toUpperCase() || "U";
+    };
+
     return (
-        <Sidebar className="bg-primary text-primary-foreground font-stretch-50%">
-            {/* --- H E A D E R --- */}
+        <Sidebar className="bg-primary text-primary-foreground">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                {/* Thêm hover và data-[state=open] cho nút Header */}
-                                <SidebarMenuButton 
-                                    size="lg" 
-                                    className="hover:bg-white/15 hover:text-white data-[state=open]:bg-white/15 data-[state=open]:text-white transition-colors"
-                                >
-                                    <div className="flex aspect-square size-10 items-center justify-center rounded-lg bg-white/20 text-white">
-                                        <GraduationCap className="size-6 fill-current" />
-                                    </div>
-
-                                    <div className="grid flex-1 text-left leading-tight ml-1">
-                                        <span className="truncate font-semibold text-base">BK-TBOT</span>
-                                        <span className="truncate text-xs text-primary-foreground/70">HCMUT</span>
-                                    </div>
-
-                                    <ChevronsUpDown className="ml-auto size-4 text-primary-foreground/70" />
-                                </SidebarMenuButton>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[--radix-popper-anchor-width]">
-                                <DropdownMenuItem>Workspace 1</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Link href="/" className="flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg transition-colors">
+                            <div className="flex aspect-square size-10 items-center justify-center rounded-lg bg-white/20">
+                                <GraduationCap className="size-6 fill-current" />
+                            </div>
+                            <div className="grid leading-tight">
+                                <span className="font-semibold text-base">BK-TBOT</span>
+                                <span className="text-xs text-white/60">HCMUT</span>
+                            </div>
+                        </Link>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarHeader>
 
-            {/* --- C O N T E N T --- */}
             <SidebarContent>
                 <SidebarGroup>
                     <SidebarMenu>
                         {data.navMain.map((item) => {
-                            // TRƯỜNG HỢP 1: MỤC LỊCH SỬ HOẶC CÓ MENU CON
                             if (item.isDynamicHistory) {
                                 return (
                                     <Collapsible key={item.title} defaultOpen={item.isActive} className="group/collapsible">
                                         <SidebarMenuItem>
                                             <CollapsibleTrigger asChild>
-                                                {/* Thêm hover và data-[state=open] cho các mục lục chính */}
                                                 <SidebarMenuButton 
                                                     tooltip={item.title}
-                                                    className="hover:bg-white/15 hover:text-white data-[state=open]:bg-white/15 data-[state=open]:text-white transition-colors"
+                                                    className="hover:bg-white/15 hover:text-white data-[state=open]:bg-white/15 data-[state=open]:text-white"
                                                 >
                                                     {item.icon && <item.icon />}
                                                     <span>{item.title}</span>
@@ -136,24 +136,22 @@ export function AppSidebar() {
                                                 <SidebarMenuSub>
                                                     {isLoadingHistory && history.length === 0 ? (
                                                         <SidebarMenuSubItem>
-                                                            <SidebarMenuSubButton className="opacity-50 pointer-events-none text-primary-foreground/70">
+                                                            <SidebarMenuSubButton className="opacity-50 pointer-events-none text-white/60">
                                                                 <Loader2 className="size-4 animate-spin" />
-                                                                <span>Đang tải lịch sử...</span>
+                                                                <span>Đang tải...</span>
                                                             </SidebarMenuSubButton>
                                                         </SidebarMenuSubItem>
                                                     ) : history.length > 0 ? (
                                                         <>
                                                             {history.map((historyItem) => (
                                                                 <SidebarMenuSubItem key={historyItem.id}>
-                                                                    {/* Thêm hover cho từng dòng lịch sử con */}
-                                                                    <SidebarMenuSubButton asChild className="hover:bg-white/15 hover:text-white transition-colors text-primary-foreground/80">
+                                                                    <SidebarMenuSubButton asChild className="hover:bg-white/15 text-white/80 hover:text-white">
                                                                         <a href={historyItem.url}>
                                                                             <span className="truncate">{historyItem.title}</span>
                                                                         </a>
                                                                     </SidebarMenuSubButton>
                                                                 </SidebarMenuSubItem>
                                                             ))}
-
                                                             {hasMoreHistory && !isLoadingHistory && (
                                                                 <SidebarMenuSubItem>
                                                                     <SidebarMenuSubButton
@@ -164,30 +162,18 @@ export function AppSidebar() {
                                                                             }
                                                                             fetchMoreHistory();
                                                                         }}
-                                                                        className="mt-1 transition-colors text-primary-foreground/80 hover:bg-white/15 hover:text-white cursor-pointer"
+                                                                        className="text-white/60 hover:bg-white/15 hover:text-white cursor-pointer"
                                                                     >
                                                                         <MoreHorizontal className="size-4" />
                                                                         <span>Xem thêm</span>
                                                                     </SidebarMenuSubButton>
                                                                 </SidebarMenuSubItem>
                                                             )}
-
-                                                            {isLoadingHistory && (
-                                                                <>
-                                                                    {[1, 2, 3].map((i) => (
-                                                                        <SidebarMenuSubItem key={`skeleton-${i}`}>
-                                                                            <SidebarMenuSubButton className="pointer-events-none opacity-50">
-                                                                                <Skeleton className="h-4 w-full rounded" />
-                                                                            </SidebarMenuSubButton>
-                                                                        </SidebarMenuSubItem>
-                                                                    ))}
-                                                                </>
-                                                            )}
                                                         </>
                                                     ) : (
                                                         <SidebarMenuSubItem>
-                                                            <SidebarMenuSubButton className="opacity-50 pointer-events-none text-primary-foreground/70">
-                                                                <span className="italic">Chưa có lịch sử tra cứu</span>
+                                                            <SidebarMenuSubButton className="opacity-50 pointer-events-none text-white/60">
+                                                                <span>Chưa có lịch sử</span>
                                                             </SidebarMenuSubButton>
                                                         </SidebarMenuSubItem>
                                                     )}
@@ -198,14 +184,12 @@ export function AppSidebar() {
                                 );
                             }
 
-                            // TRƯỜNG HỢP 2: CÁC MỤC BÌNH THƯỜNG (Không có menu con)
                             return (
                                 <SidebarMenuItem key={item.title}>
-                                    {/* Thêm hover cho các mục bấm chuyển trang trực tiếp */}
                                     <SidebarMenuButton 
                                         asChild 
                                         tooltip={item.title}
-                                        className="hover:bg-white/15 hover:text-white transition-colors"
+                                        className="hover:bg-white/15 hover:text-white"
                                     >
                                         <a href={item.url}>
                                             {item.icon && <item.icon />}
@@ -218,23 +202,13 @@ export function AppSidebar() {
                     </SidebarMenu>
                 </SidebarGroup>
 
-                {/* --- CẤU HÌNH HỆ THỐNG CỐ ĐỊNH Ở ĐÁY --- */}
                 <SidebarGroup className="mt-auto">
                     <SidebarMenu>
                         <SidebarMenuItem>
-                            {/* Thêm hover cho nút Cấu hình */}
-                            <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
-                                <Link href="/profile">
-                                    <User />
-                                    <span>Hồ sơ cá nhân</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton asChild className="hover:bg-white/15 hover:text-white transition-colors">
+                            <SidebarMenuButton asChild tooltip="Cấu hình" className="hover:bg-white/15 hover:text-white">
                                 <Link href="#">
                                     <Settings />
-                                    <span>Cấu hình hệ thống</span>
+                                    <span>Cấu hình</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -242,52 +216,52 @@ export function AppSidebar() {
                 </SidebarGroup>
             </SidebarContent>
 
-            {/* --- F O O T E R (Đăng nhập) --- */}
             <SidebarFooter>
-                <SidebarMenu className="text-primary-foreground">
-                    {user ? (
-                        <SidebarMenuItem>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    {/* Thêm hover cho User Profile */}
-                                    <SidebarMenuButton
-                                        size="lg"
-                                        className="hover:bg-white/15 hover:text-white data-[state=open]:bg-white/15 data-[state=open]:text-white transition-colors"
-                                    >
-                                        {user.avatar_url ? (
-                                            <img src={user.avatar_url} alt={user.display_name || user.email} className="h-8 w-8 rounded-lg" />
-                                        ) : (
-                                            <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
-                                                <User className="size-4" />
-                                            </div>
-                                        )}
-                                        <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">{user.display_name || user.email}</span>
-                                            <span className="truncate text-xs text-primary-foreground/70">{user.email}</span>
-                                        </div>
-                                        <ChevronsUpDown className="ml-auto size-4 text-primary-foreground/70" />
-                                    </SidebarMenuButton>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-[--radix-popper-anchor-width] side=top">
-                                    <DropdownMenuItem>Hồ sơ cá nhân</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={logout}>Đăng xuất</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </SidebarMenuItem>
-                    ) : (
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                size="lg"
-                                className="bg-transparent text-white border border-white/50 hover:bg-white/15 hover:border-white font-medium shadow-none transition-all"
-                            >
-                                <Link href="/auth" className="flex items-center gap-2">
-                                    <LogIn className="size-4" />
-                                    <span>Đăng nhập hệ thống</span>
+                {user ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-white/10 transition-colors text-left">
+                                {user.avatar_url ? (
+                                    <img 
+                                        src={user.avatar_url} 
+                                        alt="" 
+                                        className="h-9 w-9 rounded-full object-cover" 
+                                    />
+                                ) : (
+                                    <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center font-medium">
+                                        {getInitials(user.display_name, user.email)}
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                        {user.display_name || "Người dùng"}
+                                    </p>
+                                </div>
+                                <ChevronDown className="size-4 opacity-60" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent side="top" align="start" className="w-56">
+                            <DropdownMenuItem asChild>
+                                <Link href="/profile" className="cursor-pointer">
+                                    <User className="mr-2 size-4" />
+                                    Hồ sơ cá nhân
                                 </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    )}
-                </SidebarMenu>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
+                                <LogOut className="mr-2 size-4" />
+                                Đăng xuất
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : (
+                    <Link 
+                        href="/auth" 
+                        className="flex items-center justify-center gap-2 mx-3 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors font-medium"
+                    >
+                        <LogIn className="size-4" />
+                        <span>Đăng nhập</span>
+                    </Link>
+                )}
             </SidebarFooter>
         </Sidebar>
     );

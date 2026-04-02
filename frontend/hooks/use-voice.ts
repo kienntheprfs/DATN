@@ -28,12 +28,15 @@ interface UseVoiceOptions {
   agentId?: string;
   userId?: string;
   model?: string;
+  threadId?: string;
   onTranscript?: (text: string) => void;
-  onBotOutput?: (text: string) => void;
+  onBotOutput?: (text: string, runId?: string) => void;
   onBotPartialOutput?: (text: string) => void;
   onToolStarted?: (toolCalls: Array<{ id: string; name: string; args?: Record<string, unknown> }>) => void;
   onToolResult?: (result: VoiceToolResult) => void;
   onError?: (error: string) => void;
+  onThreadIdGenerated?: (threadId: string) => void;
+  createThread?: () => Promise<string>;
 }
 
 interface UseVoiceReturn {
@@ -43,6 +46,8 @@ interface UseVoiceReturn {
   isMuted: boolean;
   error: string | null;
   partialText: string;
+  lastRunId: string | null;
+  threadId: string | null;
   startConversation: () => Promise<void>;
   stopConversation: () => void;
   toggleMute: () => void;
@@ -54,12 +59,15 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     agentId = "chatbot",
     userId,
     model,
+    threadId: threadIdProp,
     onTranscript,
     onBotOutput,
     onBotPartialOutput,
     onToolStarted,
     onToolResult,
     onError,
+    onThreadIdGenerated,
+    createThread,
   } = options;
 
   const [state, setState] = useState<VoiceConnectionState>("idle");
@@ -68,6 +76,8 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partialText, setPartialText] = useState<string>("");
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const partialTextRef = useRef<string>("");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -215,7 +225,10 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
               }
 
               if (onBotOutput) {
-                onBotOutput(trimmedText);
+                onBotOutput(trimmedText, message.data.run_id);
+                if (message.data.run_id) {
+                  setLastRunId(message.data.run_id);
+                }
               }
             }
             break;
@@ -278,7 +291,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     } catch (err) {
       console.error("Error parsing data channel message:", err);
     }
-  }, [onTranscript, onBotOutput, onBotPartialOutput, onToolStarted, onToolResult, onError]);
+  }, [onTranscript, onBotOutput, onBotPartialOutput, onToolStarted, onToolResult, onError, lastRunId, setLastRunId]);
 
   const startConversation = useCallback(async () => {
     if (state === "connected" || state === "connecting") {
@@ -365,12 +378,23 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
       const targetUrl = `${apiGatewayUrl}/voice/offer`;
       const token = localStorage.getItem('access_token');
 
-      // Add request_data if agent_id, user_id, or model is provided
-      if (agentId || userId || model) {
+      // Create thread if not provided
+      let threadIdToUse = threadIdProp;
+      if (!threadIdToUse && createThread) {
+        threadIdToUse = await createThread();
+        setThreadId(threadIdToUse);
+        onThreadIdGenerated?.(threadIdToUse);
+      } else if (threadIdToUse) {
+        setThreadId(threadIdToUse);
+      }
+
+      // Add request_data if agent_id, user_id, model, or thread_id is provided
+      if (agentId || userId || model || threadIdToUse) {
         const requestData: Record<string, string> = {};
         if (agentId) requestData.agent_id = agentId;
         if (userId) requestData.user_id = userId;
         if (model) requestData.model = model;
+        if (threadIdToUse) requestData.thread_id = threadIdToUse;
         requestBody.request_data = requestData;
       }
 
@@ -431,6 +455,8 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     isMuted,
     error,
     partialText,
+    lastRunId,
+    threadId,
     startConversation,
     stopConversation,
     toggleMute,

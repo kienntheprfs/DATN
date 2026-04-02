@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { GraduationCap } from "lucide-react";
 import { authService } from "@/services/auth-api";
+import { toast } from "sonner";
 
 export default function AuthPage() {
 	const [isLogin, setIsLogin] = useState(true);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
-	const [error, setError] = useState("");
 
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
@@ -25,36 +25,36 @@ export default function AuthPage() {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		setError("");
 		setIsLoading(true);
 
 		try {
 			if (isLogin) {
 				await authService.login(email, password);
+				toast.success("Đăng nhập thành công!");
 				router.push("/");
 			} else {
 				if (password !== confirmPassword) {
-					setError("Mật khẩu xác nhận không khớp");
+					toast.error("Mật khẩu xác nhận không khớp");
 					setIsLoading(false);
 					return;
 				}
 				await authService.register({ email, password });
 				await authService.login(email, password);
+				toast.success("Đăng ký thành công!");
 				router.push("/");
 			}
 		} catch (err: any) {
-			setError(err.response?.data?.detail || "Đã xảy ra lỗi. Vui lòng thử lại.");
+			toast.error(err.response?.data?.detail || "Đã xảy ra lỗi. Vui lòng thử lại.");
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	const handleGoogleLogin = async () => {
-		// Check if Google SDK is loaded
 		if ((window as any).google?.accounts?.oauth2) {
 			const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 			if (!clientId) {
-				setError("Google OAuth chưa được cấu hình");
+				toast.error("Google OAuth chưa được cấu hình");
 				return;
 			}
 
@@ -65,16 +65,17 @@ export default function AuthPage() {
 					if (response.access_token) {
 						try {
 							await authService.googleLogin(response.access_token);
+							toast.success("Đăng nhập Google thành công!");
 							router.push("/");
 						} catch (err: any) {
-							setError(err.response?.data?.detail || "Đăng nhập Google thất bại");
+							toast.error(err.response?.data?.detail || "Đăng nhập Google thất bại");
 						}
 					}
 				},
 			});
 			googleOAuth.requestAccessToken();
 		} else {
-			setError("Google SDK chưa được tải. Vui lòng thử lại sau.");
+			toast.error("Google SDK chưa được tải. Vui lòng thử lại sau.");
 		}
 	};
 
@@ -110,7 +111,7 @@ export default function AuthPage() {
 						<div className="flex border-b border-gray-200 mb-8">
 							<button
 								type="button"
-								onClick={() => { setIsLogin(true); setError(""); }}
+								onClick={() => setIsLogin(true)}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -119,7 +120,7 @@ export default function AuthPage() {
 							</button>
 							<button
 								type="button"
-								onClick={() => { setIsLogin(false); setError(""); }}
+								onClick={() => setIsLogin(false)}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									!isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -127,13 +128,6 @@ export default function AuthPage() {
 								Đăng ký
 							</button>
 						</div>
-
-						{/* Error Message */}
-						{error && (
-							<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
-								{error}
-							</div>
-						)}
 
 						{/* Form */}
 						<form className="flex flex-col gap-6" onSubmit={handleSubmit}>

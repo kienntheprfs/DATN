@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { agentClient, ChatMessage } from "@/services/agent";
 
 interface UseChatOptions {
 	model?: string;
 	agent?: string;
 	threadId?: string;
+	initialMessages?: ChatMessage[];
+	initialMessage?: string;
+	initialQueryMode?: "normal" | "deep";
+	onThreadIdGenerated?: (threadId: string) => void;
 }
 
 interface ToolCall {
@@ -22,11 +26,13 @@ interface MessageChunk {
 	toolCalls?: Array<{ id: string; name: string }>;
 	toolCallId?: string;
 	content: string;
+	run_id?: string;
 }
 
 interface UseChatReturn {
 	messages: ChatMessage[];
-	sendMessage: (message: string) => Promise<void>;
+	setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+	sendMessage: (message: string, queryMode?: "normal" | "deep") => Promise<void>;
 	addUserMessage: (content: string) => string;
 	addBotMessage: (content: string) => string;
 	appendBotMessage: (content: string) => void;
@@ -54,19 +60,67 @@ interface BackendMessage {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-	const { model, agent = "chatbot", threadId: initialThreadId } = options;
+	const { model, agent = "chatbot", threadId: initialThreadId, initialMessages = [], initialMessage, initialQueryMode, onThreadIdGenerated } = options;
 
-	const [messages, setMessages] = useState<ChatMessage[]>([]);
+	const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
 	const [currentTools, setCurrentTools] = useState<ToolCall[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const [threadId] = useState(() => initialThreadId || crypto.randomUUID());
+	const [threadId, setThreadId] = useState<string>(() => initialThreadId || "");
 
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const processingRef = useRef(false);
 	const toolContentRef = useRef<string | null>(null);
 	const toolTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const currentRunIdRef = useRef<string | null>(null);
+	const threadIdGeneratedRef = useRef(false);
+	const hasInitializedRef = useRef(false);
+
+	useEffect(() => {
+		if (!threadId && !threadIdGeneratedRef.current) {
+			const newThreadId = crypto.randomUUID();
+			setThreadId(newThreadId);
+			threadIdGeneratedRef.current = true;
+			onThreadIdGenerated?.(newThreadId);
+		}
+	}, [threadId, onThreadIdGenerated]);
+
+	useEffect(() => {
+		if (hasInitializedRef.current) return;
+		hasInitializedRef.current = true;
+
+		if (!initialThreadId) return;
+
+		if (initialMessage) {
+			setThreadId(initialThreadId);
+			setMessages([]);
+			return;
+		}
+
+		const loadHistory = async () => {
+			try {
+				const history = await agentClient.getHistory(initialThreadId);
+				if (history.messages && history.messages.length > 0) {
+					const formattedMessages: ChatMessage[] = history.messages.map((msg, idx) => ({
+						id: msg.id || `msg-${idx}`,
+						role: msg.type === "human" ? "user" : "assistant",
+						content: msg.content,
+						run_id: msg.run_id,
+					}));
+					setMessages(formattedMessages);
+				} else {
+					setMessages([]);
+				}
+				setThreadId(initialThreadId);
+			} catch {
+				setMessages([]);
+				setThreadId(initialThreadId);
+			}
+		};
+
+		loadHistory();
+	}, [initialThreadId, initialMessage]);
 
 	const stop = useCallback(() => {
 		if (abortControllerRef.current) {
@@ -75,7 +129,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	}, []);
 
 	const sendMessage = useCallback(
-		async (message: string) => {
+		async (message: string, queryMode?: "normal" | "deep") => {
 			if (processingRef.current) {
 				if (abortControllerRef.current) {
 					abortControllerRef.current.abort();
@@ -111,6 +165,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					agent,
 					threadId: threadId,
 					streamTokens: true,
+					queryMode,
 				}, abortControllerRef.current.signal)) {
 					if (abortControllerRef.current?.signal.aborted) {
 						break;
@@ -135,6 +190,22 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 						const toolCalls = msgChunk.toolCalls;
 						const toolCallId = msgChunk.toolCallId;
 						const content = msgChunk.content;
+						const runId = msgChunk.run_id;
+
+						if (runId) {
+							currentRunIdRef.current = runId;
+							setMessages((prev) => {
+								const existing = prev.find((m) => m.id === assistantMsgId);
+								if (existing && !existing.run_id) {
+									return prev.map((m) =>
+										m.id === assistantMsgId
+											? { ...m, run_id: runId ?? undefined }
+											: m
+									);
+								}
+								return prev;
+							});
+						}
 
 						if (msgType === "tool") {
 							const toolId = toolCallId || `tool-${Date.now()}`;
@@ -183,11 +254,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 				if (err instanceof Error && err.name !== "AbortError") {
 					setError(err.message);
 				}
-			} finally {
-				setIsLoading(false);
-				setIsTyping(false);
-				processingRef.current = false;
+		} finally {
+			if (currentRunIdRef.current) {
+				setMessages((prev) => {
+					const existing = prev.find((m) => m.id === assistantMsgId);
+					if (existing && !existing.run_id) {
+						return prev.map((m) =>
+							m.id === assistantMsgId
+								? { ...m, run_id: currentRunIdRef.current ?? undefined }
+								: m
+						);
+					}
+					return prev;
+				});
 			}
+			setIsLoading(false);
+			setIsTyping(false);
+			processingRef.current = false;
+		}
 		},
 		[model, agent, threadId]
 	);
@@ -256,6 +340,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 	return {
 		messages,
+		setMessages,
 		sendMessage,
 		addUserMessage,
 		addBotMessage,

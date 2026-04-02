@@ -2,6 +2,7 @@ import { Inter } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app.sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import "@/app/globals.css";
 import { AppHeader } from "@/components/app.header";
 import { AgentProvider } from "@/contexts/agent-context";
@@ -35,6 +36,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </div>
                 
               </main>
+
+              <Toaster />
 
             </SidebarProvider>
           </AgentProvider>

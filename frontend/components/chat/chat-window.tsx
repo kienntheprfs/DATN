@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, User, Square, ChevronDown } from "lucide-react";
+import { Bot, User, Square, ChevronDown, Loader2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -13,6 +13,7 @@ import { MapData, MapNode, Instruction } from "@/types";
 import { MiniNavigation } from "./MapPreview";
 import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
+import { RatingButtons } from "./RatingButtons";
 
 interface ToolCall {
 	id: string;
@@ -54,6 +55,11 @@ interface ChatWindowProps {
 	isListening?: boolean;
 	currentTools?: ToolCall[];
 	partialText?: string;
+	threadId?: string;
+	agentId?: string;
+	lastRunId?: string;
+	voiceThreadId?: string;
+	voiceState?: string;
 }
 
 function TypingIndicator() {
@@ -266,7 +272,7 @@ interface GroupedMessages {
 	messages: ChatMessage[];
 }
 
-export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText }: ChatWindowProps) {
+export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState }: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	
@@ -276,6 +282,8 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 	const displayText = partialText || lastBotMessage?.content || "";
 	const hasBotContent = lastBotMessage?.content && lastBotMessage.content.length > 0;
 	const isThinking = isActive && !hasBotContent && !partialText && currentTools.length === 0;
+
+	const hasVoiceMessage = visibleMessages.length > 0;
 
 	useEffect(() => {
 		if (scrollRef.current) {
@@ -395,6 +403,15 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 										</div>
 									</div>
 								)}
+								{combinedContent && lastBotMessage?.run_id && threadId && (
+									<div className="flex items-center gap-1 pl-2">
+										<RatingButtons
+											runId={lastBotMessage.run_id}
+											threadId={threadId}
+											agentId={agentId}
+										/>
+									</div>
+								)}
 							</div>
 						</div>
 					);
@@ -424,7 +441,18 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					</div>
 				)}
 
-				{isVoiceMode && (
+				{(voiceState === "connecting" || (voiceState === "connected" && !hasVoiceMessage)) && (
+					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+							<Loader2 className="size-5 animate-spin" />
+						</div>
+						<div className="flex-1 max-w-[85%] flex items-center">
+							<span className="text-sm text-muted-foreground">Đang kết nối...</span>
+						</div>
+					</div>
+				)}
+
+				{voiceState === "connected" && hasVoiceMessage && (
 					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 							<div className="relative">
@@ -435,6 +463,16 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 						<div className="flex-1 max-w-[85%]">
 							<VoiceLoadingIndicator isListening={isListening || false} />
 						</div>
+					</div>
+				)}
+
+				{voiceState === "connected" && hasVoiceMessage && lastRunId && (voiceThreadId || threadId) && (
+					<div className="flex items-center gap-1 pl-2">
+						<RatingButtons
+							runId={lastRunId}
+							threadId={voiceThreadId || threadId || ""}
+							agentId={agentId}
+						/>
 					</div>
 				)}
 			</div>

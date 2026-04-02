@@ -59,6 +59,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         api_url: str,
         agent_name: str,
         user_id: str = "web-user-123",
+        thread_id: str | None = None,
         session: Optional[aiohttp.ClientSession] = None,
         on_tool_calls: Optional[ToolCallCallback] = None,
         on_tool_result: Optional[ToolResultCallback] = None,
@@ -70,6 +71,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self.api_url = api_url.rstrip("/")
         self.agent_name = agent_name
         self.user_id = user_id
+        self.thread_id = thread_id
         self._session = session
         self._client_session_owned = False
         self._on_tool_calls = on_tool_calls
@@ -84,7 +86,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
             messages = []
 
         user_text = self._extract_user_text(messages)
-        thread_id = str(uuid.uuid4())
+        thread_id = self.thread_id or str(uuid.uuid4())
 
         if self._session is None:
             self._session = aiohttp.ClientSession()
@@ -104,7 +106,9 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         async def _generate():
             accumulated_content = ""
             try:
-                async with self._session.post(endpoint, json=payload, headers=headers, timeout=120.0) as resp:
+                async with self._session.post(
+                    endpoint, json=payload, headers=headers, timeout=120.0
+                ) as resp:
                     resp.raise_for_status()
                     async for line in resp.content:
                         line = line.decode("utf-8").strip()

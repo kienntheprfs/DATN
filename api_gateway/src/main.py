@@ -122,9 +122,7 @@ async def integrity_exception_handler(request: Request, exc: IntegrityError):
     logger.error(f"Database integrity error on {request.url.path}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "detail": "Data integrity error. Please check your input and try again."
-        },
+        content={"detail": "Data integrity error. Please check your input and try again."},
     )
 
 

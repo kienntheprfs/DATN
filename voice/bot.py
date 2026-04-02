@@ -62,7 +62,13 @@ async def send_tool_result_message(transport, tool_call_id, content, tool_name):
         logger.error(f"Failed to send tool result: {e}")
 
 
-def create_llm(session, transport, agent_id: str = "chatbot", user_id: str = "web-user-123"):
+def create_llm(
+    session,
+    transport,
+    agent_id: str = "chatbot",
+    user_id: str = "web-user-123",
+    thread_id: str | None = None,
+):
     async def on_tool_calls(tool_calls):
         await send_tool_message(transport, tool_calls, "tool-started")
 
@@ -75,6 +81,7 @@ def create_llm(session, transport, agent_id: str = "chatbot", user_id: str = "we
             api_url=AGENT_API_URL,
             agent_name=agent_id,
             user_id=user_id,
+            thread_id=thread_id,
             session=session,
             on_tool_calls=on_tool_calls,
             on_tool_result=on_tool_result,
@@ -84,8 +91,13 @@ def create_llm(session, transport, agent_id: str = "chatbot", user_id: str = "we
         return OLLamaLLMService(model=model)
 
 
-async def run_bot(webrtc_connection, agent_id: str = "chatbot", user_id: str = "web-user-123"):
-    logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}")
+async def run_bot(
+    webrtc_connection,
+    agent_id: str = "chatbot",
+    user_id: str = "web-user-123",
+    thread_id: str | None = None,
+):
+    logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}")
     pipecat_transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
         params=TransportParams(
@@ -104,7 +116,7 @@ async def run_bot(webrtc_connection, agent_id: str = "chatbot", user_id: str = "
             sample_rate=24000,
             voice_id="vi_VN-vais1000-medium",
         )
-        llm = create_llm(session, pipecat_transport, agent_id, user_id)
+        llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id)
 
         if USE_AGENT_API:
             system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Hãy trả lời ngắn gọn, tự nhiên như đang nói chuyện. Không dùng markdown hay bullet points."

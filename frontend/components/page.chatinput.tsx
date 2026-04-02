@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, SlidersHorizontal, Send, Loader2, Mic, MicOff } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group";
 import { VoiceButton } from "@/components/voice-button";
 import { VoiceConnectionState } from "@/hooks/use-voice";
+import { authService } from "@/services/auth-api";
+
+export type QueryMode = "normal" | "deep";
 
 interface ChatInputProps {
-  onSubmitMessage?: (message: string) => void;
+  onSubmitMessage?: (message: string, queryMode?: QueryMode) => void;
+  onSubmitAndRedirect?: (message: string, queryMode?: QueryMode) => void;
   isLoading?: boolean;
   apiGatewayUrl?: string;
   voiceAgentId?: string;
@@ -24,12 +28,15 @@ interface ChatInputProps {
   onVoiceBotOutput?: (text: string) => void;
   onVoiceToggle?: () => void;
   onVoiceMute?: () => void;
+  showDocumentButton?: boolean;
+  onDocumentToggle?: () => void;
 }
 
 export function ChatInput({
   onSubmitMessage,
+  onSubmitAndRedirect,
   isLoading = false,
-  apiGatewayUrl = "http://localhost:8002",
+  apiGatewayUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
   voiceAgentId = "chatbot",
   userId,
   voiceModel,
@@ -41,18 +48,45 @@ export function ChatInput({
   onVoiceBotOutput,
   onVoiceToggle,
   onVoiceMute,
+  showDocumentButton = false,
+  onDocumentToggle,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
+  const [queryMode, setQueryMode] = useState<QueryMode>("normal");
+
+  const requireAuth = () => {
+    if (!authService.isAuthenticated()) {
+      router.push("/auth");
+      return false;
+    }
+    return true;
+  };
+
+  const toggleQueryMode = () => {
+    if (!requireAuth()) return;
+    setQueryMode((prev) => (prev === "normal" ? "deep" : "normal"));
+  };
+
+  const handleVoiceToggle = () => {
+    if (!requireAuth()) return;
+    if (onVoiceToggle) {
+      onVoiceToggle();
+    }
+  };
 
   const handleSend = () => {
     if (!message.trim() || isLoading) return;
 
     if (onSubmitMessage) {
-      onSubmitMessage(message);
+      onSubmitMessage(message, queryMode);
       setMessage(""); 
+    } else if (onSubmitAndRedirect) {
+      onSubmitAndRedirect(message, queryMode);
+      setMessage("");
     } else {
-      const params = new URLSearchParams({ q: message });
+      const threadId = crypto.randomUUID();
+      const params = new URLSearchParams({ thread_id: threadId, message: message });
       router.push(`/chat?${params.toString()}`);
     }
   };
@@ -65,6 +99,7 @@ export function ChatInput({
   };
 
   const isVoiceConnected = voiceState === "connected";
+  const isDeepMode = queryMode === "deep";
 
   return (
     <TooltipProvider>
@@ -82,21 +117,36 @@ export function ChatInput({
           <div className="flex items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-9 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <Paperclip className="size-4" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`size-9 rounded-none ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"}`}
+                  onClick={toggleQueryMode}
+                >
+                  <Sparkles className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Đính kèm tài liệu</TooltipContent>
+              <TooltipContent>
+                {isDeepMode ? "Tắt suy nghĩ kỹ" : "Suy nghĩ kỹ hơn"}
+              </TooltipContent>
             </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-9 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <SlidersHorizontal className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Cấu hình tra cứu</TooltipContent>
-            </Tooltip>
+            {showDocumentButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-none text-muted-foreground hover:bg-muted"
+                    onClick={onDocumentToggle}
+                  >
+                    <FileText className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Hiển thị tài liệu
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -126,7 +176,7 @@ export function ChatInput({
               externalState={voiceState}
               externalIsListening={isListening}
               externalIsSpeaking={isSpeaking}
-              onToggle={onVoiceToggle}
+              onToggle={handleVoiceToggle}
             />
 
             <Button
