@@ -1,5 +1,7 @@
 export interface HistoryItem {
-  id: string;     // Rất quan trọng khi làm map() trong React
+  id: string;
   title: string;
   url: string;
+  timestamp?: string;
+  preview?: string;
 }

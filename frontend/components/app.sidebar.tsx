@@ -53,14 +53,13 @@ const data = {
         },
         {
             title: "Lịch sử tra cứu",
-            url: "#",
             icon: History,
             isActive: true,
             isDynamicHistory: true,
         },
         {
-            title: "Đã lưu",
-            url: "#",
+            title: "Chi tiết lịch sử",
+            url: "/history",
             icon: Bookmark,
             isActive: true,
         },
