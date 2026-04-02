@@ -180,3 +180,22 @@ class ChatHistoryInput(BaseModel):
 
 class ChatHistory(BaseModel):
     messages: list[ChatMessage]
+
+from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime
+class ConversationResponse(BaseModel):
+    id: str
+    user_id: str
+    title: str | None
+    is_archived: bool
+    created_at: datetime | None
+    updated_at: datetime | None
+
+    # Cấu hình để Pydantic có thể đọc trực tiếp dữ liệu từ SQLAlchemy Object (ORM Mode)
+    model_config = ConfigDict(from_attributes=True)
+
+# Schema cho response tổng của API (có phân trang cơ bản)
+class ThreadListResponse(BaseModel):
+    items: list[ConversationResponse]
+    limit: int
+    offset: int
