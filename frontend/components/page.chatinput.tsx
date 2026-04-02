@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, MicOff, Sparkles } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group";
@@ -28,6 +28,8 @@ interface ChatInputProps {
   onVoiceBotOutput?: (text: string) => void;
   onVoiceToggle?: () => void;
   onVoiceMute?: () => void;
+  showDocumentButton?: boolean;
+  onDocumentToggle?: () => void;
 }
 
 export function ChatInput({
@@ -46,6 +48,8 @@ export function ChatInput({
   onVoiceBotOutput,
   onVoiceToggle,
   onVoiceMute,
+  showDocumentButton = false,
+  onDocumentToggle,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -126,6 +130,23 @@ export function ChatInput({
                 {isDeepMode ? "Tắt suy nghĩ kỹ" : "Suy nghĩ kỹ hơn"}
               </TooltipContent>
             </Tooltip>
+            {showDocumentButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-none text-muted-foreground hover:bg-muted"
+                    onClick={onDocumentToggle}
+                  >
+                    <FileText className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Hiển thị tài liệu
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

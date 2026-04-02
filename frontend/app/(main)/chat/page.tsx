@@ -8,6 +8,7 @@ import { useVoice } from "@/hooks/use-voice";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
+import { DocumentPanel } from "@/components/chat/document-panel";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
@@ -21,6 +22,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const router = useRouter();
 	const { model, agent } = useAgent();
 	const { state } = useSidebar();
+	const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false);
 
 	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error, threadId } = useChat({
 		model: model || "gpt-5-nano",
@@ -133,9 +135,15 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 						isMuted={voice.isMuted}
 						onVoiceToggle={handleVoiceStateChange}
 						onVoiceMute={voice.toggleMute}
+						showDocumentButton={true}
+						onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
 					/>
 				</div>
 			</div>
+			<DocumentPanel 
+				isOpen={isDocumentPanelOpen} 
+				onClose={() => setIsDocumentPanelOpen(false)} 
+			/>
 		</>
 	);
 }
