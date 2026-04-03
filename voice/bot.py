@@ -33,6 +33,9 @@ from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from agent_llm import DirectAPIAgentLLMService
 from zipformer_stt.sherpa_stt import SherpaSTTService
+from pipecat.services.cartesia import CartesiaTTSService
+import re
+from pipecat.services.cartesia.tts import GenerationConfig
 
 load_dotenv(override=True)
 
@@ -91,6 +94,52 @@ def create_llm(
         return OLLamaLLMService(model=model)
 
 
+def clean_markdown_for_tts(text: str) -> str:
+    if not text:
+        return text
+
+    # Bỏ các đoạn code block dài (TTS đọc code rất tệ và mất thời gian)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    # Bỏ inline code (chỉ bỏ dấu backtick, giữ lại text bên trong)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Bỏ các dấu in đậm, in nghiêng (**text**, *text*, __text__, _text_)
+    text = re.sub(r"[*_]{1,2}([^*_]+)[*_]{1,2}", r"\1", text)
+    # Xử lý link: [Tên Link](URL) -> Chỉ giữ lại phần "Tên Link" để đọc
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    # Bỏ các ký tự Header (#)
+    text = re.sub(r"#+\s*", "", text)
+    # Bỏ các dấu gạch đầu dòng, dấu sao hoặc số thứ tự ở đầu dòng
+    text = re.sub(r"^[\-\*\+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+
+    # Xóa khoảng trắng thừa và ký tự > của blockquote
+    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
+    return text.strip()
+
+
+def normalize_vietnamese_text(text: str) -> str:
+    if not text:
+        return text
+
+    # --- THÊM DÒNG NÀY ĐỂ XÓA CHỮ V.V ---
+    # Bắt các trường hợp: v.v, v.v., v.v... và thay bằng khoảng trắng
+    text = re.sub(r"\bv\.v\.*", "", text, flags=re.IGNORECASE)
+
+    # for pattern, pronun in replacements.items():
+    #     text = re.sub(pattern, pronun, text, flags=re.IGNORECASE)
+
+    # Dọn dẹp khoảng trắng thừa lỡ sinh ra sau khi xóa chữ
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+async def tts_preprocessing(text: str, context_type: str) -> str:
+    cleaned_text = clean_markdown_for_tts(text)
+    final_text = normalize_vietnamese_text(cleaned_text)
+    return final_text
+
+
 async def run_bot(
     webrtc_connection,
     agent_id: str = "chatbot",
@@ -110,11 +159,23 @@ async def run_bot(
 
     async with aiohttp.ClientSession() as session:
         stt = SherpaSTTService(model_dir="./zipformer_stt")
+        # tts = CartesiaTTSService(
+        #     api_key=os.getenv("CARTESIA_API_KEY"),
+        #     # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
+        #     text_transforms=[("*", tts_preprocessing)],
+        #     settings=CartesiaTTSService.Settings(
+        #         voice="0e58d60a-2f1a-4252-81bd-3db6af45fb41",  # Thay ID giọng tiếng Việt của bạn vào đây
+        #         model="sonic-3",  # Bắt buộc dùng sonic-3 để config hoạt động tốt nhất
+        #         language="vi",
+        #         generation_config=GenerationConfig(volume=1.8, speed=1.0),  # Khuếch đại âm lượng (Giới hạn cho phép từ 0.5 đến 2.0)  # Tốc độ đọc (Giới hạn từ 0.6 đến 1.5)
+        #     ),
+        # )
         tts = PiperTTSService(
             base_url="http://localhost:5000",
             aiohttp_session=session,
             sample_rate=24000,
             voice_id="vi_VN-vais1000-medium",
+            text_transforms=[("*", tts_preprocessing)],
         )
         llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id)
 
@@ -134,11 +195,7 @@ async def run_bot(
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
             context,
             user_params=LLMUserAggregatorParams(
-                user_turn_strategies=UserTurnStrategies(
-                    stop=[
-                        TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
-                    ]
-                ),
+                user_turn_strategies=UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]),
             ),
         )
 

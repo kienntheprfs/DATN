@@ -194,217 +194,87 @@ export default function ProfilePage() {
 				<div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
 					{/* Tabs Section - chiếm 3 phần */}
 					<div className="xl:col-span-4">
-						<Tabs defaultValue="personal" className="w-full">
-							<TabsList className="mb-6">
-								<TabsTrigger value="personal">Thông tin cá nhân</TabsTrigger>
-								<TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
-								<TabsTrigger value="saved">Tài liệu đã lưu</TabsTrigger>
-							</TabsList>
-
-							<TabsContent value="personal" className="space-y-6">
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-3">
-											<div className="p-2 bg-primary/10 rounded-lg">
-												<Mail className="h-5 w-5 text-primary" />
-											</div>
-											Thông tin liên hệ
-										</CardTitle>
-									</CardHeader>
-									<CardContent className="space-y-6">
-										<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-											<div className="space-y-2">
-												<Label htmlFor="email">Email</Label>
-												<InputGroup>
-													<InputGroupAddon align="inline-start">
-														<Mail className="h-4 w-4 text-muted-foreground" />
-													</InputGroupAddon>
-													<InputGroupInput id="email" disabled value={user.email} />
-												</InputGroup>
-												<p className="text-xs text-muted-foreground flex items-center gap-1">
-													<Lock className="h-3 w-3" />
-													Email chính thức không thể thay đổi
-												</p>
-											</div>
-											<div className="space-y-2">
-												<Label htmlFor="provider">Đăng nhập qua</Label>
-												<InputGroup>
-													<InputGroupAddon align="inline-start">
-														<Shield className="h-4 w-4 text-muted-foreground" />
-													</InputGroupAddon>
-													<InputGroupInput
-														id="provider"
-														disabled
-														value={user.auth_provider === "google" ? "Google" : "Tài khoản local"}
-													/>
-												</InputGroup>
-											</div>
-											<div className="space-y-2">
-												<Label htmlFor="status">Trạng thái</Label>
-												<InputGroup>
-													<InputGroupAddon align="inline-start">
-														<CheckCircle2 className="h-4 w-4 text-green-500" />
-													</InputGroupAddon>
-													<InputGroupInput id="status" disabled value={user.is_active ? "Hoạt động" : "Không hoạt động"} />
-												</InputGroup>
-											</div>
-										</div>
-									</CardContent>
-								</Card>
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-3">
-											<div className="p-2 bg-primary/10 rounded-lg">
-												<Lock className="h-5 w-5 text-primary" />
-											</div>
-											Bảo mật
-										</CardTitle>
-									</CardHeader>
-									<CardContent className="space-y-4">
-										<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-											<div className="space-y-2">
-												<Label htmlFor="current-pwd">Mật khẩu hiện tại</Label>
-												<InputGroup>
-													<InputGroupAddon align="inline-start">
-														<Lock className="h-4 w-4 text-muted-foreground" />
-													</InputGroupAddon>
-													<InputGroupInput id="current-pwd" type="password" placeholder="Nhập mật khẩu hiện tại" />
-												</InputGroup>
-											</div>
-											<div className="space-y-2">
-												<Label htmlFor="new-pwd">Mật khẩu mới</Label>
-												<InputGroup>
-													<InputGroupAddon align="inline-start">
-														<Lock className="h-4 w-4 text-muted-foreground" />
-													</InputGroupAddon>
-													<InputGroupInput id="new-pwd" type="password" placeholder="Nhập mật khẩu mới" />
-												</InputGroup>
-											</div>
-										</div>
-										<div className="flex items-start gap-2 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-											<Info className="h-4 w-4 mt-0.5 shrink-0" />
-											<span>Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số</span>
-										</div>
-									</CardContent>
-								</Card>
-							</TabsContent>
-
-							<TabsContent value="history">
-								<Card>
-									<CardHeader>
-										<CardTitle className="flex items-center gap-3">
-											<div className="p-2 bg-primary/10 rounded-lg">
-												<History className="h-5 w-5 text-primary" />
-											</div>
-											Lịch sử hoạt động gần đây
-										</CardTitle>
-									</CardHeader>
-									<CardContent className="p-0">
-										<div className="divide-y">
-											{[
-												{
-													icon: FileText,
-													action: "Tra cứu văn bản",
-													detail: "Quy chế đào tạo tín chỉ 2024",
-													time: "2 giờ trước",
-													color: "bg-blue-100 text-blue-600",
-												},
-												{
-													icon: Bookmark,
-													action: "Lưu tài liệu",
-													detail: "Quy định về thi cử",
-													time: "1 ngày trước",
-													color: "bg-emerald-100 text-emerald-600",
-												},
-												{
-													icon: History,
-													action: "Đăng nhập",
-													detail: "Từ thiết bị mới - Chrome on Windows",
-													time: "3 ngày trước",
-													color: "bg-purple-100 text-purple-600",
-												},
-											].map((item, index) => (
-												<div
-													key={index}
-													className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-												>
-													<div className="flex items-center gap-4">
-														<div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center`}>
-															<item.icon className="h-6 w-6" />
-														</div>
-														<div>
-															<p className="font-medium">{item.action}</p>
-															<p className="text-sm text-muted-foreground">{item.detail}</p>
-														</div>
-													</div>
-													<Badge variant="secondary">{item.time}</Badge>
-												</div>
-											))}
-										</div>
-									</CardContent>
-								</Card>
-							</TabsContent>
-
-							<TabsContent value="saved">
-								<Card>
-									<CardHeader>
-										<div className="flex items-center justify-between">
-											<CardTitle className="flex items-center gap-3">
-												<div className="p-2 bg-primary/10 rounded-lg">
-													<Bookmark className="h-5 w-5 text-primary" />
-												</div>
-												Tài liệu đã lưu
-											</CardTitle>
-											<Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-												23 tài liệu
-											</Badge>
-										</div>
-									</CardHeader>
-									<CardContent className="p-0">
-										<div className="divide-y">
-											{[
-												{
-													title: "Quy chế đào tạo tín chỉ",
-													category: "Đào tạo",
-													date: "15/01/2024",
-													color: "bg-blue-100 text-blue-600",
-												},
-												{
-													title: "Quy định về thi cử",
-													category: "Đào tạo",
-													date: "10/01/2024",
-													color: "bg-emerald-100 text-emerald-600",
-												},
-												{
-													title: "Quy trình xin nghỉ phép",
-													category: "Công tác sinh viên",
-													date: "05/01/2024",
-													color: "bg-purple-100 text-purple-600",
-												},
-											].map((doc, index) => (
-												<div
-													key={index}
-													className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-												>
-													<div className="flex items-center gap-4">
-														<div className={`w-12 h-12 rounded-xl ${doc.color} flex items-center justify-center`}>
-															<FileText className="h-6 w-6" />
-														</div>
-														<div>
-															<p className="font-medium">{doc.title}</p>
-															<Badge variant="outline" className="mt-1">
-																{doc.category}
-															</Badge>
-														</div>
-													</div>
-													<Badge variant="secondary">{doc.date}</Badge>
-												</div>
-											))}
-										</div>
-									</CardContent>
-								</Card>
-							</TabsContent>
-						</Tabs>
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-3">
+									<div className="p-2 bg-primary/10 rounded-lg">
+										<Mail className="h-5 w-5 text-primary" />
+									</div>
+									Thông tin liên hệ
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-6">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+									<div className="space-y-2">
+										<Label htmlFor="email">Email</Label>
+										<InputGroup>
+											<InputGroupAddon align="inline-start">
+												<Mail className="h-4 w-4 text-muted-foreground" />
+											</InputGroupAddon>
+											<InputGroupInput id="email" disabled value={user.email} />
+										</InputGroup>
+										<p className="text-xs text-muted-foreground flex items-center gap-1">
+											<Lock className="h-3 w-3" />
+											Email chính thức không thể thay đổi
+										</p>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="provider">Đăng nhập qua</Label>
+										<InputGroup>
+											<InputGroupAddon align="inline-start">
+												<Shield className="h-4 w-4 text-muted-foreground" />
+											</InputGroupAddon>
+											<InputGroupInput id="provider" disabled value={user.auth_provider === "google" ? "Google" : "Tài khoản local"} />
+										</InputGroup>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="status">Trạng thái</Label>
+										<InputGroup>
+											<InputGroupAddon align="inline-start">
+												<CheckCircle2 className="h-4 w-4 text-green-500" />
+											</InputGroupAddon>
+											<InputGroupInput id="status" disabled value={user.is_active ? "Hoạt động" : "Không hoạt động"} />
+										</InputGroup>
+									</div>
+								</div>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader>
+								<CardTitle className="flex items-center gap-3">
+									<div className="p-2 bg-primary/10 rounded-lg">
+										<Lock className="h-5 w-5 text-primary" />
+									</div>
+									Bảo mật
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+									<div className="space-y-2">
+										<Label htmlFor="current-pwd">Mật khẩu hiện tại</Label>
+										<InputGroup>
+											<InputGroupAddon align="inline-start">
+												<Lock className="h-4 w-4 text-muted-foreground" />
+											</InputGroupAddon>
+											<InputGroupInput id="current-pwd" type="password" placeholder="Nhập mật khẩu hiện tại" />
+										</InputGroup>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="new-pwd">Mật khẩu mới</Label>
+										<InputGroup>
+											<InputGroupAddon align="inline-start">
+												<Lock className="h-4 w-4 text-muted-foreground" />
+											</InputGroupAddon>
+											<InputGroupInput id="new-pwd" type="password" placeholder="Nhập mật khẩu mới" />
+										</InputGroup>
+									</div>
+								</div>
+								<div className="flex items-start gap-2 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+									<Info className="h-4 w-4 mt-0.5 shrink-0" />
+									<span>Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số</span>
+								</div>
+							</CardContent>
+						</Card>
 					</div>
 				</div>
 			</div>
