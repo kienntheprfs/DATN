@@ -51,7 +51,9 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_superuser: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column_kwargs={
+        "onupdate": datetime.utcnow
+    })
     
     # OAuth fields
     auth_provider: str = Field(
@@ -149,7 +151,9 @@ class Thread(SQLModel, table=True):
         max_length=255,
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, sa_column_kwargs={
+        "onupdate": datetime.utcnow
+    })
     
     # Relationships
     owner: "User" = Relationship(back_populates="threads")
