@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { User, TokenResponse, LoginRequest, RegisterRequest } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+const API_URL = '/api';
 
 export const apiClient = axios.create({
   baseURL: API_URL,

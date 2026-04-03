@@ -22,7 +22,7 @@ export interface RatingResponse {
 	updated_at: string;
 }
 
-const DASHBOARD_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
+const DASHBOARD_API_BASE = '/api';
 
 export const ratingService = {
 	async createOrUpdate(rating: RatingCreate): Promise<RatingResponse> {

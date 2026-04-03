@@ -1,4 +1,4 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
+export const API_BASE_URL = "/api";
 
 export const getFullImageUrl = (path: string) => {
   if (!path) return "";
