@@ -9,6 +9,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
 import { DocumentPanel } from "@/components/chat/document-panel";
+import { toast } from "sonner";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
@@ -31,6 +32,15 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		initialMessage: urlMessage || undefined,
 		initialQueryMode: urlQueryMode || undefined,
 	});
+
+	useEffect(() => {
+		if (error) {
+			toast.error("Đã xảy ra lỗi", {
+				description: error,
+				duration: 5000,
+			});
+		}
+	}, [error]);
 
 	useEffect(() => {
 		sendMessageRef.current = sendMessage;
@@ -74,7 +84,13 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		onToolResult: (result) => {
 			updateVoiceToolResult(result.toolCallId, result.content);
 		},
-		onError: (err) => console.error("Voice error:", err),
+		onError: (err) => {
+			console.error("Voice error:", err);
+			toast.error("Lỗi Voice", {
+				description: err,
+				duration: 5000,
+			});
+		},
 	});
 
 	const handleVoiceStateChange = () => {

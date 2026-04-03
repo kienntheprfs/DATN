@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 function AuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -13,9 +14,17 @@ function AuthCallbackContent() {
     const code = searchParams.get("code");
     
     if (code) {
-      setError("Google OAuth callback cần backend xử lý. Vui lòng đăng nhập bằng email/password trước.");
+      const errorMsg = "Google OAuth callback cần backend xử lý. Vui lòng đăng nhập bằng email/password trước.";
+      setError(errorMsg);
+      toast.error("Đăng nhập Google thất bại", {
+        description: errorMsg,
+      });
     } else {
-      setError("Không nhận được mã xác thực từ Google.");
+      const errorMsg = "Không nhận được mã xác thực từ Google.";
+      setError(errorMsg);
+      toast.error("Đăng nhập Google thất bại", {
+        description: errorMsg,
+      });
     }
   }, [searchParams]);
 

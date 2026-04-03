@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAuthHeaders } from "@/services/auth-api";
 
 export type VoiceConnectionState =
   | "idle"
@@ -128,13 +129,12 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
 
     try {
       const targetUrl = `${apiGatewayUrl}/voice/offer`;
-      const token = localStorage.getItem('access_token');
+      const authHeaders = getAuthHeaders();
       
       await fetch(targetUrl, {
         method: "PATCH",
         headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          ...authHeaders,
         },
         body: JSON.stringify({
           pc_id: pcIdRef.current,
@@ -376,7 +376,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
 
       // Determine the target URL
       const targetUrl = `${apiGatewayUrl}/voice/offer`;
-      const token = localStorage.getItem('access_token');
+      const authHeaders = getAuthHeaders();
 
       // Create thread if not provided
       let threadIdToUse = threadIdProp;
@@ -401,8 +401,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
       const response = await fetch(targetUrl, {
         method: "POST",
         headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          ...authHeaders,
         },
         body: JSON.stringify(requestBody),
       });

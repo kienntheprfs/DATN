@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -268,10 +269,12 @@ export default function EditorPage() {
       } else {
         setMap(null);
       }
-      alert('Đã xóa bản đồ!');
+      toast.success('Đã xóa bản đồ!');
     } catch (error) {
       console.error('Error deleting map:', error);
-      alert('Lỗi khi xóa bản đồ');
+      toast.error('Lỗi khi xóa bản đồ', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 
@@ -765,9 +768,12 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
       }
       setEditedData(null);
       setEditing(false);
+      toast.success('Lưu thành công!');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Lỗi khi lưu!');
+      toast.error('Lỗi khi lưu!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 
@@ -777,13 +783,17 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
       if (selectedType === 'node') {
         await editorApi.deleteNode(selectedId);
         deleteNode(selectedId);
+        toast.success('Đã xóa node!');
       } else if (selectedType === 'edge') {
         await editorApi.deleteEdge(selectedId);
         deleteEdge(selectedId);
+        toast.success('Đã xóa edge!');
       }
     } catch (error) {
       console.error('Error deleting:', error);
-      alert('Lỗi khi xóa!');
+      toast.error('Lỗi khi xóa!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 
