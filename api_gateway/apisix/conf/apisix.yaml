@@ -92,6 +92,7 @@ routes:
     uri: /agent/invoke
     plugins:
       proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
         headers:
           set:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
@@ -103,10 +104,21 @@ routes:
     uri: /agent/stream
     plugins:
       proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
         headers:
           set:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
     upstream_id: u-agent-stream
+
+  - id: agent-info-public
+    priority: 110
+    methods: ["GET"]
+    uri: /agent/info
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+    upstream_id: u-agent
+    
 
   - id: agent-protected
     priority: 60
@@ -120,6 +132,7 @@ routes:
         timeout: 5000
         status_on_error: 503
       proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
         headers:
           set:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
