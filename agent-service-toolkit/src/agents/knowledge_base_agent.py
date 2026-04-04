@@ -63,7 +63,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
     try:
         # 1. CHẠY SONG SONG QDRANT VÀ LIGHTRAG
-        task_qdrant = retriever_service.search(query=query, collection_name="kb_4", top_k=5)
+        task_qdrant = retriever_service.search(query=query, collection_name="kb_2", top_k=5)
         task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
         
         qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)

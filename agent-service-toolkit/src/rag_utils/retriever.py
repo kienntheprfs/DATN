@@ -95,14 +95,13 @@ class QdrantHybridRetriever:
             for point in results.points:
                 payload = point.payload or {}
                 
-                # Payload này được cấu trúc trong tasks.py bên KM
+                # Payload do KM ghi: doc_id, content, chunk_index, type, metadata (tasks.py / celery process_batch)
                 item = RetrievedChunk(
                     chunk_id=str(point.id),
-                    # Bên KM lưu: "content": chunk_data["text"]
-                    content=payload.get("content", ""), 
+                    content=payload.get("content", ""),
                     score=point.score,
-                    # Bên KM lưu: "document_id"
-                    doc_id=payload.get("document_id", 0),
+                    # KM upsert dùng key "doc_id"; "document_id" chỉ để tương thích point cũ (nếu có)
+                    doc_id=payload.get("doc_id", payload.get("document_id", 0)),
                     source_type=payload.get("doc_type", "unknown"), # Nếu bạn có lưu doc_type
                     answer=payload.get("answer_preview", None),
                     metadata=payload.get("metadata", {}),
