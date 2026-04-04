@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str
 
+    POSTGRES_SSL_MODE: str = "disable"
+
     STORAGE_TYPE: str = "local"
 
     S3_ENDPOINT: str | None = None

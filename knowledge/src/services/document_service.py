@@ -7,9 +7,11 @@ from typing import Optional
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.vector_db_setup import QdrantManager
 from .file_storage import get_storage
 from .lightrag_service import LightRAGService
 from .validator import validate_upload_file
+from .vector_db import VectorDBService
 from ..models.models import Document
 from ..repositories.document_repository import DocumentRepository
 from ..repositories.formal_document_repository import FormalDocumentRepository
@@ -191,6 +193,20 @@ class DocumentService:
         if not current_doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
+        collection_name = f"kb_{current_doc.storage_id}"
+        vector_db = VectorDBService(QdrantManager.get_client(), collection_name)
+        try:
+            if await vector_db.collection_exists():
+                await vector_db.delete_vectors_by_document(document_id)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete Qdrant vectors for document %s in %s: %s",
+                document_id,
+                collection_name,
+                e,
+            )
+
+        await self.doc_repo.delete_chunks_for_document(document_id)
         await self.doc_repo.soft_delete(document_id)
         await self.db.commit()
         return {"message": "Document deleted successfully"}
