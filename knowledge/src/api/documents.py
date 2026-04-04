@@ -21,22 +21,17 @@ async def upload_document(
     service = DocumentService(db)
 
     if not is_formal_doc:
-        # 1. Upload lên file storage và Lưu Metadata vào DB
-        # Lưu ý: Hàm này BẮT BUỘC phải commit DB xong xuôi mới được trigger Celery
-        version = await service.upload_normal_document(
+        document = await service.upload_normal_document(
             file=file,
-            storage_id=storage_id
+            storage_id=storage_id,
         )
 
-        # 2. Trigger Celery Pipeline
-        # Hàm trigger_ingestion_pipeline trả về AsyncResult (chứa task_id)
-        task_result = trigger_ingestion_pipeline(version.id, auto_generate_faq)
+        task_result = trigger_ingestion_pipeline(document.id, auto_generate_faq)
 
         return {
             "status": "queued",
-            "document_id": version.document_id,
-            "version_id": version.id,
-            "task_id": task_result.id # Trả về ID để tracking nếu cần
+            "document_id": document.id,
+            "task_id": task_result.id,
         }
     else:
         formal_doc = await service.upload_formal_document(
@@ -134,7 +129,7 @@ async def get_document_detail(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get detailed information about a specific document, including version history.
+    Get a single document record (file + processing state on the same row).
     """
     service = DocumentService(db)
     return await service.get_document(document_id)
@@ -146,8 +141,8 @@ async def update_document(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Update document metadata (Title, Status, etc.).
-    Note: To update the file content, use the Upload API (it creates a new version).
+    Update document metadata (title, status, meta_data).
+    Replacing the binary file is not modeled as a separate version; upload a new document if needed.
     """
     service = DocumentService(db)
     return await service.update_document(document_id, payload)

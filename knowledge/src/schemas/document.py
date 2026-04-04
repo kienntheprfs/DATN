@@ -1,43 +1,35 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import Optional
 from src.models.models import DocumentStatus, ProcessingStatus, DocumentType
 
-# --- Base Schemas ---
-class DocumentBase(BaseModel):
-    title: str
-    storage_id: int
-
-# --- Response Schemas ---
-class DocumentVersionResponse(BaseModel):
-    id: int
-    version: int
-    document_type: DocumentType
-    file_path: str
-    file_size: int
-    processing_status: ProcessingStatus
-    created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
 
 class DocumentResponse(BaseModel):
     id: int
     title: str
     storage_id: int
     status: DocumentStatus
+    document_type: DocumentType
+    file_path: str
+    file_size: int
+    checksum: str
+    processing_status: ProcessingStatus
+    processing_error: Optional[str] = None
+    processing_started_at: Optional[datetime] = None
+    processing_completed_at: Optional[datetime] = None
+    meta_data: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
-    # Trả về version mới nhất để UI hiển thị trạng thái xử lý
-    latest_version: Optional[DocumentVersionResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 
-class DocumentDetailResponse(DocumentResponse):
-    """Chi tiết document bao gồm lịch sử các version"""
-    versions: List[DocumentVersionResponse] = []
 
-# --- Update Schema ---
+class DocumentDetailResponse(DocumentResponse):
+    """Same shape as list item; no separate version history."""
+    pass
+
+
 class DocumentUpdate(BaseModel):
     title: Optional[str] = None
     status: Optional[DocumentStatus] = None
-    # Có thể mở rộng thêm description hoặc tags ở đây
+    meta_data: Optional[dict] = None

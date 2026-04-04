@@ -37,12 +37,18 @@ class QdrantTransaction:
     async def delete_with_backup(self, doc_id: int):
         """
         Xóa document nhưng lưu backup vào RAM để rollback.
+        Payload từ ingestion dùng key `doc_id`.
         """
         # 1. Tìm các point sắp bị xóa
         scroll_result, _ = await self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=models.Filter(
-                must=[models.FieldCondition(key="doc_id", match=models.MatchValue(value=doc_id))]
+                must=[
+                    models.FieldCondition(
+                        key="doc_id",
+                        match=models.MatchValue(value=doc_id),
+                    )
+                ]
             ),
             with_payload=True,
             with_vectors=True,
