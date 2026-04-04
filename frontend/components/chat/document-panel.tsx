@@ -103,11 +103,10 @@ function HighlightedText({ text, highlight }: HighlightedTextProps) {
 }
 
 interface DocumentPanelProps {
-	isOpen: boolean;
 	onClose: () => void;
 }
 
-export function DocumentPanel({ isOpen, onClose }: DocumentPanelProps) {
+export function DocumentPanel({ onClose }: DocumentPanelProps) {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
 	const [expandedSection, setExpandedSection] = useState<string | null>(null);
@@ -125,94 +124,79 @@ export function DocumentPanel({ isOpen, onClose }: DocumentPanelProps) {
 		};
 	});
 
-  if (!isOpen) return null;
+	return (
+		<div className="flex flex-col h-full bg-background">
+			<div className="flex items-center justify-between p-4 border-b shrink-0">
+				<h2 className="text-lg font-semibold">Tài liệu tham khảo</h2>
+				<Button variant="ghost" size="icon" onClick={onClose}>
+					<X className="size-5" />
+				</Button>
+			</div>
 
-  return (
-    <>
-      <div 
-        className="fixed inset-0 bg-black/20 z-40"
-        onClick={onClose}
-      />
-      <div className="fixed right-0 top-0 h-full w-96 bg-background border-l border-border shadow-lg z-50 flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Tài liệu tham khảo</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="size-5" />
-          </Button>
-        </div>
+			<div className="p-4 border-b shrink-0">
+				<div className="relative">
+					<Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+					<Input
+						placeholder="Tìm kiếm trong tài liệu..."
+						value={searchQuery}
+						onChange={(e) => setSearchQuery(e.target.value)}
+						className="pl-9"
+					/>
+				</div>
+			</div>
 
-        <div className="p-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Tìm kiếm trong tài liệu..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
+			<div className="flex-1 overflow-y-auto p-4 space-y-3">
+				{filteredDocs.map((doc) => (
+					<div key={doc.id} className="border rounded-lg overflow-hidden">
+						<button
+							onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
+							className="w-full flex items-center justify-between p-3 bg-muted/50 hover:bg-muted transition-colors"
+						>
+							<div className="flex items-center gap-2">
+								<FileText className="size-4 text-muted-foreground" />
+								<span className="font-medium text-sm">{doc.title}</span>
+							</div>
+							{expandedDoc === doc.id ? (
+								<ChevronUp className="size-4" />
+							) : (
+								<ChevronDown className="size-4" />
+							)}
+						</button>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {filteredDocs.map((doc) => (
-            <div key={doc.id} className="border rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
-                className="w-full flex items-center justify-between p-3 bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="size-4 text-muted-foreground" />
-                  <span className="font-medium text-sm">{doc.title}</span>
-                </div>
-                {expandedDoc === doc.id ? (
-                  <ChevronUp className="size-4" />
-                ) : (
-                  <ChevronDown className="size-4" />
-                )}
-              </button>
+						{expandedDoc === doc.id && (
+							<div className="border-t">
+								{doc.sections.map((section) => (
+									<div key={section.id} className="border-b last:border-b-0">
+										<button
+											onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
+											className="w-full p-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between"
+										>
+											<span className="text-sm font-medium">{section.title}</span>
+											{expandedSection === section.id ? (
+												<ChevronUp className="size-3 text-muted-foreground" />
+											) : (
+												<ChevronDown className="size-3 text-muted-foreground" />
+											)}
+										</button>
 
-              {expandedDoc === doc.id && (
-                <div className="border-t">
-                  {doc.sections.map((section) => (
-                    <div key={section.id} className="border-b last:border-b-0">
-                      <button
-                        onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
-                        className="w-full p-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between"
-                      >
-                        <span className="text-sm font-medium">{section.title}</span>
-                        {expandedSection === section.id ? (
-                          <ChevronUp className="size-3 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="size-3 text-muted-foreground" />
-                        )}
-                      </button>
-                      
-                      {expandedSection === section.id && (
-                        <div className="px-3 pb-3">
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            <HighlightedText text={section.content} highlight={searchQuery} />
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+										{expandedSection === section.id && (
+											<div className="px-3 pb-3">
+												<p className="text-sm text-muted-foreground leading-relaxed">
+													<HighlightedText text={section.content} highlight={searchQuery} />
+												</p>
+											</div>
+										)}
+									</div>
+								))}
+							</div>
+						)}
+					</div>
+				))}
 
-          {searchQuery && filteredDocs.every(doc => 
-            doc.sections.every(section => 
-              !section.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-              !section.content.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-          ) && (
-            <p className="text-center text-muted-foreground text-sm py-8">
-              Không tìm thấy kết quả nào
-            </p>
-          )}
-        </div>
-      </div>
-    </>
-  );
+				{searchQuery && filteredDocs.every((doc) => doc.sections.every((section) => !section.title.toLowerCase().includes(searchQuery.toLowerCase()) && !section.content.toLowerCase().includes(searchQuery.toLowerCase()))) && (
+					<p className="text-center text-muted-foreground text-sm py-8">Không tìm thấy kết quả nào</p>
+				)}
+			</div>
+		</div>
+	);
 }

@@ -11,6 +11,7 @@ import { ChatInput, QueryMode } from "@/components/page.chatinput";
 import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
 import { getUserId } from "@/services/auth-api";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
@@ -28,7 +29,23 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 
 	const chatKey = useMemo(() => `chat-${urlThreadId || "new"}`, [urlThreadId]);
 
-	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error, threadId } = useChat({
+	const {
+		messages,
+		sendMessage,
+		addUserMessage,
+		addBotMessage,
+		appendBotMessage,
+		updateLastBotMessage,
+		addVoiceToolCall,
+		updateVoiceToolResult,
+		clearVoiceTools,
+		stop,
+		isLoading,
+		isTyping,
+		currentTools,
+		error,
+		threadId,
+	} = useChat({
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
 		threadId: urlThreadId || undefined,
@@ -54,7 +71,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		if (urlMessage && !hasAppended.current && model && agent && threadId) {
 			hasAppended.current = true;
 			sendMessageRef.current?.(urlMessage, urlQueryMode || undefined);
-			
+
 			setTimeout(() => {
 				router.replace(`/chat?thread_id=${urlThreadId}`);
 			}, 100);
@@ -124,24 +141,52 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 
 	return (
 		<>
-			<div className="flex flex-1 flex-col overflow-hidden bg-background pb-32">
-			<ChatWindow 
-					messages={messages} 
-					error={error} 
-					isStreaming={isLoading} 
-					isTyping={isTyping}
-					isVoiceMode={voice.state === "connected"}
-					isListening={voice.isListening}
-					currentTools={currentTools}
-					partialText={voice.partialText}
-					threadId={threadId}
-					agentId={agent || "chatbot"}
-					lastRunId={voice.lastRunId || undefined}
-					voiceThreadId={voice.threadId || undefined}
-					voiceState={voice.state}
-				/>
+			<div className="h-[calc(100vh-100px)] w-screen overflow-hidden">
+				<ResizablePanelGroup orientation="horizontal" className="h-full w-full">
+					{state === "collapsed" ? null : (
+						<>
+							<ResizablePanel defaultSize={16} minSize={16} maxSize={16}>
+								<div className="h-full" />
+							</ResizablePanel>
+							<ResizableHandle className="hidden" />
+						</>
+					)}
+					<ResizablePanel defaultSize={isDocumentPanelOpen ? 50 : 100}>
+						<div className="h-full flex flex-col bg-background">
+							<div className="flex-1 overflow-auto">
+								<div className="w-full max-w-4xl mx-auto py-4">
+									<ChatWindow
+										messages={messages}
+										error={error}
+										isStreaming={isLoading}
+										isTyping={isTyping}
+										isVoiceMode={voice.state === "connected"}
+										isListening={voice.isListening}
+										currentTools={currentTools}
+										partialText={voice.partialText}
+										threadId={threadId}
+										agentId={agent || "chatbot"}
+										lastRunId={voice.lastRunId || undefined}
+										voiceThreadId={voice.threadId || undefined}
+										voiceState={voice.state}
+									/>
+								</div>
+							</div>
+						</div>
+					</ResizablePanel>
+					{isDocumentPanelOpen && (
+						<>
+							<ResizableHandle withHandle />
+							<ResizablePanel defaultSize={50}>
+								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} />
+							</ResizablePanel>
+						</>
+					)}
+				</ResizablePanelGroup>
 			</div>
-			<div className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${state === "collapsed" ? "left-0" : "left-64"} right-0`}>
+			<div
+				className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${state === "collapsed" ? "left-0" : "left-64"} right-0`}
+			>
 				<div className="mx-auto w-full max-w-4xl">
 					<ChatInput
 						isLoading={isLoading}
@@ -158,11 +203,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 						onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
 					/>
 				</div>
-			</div>
-			<DocumentPanel 
-				isOpen={isDocumentPanelOpen} 
-				onClose={() => setIsDocumentPanelOpen(false)} 
-			/>
+			</div>{" "}
 		</>
 	);
 }
@@ -177,10 +218,7 @@ export default function ChatPage() {
 
 	return (
 		<Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-			<ChatContent 
-				key={conversationKey}
-				onVoiceToggle={handleVoiceToggle}
-			/>
+			<ChatContent key={conversationKey} onVoiceToggle={handleVoiceToggle} />
 		</Suspense>
 	);
 }

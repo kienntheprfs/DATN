@@ -22,6 +22,11 @@ interface BackendChatMessage {
 	type: "human" | "ai" | "tool";
 	content: string;
 	run_id?: string;
+	tool_calls?: Array<{
+		id: string;
+		name: string;
+	}>;
+	tool_call_id?: string;
 }
 
 export interface ChatHistory {

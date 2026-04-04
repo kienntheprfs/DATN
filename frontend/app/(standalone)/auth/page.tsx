@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ interface FormErrors {
 	general?: string;
 }
 
-export default function AuthPage() {
+function AuthForm() {
 	const [isLogin, setIsLogin] = useState(true);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
@@ -475,5 +475,13 @@ export default function AuthPage() {
 				</svg>
 			</div>
 		</div>
+	);
+}
+
+export default function AuthPage() {
+	return (
+		<Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+			<AuthForm />
+		</Suspense>
 	);
 }

@@ -151,8 +151,8 @@ export function AppSidebar() {
                                                         </>
                                                     ) : history.length > 0 ? (
                                                         <>
-                                                            {history.map((historyItem) => (
-                                                                <SidebarMenuSubItem key={historyItem.id}>
+                                                            {history.map((historyItem, index) => (
+                                                                <SidebarMenuSubItem key={`${historyItem.id}-${index}`}>
                                                                     <SidebarMenuSubButton asChild className="hover:bg-white/15 text-white/80 hover:text-white">
                                                                         <Link href={historyItem.url}>
                                                                             <span className="truncate">{historyItem.title}</span>

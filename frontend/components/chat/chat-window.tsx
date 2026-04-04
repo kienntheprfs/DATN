@@ -160,8 +160,8 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 												const result = r as Record<string, unknown>;
 												return (
 													<div key={i} className="pl-2 border-l-2 border-blue-300">
-														{result.name && <div className="font-medium">{String(result.name)}</div>}
-														{result.description && <div className="text-blue-600/80">{String(result.description)}</div>}
+														{result.name ? <div className="font-medium">{String(result.name)}</div> : null}
+														{result.description ? <div className="text-blue-600/80">{String(result.description)}</div> : null}
 													</div>
 												);
 											})}
@@ -359,9 +359,9 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 
 	useEffect(() => {
 		if (scrollRef.current) {
-			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+			scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
 		}
-	}, [visibleMessages, currentTools.length]);
+	}, [visibleMessages, currentTools.length, partialText]);
 
 	// Extract route data from completed tools
 	const routeData = useMemo(() => {
@@ -420,8 +420,8 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 	};
 
 	return (
-		<div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8">
-			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-20">
+			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
 					const isMessageActive = isLastGroup && isActive;
