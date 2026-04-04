@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, SortDesc, Download, Trash2, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
 import { useAppStore } from "@/stores/app.store";
+import { authService } from "@/services/auth-api";
 import type { HistoryItem } from "@/types/history";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +19,28 @@ type SortOption = "newest" | "oldest" | "az";
 
 export default function HistoryPage() {
   const router = useRouter();
-  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory } = useAppStore();
+  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, login } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filteredHistory, setFilteredHistory] = useState<HistoryItem[]>([]);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
+    const checkAuth = async () => {
+      if (!authService.isAuthenticated()) {
+        router.push("/auth?redirected=true");
+        return;
+      }
+      if (!user) {
+        await login();
+      }
+      setIsCheckingAuth(false);
+    };
+    checkAuth();
+  }, [login]);
+
+  useEffect(() => {
+    if (isCheckingAuth) return;
     if (!user) {
       router.push("/auth?redirected=true");
       return;
@@ -32,7 +48,7 @@ export default function HistoryPage() {
     if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
       fetchMoreHistory();
     }
-  }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory, router]);
+  }, [isCheckingAuth, user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory, router]);
 
   useEffect(() => {
     let filtered = history.filter((item) =>
