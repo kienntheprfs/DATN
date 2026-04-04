@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import { useAgent } from "@/contexts/agent-context";
@@ -26,12 +26,15 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const { state } = useSidebar();
 	const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false);
 
+	const chatKey = useMemo(() => `chat-${urlThreadId || "new"}`, [urlThreadId]);
+
 	const { messages, sendMessage, addUserMessage, addBotMessage, appendBotMessage, updateLastBotMessage, addVoiceToolCall, updateVoiceToolResult, clearVoiceTools, stop, isLoading, isTyping, currentTools, error, threadId } = useChat({
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
 		threadId: urlThreadId || undefined,
 		initialMessage: urlMessage || undefined,
 		initialQueryMode: urlQueryMode || undefined,
+		key: chatKey,
 	});
 
 	useEffect(() => {

@@ -11,6 +11,7 @@ interface UseChatOptions {
 	initialMessage?: string;
 	initialQueryMode?: "normal" | "deep";
 	onThreadIdGenerated?: (threadId: string) => void;
+	key?: string;
 }
 
 interface ToolCall {
@@ -76,6 +77,21 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	const currentRunIdRef = useRef<string | null>(null);
 	const threadIdGeneratedRef = useRef(false);
 	const hasInitializedRef = useRef(false);
+	const keyRef = useRef(options.key);
+
+	useEffect(() => {
+		if (options.key && options.key !== keyRef.current) {
+			keyRef.current = options.key;
+			hasInitializedRef.current = false;
+			threadIdGeneratedRef.current = false;
+			setMessages([]);
+			setCurrentTools([]);
+			setError(null);
+			if (initialThreadId) {
+				setThreadId(initialThreadId);
+			}
+		}
+	}, [options.key, initialThreadId]);
 
 	useEffect(() => {
 		if (!threadId && !threadIdGeneratedRef.current) {

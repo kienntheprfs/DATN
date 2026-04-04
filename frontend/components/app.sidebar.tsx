@@ -138,7 +138,7 @@ export function AppSidebar() {
                                             </CollapsibleTrigger>
 
                                             <CollapsibleContent>
-                                                <SidebarMenuSub>
+                                                <SidebarMenuSub className="max-h-64 overflow-y-auto">
                                                     {isLoadingHistory && history.length === 0 ? (
                                                         <>
                                                             {[1, 2, 3, 4, 5].map((i) => (
@@ -154,9 +154,9 @@ export function AppSidebar() {
                                                             {history.map((historyItem) => (
                                                                 <SidebarMenuSubItem key={historyItem.id}>
                                                                     <SidebarMenuSubButton asChild className="hover:bg-white/15 text-white/80 hover:text-white">
-                                                                        <a href={historyItem.url}>
+                                                                        <Link href={historyItem.url}>
                                                                             <span className="truncate">{historyItem.title}</span>
-                                                                        </a>
+                                                                        </Link>
                                                                     </SidebarMenuSubButton>
                                                                 </SidebarMenuSubItem>
                                                             ))}
