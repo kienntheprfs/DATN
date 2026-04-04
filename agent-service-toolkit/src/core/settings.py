@@ -84,8 +84,9 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: SecretStr | None = None
     ANTHROPIC_API_KEY: SecretStr | None = None
     GOOGLE_API_KEY: SecretStr | None = None
-    GOOGLE_APPLICATION_CREDENTIALS: SecretStr | None = None
     GROQ_API_KEY: SecretStr | None = None
+    GOOGLE_APPLICATION_CREDENTIALS: SecretStr | None = None
+    MY_GROQ_API_KEY: str | None = None
     USE_AWS_BEDROCK: bool = False
     OLLAMA_MODEL: str | None = None
     OLLAMA_BASE_URL: str | None = None

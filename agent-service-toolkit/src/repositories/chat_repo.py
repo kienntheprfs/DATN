@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from schema.conversation import Conversation
 
 class ChatRepository:
@@ -40,3 +40,12 @@ class ChatRepository:
         result = await self.db.execute(query)
 
         return result.scalars().all()
+    
+    async def update_thread_title(self, thread_id: str, new_title: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.id == thread_id)
+            .values(title=new_title)
+        )
+        await self.db.execute(query)
+        await self.db.commit()
