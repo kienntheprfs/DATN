@@ -202,3 +202,4 @@ cython_debug/
 privatecredentials/*
 !privatecredentials/.gitkeep
 .next/
+!frontend/lib/
