@@ -64,6 +64,7 @@ dependencies = [
     "openai>=1.30.0",
     "fastembed",
     "langchain_tavily",
+    "boto3"
 ]
 
 [dependency-groups]

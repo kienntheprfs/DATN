@@ -41,12 +41,12 @@ lightrag_service: LightRAGService = LightRAGService()
 # DEFINING TOOLS
 # ==============================================================================
 class UnifiedDocument:
-    def __init__(self, content: str, source: str, doc_id: str):
+    def __init__(self, content: str, source_type: str, doc_id: str):
         self.content = content
-        self.source = source
+        self.source_type = source_type
         self.doc_id = doc_id
 
-@tool("lookup_hcmut_info")
+@tool("lookup_hcmut_info", response_format="content_and_artifact")
 async def lookup_hcmut_info(query: str, config: RunnableConfig):
     """
     Tìm kiếm thông tin nội bộ. 
@@ -63,7 +63,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
     try:
         # 1. CHẠY SONG SONG QDRANT VÀ LIGHTRAG
-        task_qdrant = retriever_service.search(query=query, collection_name="kb_1", top_k=5)
+        task_qdrant = retriever_service.search(query=query, collection_name="kb_4", top_k=5)
         task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
         
         qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
@@ -73,13 +73,14 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
         # Đưa Qdrant chunks vào pool
         for doc in qdrant_docs:
-            unified_chunks.append(UnifiedDocument(content=doc.content, source="VectorDB", doc_id=str(doc.doc_id)))
+            unified_chunks.append(UnifiedDocument(content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)))
                 
         # Đưa LightRAG chunks vào pool
         for chunk in lightrag_result.chunks:
-            unified_chunks.append(UnifiedDocument(content=chunk.content, source=chunk.file_path, doc_id=chunk.chunk_id))
+            unified_chunks.append(UnifiedDocument(content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id))
 
         output_lines = []
+        artifacts = []
 
         # Rerank toàn bộ pool hỗn hợp
         if unified_chunks:
@@ -89,7 +90,11 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
             
             output_lines.append(f"### THÔNG TIN TỪ VĂN BẢN ({len(reranked_docs)} đoạn phù hợp nhất):")
             for doc in reranked_docs:
-                output_lines.append(f"- [Nguồn: {doc.source} | Điểm: {doc.score:.2f}]: {doc.content}")
+                output_lines.append(f"- [Nguồn: {doc.source_type} | Điểm: {doc.score:.2f}]: {doc.content}")
+                artifacts.append({
+                    "doc_id": doc.doc_id, # Hoặc chunk.chunk_id tuỳ cấu trúc của bạn
+                    "source_type": getattr(doc, 'source_type', 'Normal')
+                })
 
         # 3. XỬ LÝ ĐỒ THỊ TRI THỨC (Chỉ áp dụng cho Mode Deep)
         if search_depth == "deep":
@@ -116,7 +121,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         if not output_lines:
             return "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
 
-        return "\n".join(output_lines)
+        return "\n".join(output_lines), artifacts
 
     except Exception as e:
         logger.exception("Lỗi trong quá trình truy xuất dữ liệu")

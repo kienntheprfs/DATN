@@ -1,119 +1,110 @@
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from qdrant_client import AsyncQdrantClient, models
-from src.core.config import settings
+
 
 class VectorDBService:
     DENSE_VECTOR_NAME = "dense_vec"
     SPARSE_VECTOR_NAME = "sparse_vec"
 
     def __init__(self, client: AsyncQdrantClient, collection_name: str):
-        # Lưu client và collection_name vào instance để dùng cho tiện
         self.client = client
         self.collection_name = collection_name
 
     async def ensure_hybrid_collection(self, dense_dim: int = 3072):
-        """
-        Kiểm tra và tạo collection Hybrid (Dense + Sparse) nếu chưa có.
-        """
         if await self.client.collection_exists(self.collection_name):
             return
 
         await self.client.create_collection(
             collection_name=self.collection_name,
-            # 1. Config Dense Vector
             vectors_config={
                 self.DENSE_VECTOR_NAME: models.VectorParams(
-                    size=dense_dim, 
-                    distance=models.Distance.COSINE
+                    size=dense_dim,
+                    distance=models.Distance.COSINE,
                 )
             },
-            # 2. Config Sparse Vector (Quan trọng cho Hybrid)
             sparse_vectors_config={
                 self.SPARSE_VECTOR_NAME: models.SparseVectorParams(
                     index=models.SparseIndexParams(
-                        on_disk=False, 
+                        on_disk=False,
                     )
-                )
-            }
+                ),
+            },
         )
-        
-        # Optimize: Tạo Payload Index
-        await self.client.create_payload_index(self.collection_name, "doc_id", models.PayloadSchemaType.INTEGER)
-        await self.client.create_payload_index(self.collection_name, "version_id", models.PayloadSchemaType.INTEGER)
-        
+
+        await self.client.create_payload_index(
+            self.collection_name, "doc_id", models.PayloadSchemaType.INTEGER
+        )
+        await self.client.create_payload_index(
+            self.collection_name, "faq_id", models.PayloadSchemaType.INTEGER
+        )
         print(f"✅ Created Hybrid Collection: {self.collection_name}")
 
     async def upsert_hybrid_batch(self, points_data: List[Dict[str, Any]]) -> List[str]:
-        """
-        Upsert batch. Input: List[{'dense': ..., 'sparse': ..., 'payload': ...}]
-        """
         points = []
         generated_ids = []
 
         for item in points_data:
-            # Tạo UUID nếu chưa có (Qdrant yêu cầu UUID hoặc Int)
             point_id = str(uuid.uuid4())
             generated_ids.append(point_id)
+            points.append(
+                models.PointStruct(
+                    id=point_id,
+                    vector={
+                        self.DENSE_VECTOR_NAME: item["dense"],
+                        self.SPARSE_VECTOR_NAME: item["sparse"],
+                    },
+                    payload=item["payload"],
+                )
+            )
 
-            points.append(models.PointStruct(
-                id=point_id,
-                vector={
-                    self.DENSE_VECTOR_NAME: item["dense"], 
-                    self.SPARSE_VECTOR_NAME: item["sparse"]
-                },
-                payload=item["payload"]
-            ))
-
-        # wait=True để đảm bảo data available ngay lập tức cho transaction tracking
         await self.client.upsert(
             collection_name=self.collection_name,
             points=points,
-            wait=True
+            wait=True,
         )
         return generated_ids
-    
-    async def upsert_faq_batch(self, points_data: List[Dict[str, Any]]) -> bool:
-        """
-        Upsert FAQ variants.
-        Dữ liệu FAQ nên nằm chung Collection với Chunks để tận dụng Unified Search.
-        Ta phân biệt bằng payload field `type: "faq"`.
-        """
-        points = []
-        
-        for item in points_data:
-            # item bao gồm: id (uuid), dense, sparse, payload
-            points.append(models.PointStruct(
-                id=item["id"], # Sử dụng ID được tạo từ bên ngoài để map với Postgres
-                vector={
-                    self.DENSE_VECTOR_NAME: item["dense"], 
-                    self.SPARSE_VECTOR_NAME: item["sparse"]
-                },
-                payload=item["payload"]
-            ))
 
-        # Dùng wait=True để đảm bảo data consistency cho luồng xử lý tiếp theo
+    async def upsert_faq_batch(self, points_data: List[Dict[str, Any]]) -> bool:
+        points = []
+        for item in points_data:
+            points.append(
+                models.PointStruct(
+                    id=item["id"],
+                    vector={
+                        self.DENSE_VECTOR_NAME: item["dense"],
+                        self.SPARSE_VECTOR_NAME: item["sparse"],
+                    },
+                    payload=item["payload"],
+                )
+            )
         await self.client.upsert(
             collection_name=self.collection_name,
             points=points,
-            wait=True
+            wait=True,
         )
         return True
-    
-    async def delete_vectors_by_version(self, version_id: int):
-        """
-        ROLLBACK QDRANT: Xóa vector theo Filter (Payload)
-        """
+
+    async def delete_vectors_by_document(self, document_id: int):
         await self.client.delete(
             collection_name=self.collection_name,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[
                         models.FieldCondition(
-                            key="version_id",
-                            match=models.MatchValue(value=version_id),
+                            key="doc_id",
+                            match=models.MatchValue(value=document_id),
                         )
                     ]
                 )
             ),
+        )
+
+    async def delete_points_by_ids(self, point_ids: List[str]):
+        if not point_ids:
+            return
+        await self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=models.PointIdsList(points=point_ids),
+            wait=True,
         )

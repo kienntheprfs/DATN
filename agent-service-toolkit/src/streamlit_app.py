@@ -282,42 +282,374 @@ async def main() -> None:
             await handle_feedback()
 
 
+# async def draw_messages(
+#     messages_agen: AsyncGenerator[ChatMessage | str, None],
+#     is_new: bool = False,
+# ) -> None:
+#     """
+#     Draws a set of chat messages - either replaying existing messages
+#     or streaming new ones.
+
+#     This function has additional logic to handle streaming tokens and tool calls.
+#     - Use a placeholder container to render streaming tokens as they arrive.
+#     - Use a status container to render tool calls. Track the tool inputs and outputs
+#       and update the status container accordingly.
+
+#     The function also needs to track the last message container in session state
+#     since later messages can draw to the same container. This is also used for
+#     drawing the feedback widget in the latest chat message.
+
+#     Args:
+#         messages_aiter: An async iterator over messages to draw.
+#         is_new: Whether the messages are new or not.
+#     """
+
+#     # Keep track of the last message container
+#     last_message_type = None
+#     st.session_state.last_message = None
+
+#     # Placeholder for intermediate streaming tokens
+#     streaming_content = ""
+#     streaming_placeholder = None
+
+#     # Iterate over the messages and draw them
+#     while msg := await anext(messages_agen, None):
+#         # str message represents an intermediate token being streamed
+#         if isinstance(msg, str):
+#             # If placeholder is empty, this is the first token of a new message
+#             # being streamed. We need to do setup.
+#             if not streaming_placeholder:
+#                 if last_message_type != "ai":
+#                     last_message_type = "ai"
+#                     st.session_state.last_message = st.chat_message("ai")
+#                 with st.session_state.last_message:
+#                     streaming_placeholder = st.empty()
+
+#             streaming_content += msg
+#             streaming_placeholder.write(streaming_content)
+#             continue
+#         if not isinstance(msg, ChatMessage):
+#             st.error(f"Unexpected message type: {type(msg)}")
+#             st.write(msg)
+#             st.stop()
+
+#         match msg.type:
+#             # A message from the user, the easiest case
+#             case "human":
+#                 last_message_type = "human"
+#                 st.chat_message("human").write(msg.content)
+
+#             # A message from the agent is the most complex case, since we need to
+#             # handle streaming tokens and tool calls.
+#             case "ai":
+#                 # If we're rendering new messages, store the message in session state
+#                 if is_new:
+#                     st.session_state.messages.append(msg)
+
+#                 # If the last message type was not AI, create a new chat message
+#                 if last_message_type != "ai":
+#                     last_message_type = "ai"
+#                     st.session_state.last_message = st.chat_message("ai")
+
+#                 with st.session_state.last_message:
+#                     # If the message has content, write it out.
+#                     # Reset the streaming variables to prepare for the next message.
+#                     if msg.content:
+#                         if streaming_placeholder:
+#                             streaming_placeholder.write(msg.content)
+#                             streaming_content = ""
+#                             streaming_placeholder = None
+#                         else:
+#                             st.write(msg.content)
+
+#                     if msg.tool_calls:
+#                         # Create a status container for each tool call and store the
+#                         # status container by ID to ensure results are mapped to the
+#                         # correct status container.
+#                         call_results = {}
+#                         for tool_call in msg.tool_calls:
+#                             # Use different labels for transfer vs regular tool calls
+#                             if "transfer_to" in tool_call["name"]:
+#                                 label = f"""💼 Sub Agent: {tool_call["name"]}"""
+#                             else:
+#                                 label = f"""🛠️ Tool Call: {tool_call["name"]}"""
+
+#                             status = st.status(
+#                                 label,
+#                                 state="running" if is_new else "complete",
+#                             )
+#                             call_results[tool_call["id"]] = status
+
+#                         # Expect one ToolMessage for each tool call.
+#                         for tool_call in msg.tool_calls:
+#                             if "transfer_to" in tool_call["name"]:
+#                                 status = call_results[tool_call["id"]]
+#                                 status.update(expanded=True)
+#                                 await handle_sub_agent_msgs(messages_agen, status, is_new)
+#                                 break
+
+#                             # Only non-transfer tool calls reach this point
+#                             status = call_results[tool_call["id"]]
+#                             status.write("Input:")
+#                             status.write(tool_call["args"])
+#                             tool_result: ChatMessage = await anext(messages_agen)
+
+#                             if tool_result.type != "tool":
+#                                 st.error(f"Unexpected ChatMessage type: {tool_result.type}")
+#                                 st.write(tool_result)
+#                                 st.stop()
+
+#                             # Record the message if it's new, and update the correct
+#                             # status container with the result
+#                             if is_new:
+#                                 st.session_state.messages.append(tool_result)
+#                             if tool_result.tool_call_id:
+#                                 status = call_results[tool_result.tool_call_id]
+#                             status.write("Output:")
+#                             status.write(tool_result.content)
+#                             status.update(state="complete")
+
+#             case "custom":
+#                 # CustomData example used by the bg-task-agent
+#                 # See:
+#                 # - src/agents/utils.py CustomData
+#                 # - src/agents/bg_task_agent/task.py
+#                 try:
+#                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
+#                 except ValidationError:
+#                     st.error("Unexpected CustomData message received from agent")
+#                     st.write(msg.custom_data)
+#                     st.stop()
+
+#                 if is_new:
+#                     st.session_state.messages.append(msg)
+
+#                 if last_message_type != "task":
+#                     last_message_type = "task"
+#                     st.session_state.last_message = st.chat_message(
+#                         name="task", avatar=":material/manufacturing:"
+#                     )
+#                     with st.session_state.last_message:
+#                         status = TaskDataStatus()
+
+#                 status.add_and_draw_task_data(task_data)
+
+#             # In case of an unexpected message type, log an error and stop
+#             case _:
+#                 st.error(f"Unexpected ChatMessage type: {msg.type}")
+#                 st.write(msg)
+#                 st.stop()
+
+# async def draw_messages(
+#     messages_agen: AsyncGenerator[ChatMessage | str | dict, None], # [SỬA ĐỔI]: Thêm `dict` vào Type Hint
+#     is_new: bool = False,
+# ) -> None:
+#     """
+#     Draws a set of chat messages - either replaying existing messages
+#     or streaming new ones.
+
+#     This function has additional logic to handle streaming tokens and tool calls.
+#     - Use a placeholder container to render streaming tokens as they arrive.
+#     - Use a status container to render tool calls. Track the tool inputs and outputs
+#       and update the status container accordingly.
+
+#     The function also needs to track the last message container in session state
+#     since later messages can draw to the same container. This is also used for
+#     drawing the feedback widget in the latest chat message.
+
+#     Args:
+#         messages_agen: An async iterator over messages to draw.
+#         is_new: Whether the messages are new or not.
+#     """
+
+#     # Keep track of the last message container
+#     last_message_type = None
+#     st.session_state.last_message = None
+
+#     # Placeholder for intermediate streaming tokens
+#     streaming_content = ""
+#     streaming_placeholder = None
+    
+#     # [THÊM MỚI]: Biến lưu trữ danh sách trích dẫn tạm thời cho message hiện tại
+#     current_citations = []
+
+#     # Iterate over the messages and draw them
+#     while msg := await anext(messages_agen, None):
+#         # str message represents an intermediate token being streamed
+#         if isinstance(msg, str):
+#             # If placeholder is empty, this is the first token of a new message
+#             # being streamed. We need to do setup.
+#             if not streaming_placeholder:
+#                 if last_message_type != "ai":
+#                     last_message_type = "ai"
+#                     st.session_state.last_message = st.chat_message("ai")
+#                 with st.session_state.last_message:
+#                     streaming_placeholder = st.empty()
+
+#             streaming_content += msg
+#             streaming_placeholder.write(streaming_content)
+#             continue
+            
+#         if isinstance(msg, dict) and msg.get("type") == "citations_ready":
+#             citations = msg.get("data", [])
+            
+#             # 1. Vẽ trực tiếp lên container AI hiện tại
+#             if citations and st.session_state.last_message:
+#                 with st.session_state.last_message:
+#                     with st.expander("📚 Nguồn tham khảo"):
+#                         for idx, cite in enumerate(citations):
+#                             file_name = cite.get("file_name", f"Tài liệu {idx+1}")
+#                             s3_url = cite.get("s3_url", "#")
+#                             preview = cite.get("text_preview", "")
+#                             source_type = cite.get("source_type", "Nội bộ")
+                            
+#                             st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+#                             if preview:
+#                                 st.caption(f"> {preview}...")
+            
+#             # 2. Lưu thuộc tính 'citations' vào tin nhắn AI cuối cùng để render lại khi F5
+#             if st.session_state.messages and st.session_state.messages[-1].type == "ai":
+#                 setattr(st.session_state.messages[-1], "citations", citations)
+                
+#             continue
+
+#         if not isinstance(msg, ChatMessage):
+#             st.error(f"Unexpected message type: {type(msg)}")
+#             st.write(msg)
+#             st.stop()
+
+#         match msg.type:
+#             # A message from the user, the easiest case
+#             case "human":
+#                 last_message_type = "human"
+#                 st.chat_message("human").write(msg.content)
+
+#             # A message from the agent is the most complex case, since we need to
+#             # handle streaming tokens and tool calls.
+#             case "ai":
+#                 # If we're rendering new messages, store the message in session state
+#                 if is_new:
+#                     st.session_state.messages.append(msg)
+
+#                 # If the last message type was not AI, create a new chat message
+#                 if last_message_type != "ai":
+#                     last_message_type = "ai"
+#                     st.session_state.last_message = st.chat_message("ai")
+
+#                 with st.session_state.last_message:
+#                     # If the message has content, write it out.
+#                     # Reset the streaming variables to prepare for the next message.
+#                     if msg.content:
+#                         if streaming_placeholder:
+#                             streaming_placeholder.write(msg.content)
+#                             streaming_content = ""
+#                             streaming_placeholder = None
+#                         else:
+#                             st.write(msg.content)
+
+#                     if hasattr(msg, "citations") and msg.citations:
+#                         with st.expander("📚 Nguồn tham khảo"):
+#                             for idx, cite in enumerate(msg.citations):
+#                                 file_name = cite.get("file_name", f"Tài liệu {idx+1}")
+#                                 s3_url = cite.get("s3_url", "#")
+#                                 preview = cite.get("text_preview", "")
+#                                 source_type = cite.get("source_type", "Nội bộ")
+                                
+#                                 st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+#                                 if preview:
+#                                     st.caption(f"> {preview}...")
+
+#                     if msg.tool_calls:
+#                         # Create a status container for each tool call and store the
+#                         # status container by ID to ensure results are mapped to the
+#                         # correct status container.
+#                         call_results = {}
+#                         for tool_call in msg.tool_calls:
+#                             # Use different labels for transfer vs regular tool calls
+#                             if "transfer_to" in tool_call["name"]:
+#                                 label = f"""💼 Sub Agent: {tool_call["name"]}"""
+#                             else:
+#                                 label = f"""🛠️ Tool Call: {tool_call["name"]}"""
+
+#                             status = st.status(
+#                                 label,
+#                                 state="running" if is_new else "complete",
+#                             )
+#                             call_results[tool_call["id"]] = status
+
+#                         # Expect one ToolMessage for each tool call.
+#                         for tool_call in msg.tool_calls:
+#                             if "transfer_to" in tool_call["name"]:
+#                                 status = call_results[tool_call["id"]]
+#                                 status.update(expanded=True)
+#                                 await handle_sub_agent_msgs(messages_agen, status, is_new)
+#                                 break
+
+#                             # Only non-transfer tool calls reach this point
+#                             status = call_results[tool_call["id"]]
+#                             status.write("Input:")
+#                             status.write(tool_call["args"])
+#                             tool_result: ChatMessage = await anext(messages_agen)
+
+#                             if tool_result.type != "tool":
+#                                 st.error(f"Unexpected ChatMessage type: {tool_result.type}")
+#                                 st.write(tool_result)
+#                                 st.stop()
+
+#                             # Record the message if it's new, and update the correct
+#                             # status container with the result
+#                             if is_new:
+#                                 st.session_state.messages.append(tool_result)
+#                             if tool_result.tool_call_id:
+#                                 status = call_results[tool_result.tool_call_id]
+#                             status.write("Output:")
+#                             status.write(tool_result.content)
+#                             status.update(state="complete")
+
+#             case "custom":
+#                 # CustomData example used by the bg-task-agent
+#                 # See:
+#                 # - src/agents/utils.py CustomData
+#                 # - src/agents/bg_task_agent/task.py
+#                 try:
+#                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
+#                 except ValidationError:
+#                     st.error("Unexpected CustomData message received from agent")
+#                     st.write(msg.custom_data)
+#                     st.stop()
+
+#                 if is_new:
+#                     st.session_state.messages.append(msg)
+
+#                 if last_message_type != "task":
+#                     last_message_type = "task"
+#                     st.session_state.last_message = st.chat_message(
+#                         name="task", avatar=":material/manufacturing:"
+#                     )
+#                     with st.session_state.last_message:
+#                         status = TaskDataStatus()
+
+#                 status.add_and_draw_task_data(task_data)
+
+#             # In case of an unexpected message type, log an error and stop
+#             case _:
+#                 st.error(f"Unexpected ChatMessage type: {msg.type}")
+#                 st.write(msg)
+#                 st.stop()
+
 async def draw_messages(
-    messages_agen: AsyncGenerator[ChatMessage | str, None],
+    messages_agen: AsyncGenerator[ChatMessage | str | dict, None],
     is_new: bool = False,
 ) -> None:
-    """
-    Draws a set of chat messages - either replaying existing messages
-    or streaming new ones.
 
-    This function has additional logic to handle streaming tokens and tool calls.
-    - Use a placeholder container to render streaming tokens as they arrive.
-    - Use a status container to render tool calls. Track the tool inputs and outputs
-      and update the status container accordingly.
-
-    The function also needs to track the last message container in session state
-    since later messages can draw to the same container. This is also used for
-    drawing the feedback widget in the latest chat message.
-
-    Args:
-        messages_aiter: An async iterator over messages to draw.
-        is_new: Whether the messages are new or not.
-    """
-
-    # Keep track of the last message container
     last_message_type = None
     st.session_state.last_message = None
-
-    # Placeholder for intermediate streaming tokens
     streaming_content = ""
     streaming_placeholder = None
 
-    # Iterate over the messages and draw them
     while msg := await anext(messages_agen, None):
-        # str message represents an intermediate token being streamed
+        # 1. XỬ LÝ TOKENS ĐANG STREAM (STR)
         if isinstance(msg, str):
-            # If placeholder is empty, this is the first token of a new message
-            # being streamed. We need to do setup.
             if not streaming_placeholder:
                 if last_message_type != "ai":
                     last_message_type = "ai"
@@ -328,32 +660,76 @@ async def draw_messages(
             streaming_content += msg
             streaming_placeholder.write(streaming_content)
             continue
+            
+        # 2. XỬ LÝ EVENT CITATIONS_READY (DICT)
+        if isinstance(msg, dict) and msg.get("type") == "citations_ready":
+            citations = msg.get("data", [])
+            
+            # A. Vẽ ngay lập tức lên giao diện hiện hành
+            if citations and st.session_state.last_message:
+                with st.session_state.last_message:
+                    with st.expander("📚 Nguồn tham khảo"):
+                        for idx, cite in enumerate(citations):
+                            file_name = cite.get("file_name", f"Tài liệu {idx+1}")
+                            s3_url = cite.get("s3_url", "#")
+                            preview = cite.get("text_preview", "")
+                            source_type = cite.get("source_type", "Nội bộ")
+                            
+                            st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+                            if preview:
+                                st.caption(f"> {preview}...")
+            
+            # B. LƯU VÀO STATE ĐỂ GIỮ LẠI SAU KHI RERUN
+            if is_new:
+                # Trường hợp 1: Nếu AI message CỦA LƯỢT NÀY ĐÃ được chốt vào mảng (do tiến trình S3 xử lý chậm hơn LLM)
+                if st.session_state.messages and st.session_state.messages[-1].type == "ai":
+                    try:
+                        if getattr(st.session_state.messages[-1], "additional_kwargs", None) is None:
+                            st.session_state.messages[-1].additional_kwargs = {}
+                        st.session_state.messages[-1].additional_kwargs["citations"] = citations
+                    except Exception:
+                        # Fallback nếu model Pydantic chặn
+                        setattr(st.session_state.messages[-1], "citations", citations)
+                else:
+                    # Trường hợp 2: Nếu AI message CHƯA được chốt (đang stream text)
+                    # -> Lưu tạm vào state chờ Lát nữa gán
+                    st.session_state.pending_citations = citations
+                    
+            continue
+
+        # 3. XỬ LÝ CHATMESSAGE OBJECT CHÍNH THỨC
         if not isinstance(msg, ChatMessage):
             st.error(f"Unexpected message type: {type(msg)}")
             st.write(msg)
             st.stop()
 
         match msg.type:
-            # A message from the user, the easiest case
             case "human":
                 last_message_type = "human"
                 st.chat_message("human").write(msg.content)
 
-            # A message from the agent is the most complex case, since we need to
-            # handle streaming tokens and tool calls.
             case "ai":
-                # If we're rendering new messages, store the message in session state
                 if is_new:
+                    # NẾU CÓ CITATIONS ĐANG CHỜ, BƠM NGAY VÀO MESSAGE TRƯỚC KHI APPEND VÀO STATE
+                    if "pending_citations" in st.session_state:
+                        try:
+                            if getattr(msg, "additional_kwargs", None) is None:
+                                msg.additional_kwargs = {}
+                            msg.additional_kwargs["citations"] = st.session_state.pending_citations
+                        except Exception:
+                            setattr(msg, "citations", st.session_state.pending_citations)
+                        
+                        del st.session_state.pending_citations
+                        
+                    # Chốt lưu vào lịch sử
                     st.session_state.messages.append(msg)
 
-                # If the last message type was not AI, create a new chat message
                 if last_message_type != "ai":
                     last_message_type = "ai"
                     st.session_state.last_message = st.chat_message("ai")
 
                 with st.session_state.last_message:
-                    # If the message has content, write it out.
-                    # Reset the streaming variables to prepare for the next message.
+                    # 1. Vẽ text content
                     if msg.content:
                         if streaming_placeholder:
                             streaming_placeholder.write(msg.content)
@@ -362,13 +738,31 @@ async def draw_messages(
                         else:
                             st.write(msg.content)
 
+                    # 2. PHỤC HỒI GIAO DIỆN CITATIONS TỪ LỊCH SỬ KHI RERUN (is_new = False)
+                    # Lấy dữ liệu ra theo 2 cách (tùy thuộc vào model bạn đã thiết lập)
+                    saved_citations = getattr(msg, "additional_kwargs", {}).get("citations", [])
+                    if not saved_citations:
+                        saved_citations = getattr(msg, "citations", [])
+                        
+                    if saved_citations:
+                        with st.expander("📚 Nguồn tham khảo"):
+                            for idx, cite in enumerate(saved_citations):
+                                file_name = cite.get("file_name", f"Tài liệu {idx+1}")
+                                s3_url = cite.get("s3_url", "#")
+                                preview = cite.get("text_preview", "")
+                                source_type = cite.get("source_type", "Nội bộ")
+                                
+                                st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+                                if preview:
+                                    st.caption(f"> {preview}...")
+
+                    # =================================================================
+                    # Phần xử lý tool_calls (nếu có) của bạn được giữ nguyên ở dưới đây
+                    # ... [Code msg.tool_calls của bạn paste tiếp vào đây] ...
+                    # =================================================================
                     if msg.tool_calls:
-                        # Create a status container for each tool call and store the
-                        # status container by ID to ensure results are mapped to the
-                        # correct status container.
                         call_results = {}
                         for tool_call in msg.tool_calls:
-                            # Use different labels for transfer vs regular tool calls
                             if "transfer_to" in tool_call["name"]:
                                 label = f"""💼 Sub Agent: {tool_call["name"]}"""
                             else:
@@ -380,7 +774,6 @@ async def draw_messages(
                             )
                             call_results[tool_call["id"]] = status
 
-                        # Expect one ToolMessage for each tool call.
                         for tool_call in msg.tool_calls:
                             if "transfer_to" in tool_call["name"]:
                                 status = call_results[tool_call["id"]]
@@ -388,7 +781,6 @@ async def draw_messages(
                                 await handle_sub_agent_msgs(messages_agen, status, is_new)
                                 break
 
-                            # Only non-transfer tool calls reach this point
                             status = call_results[tool_call["id"]]
                             status.write("Input:")
                             status.write(tool_call["args"])
@@ -399,8 +791,6 @@ async def draw_messages(
                                 st.write(tool_result)
                                 st.stop()
 
-                            # Record the message if it's new, and update the correct
-                            # status container with the result
                             if is_new:
                                 st.session_state.messages.append(tool_result)
                             if tool_result.tool_call_id:
@@ -410,10 +800,7 @@ async def draw_messages(
                             status.update(state="complete")
 
             case "custom":
-                # CustomData example used by the bg-task-agent
-                # See:
-                # - src/agents/utils.py CustomData
-                # - src/agents/bg_task_agent/task.py
+                # ... [Code custom của bạn paste tiếp vào đây] ...
                 try:
                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
                 except ValidationError:
@@ -432,7 +819,6 @@ async def draw_messages(
 
                 status.add_and_draw_task_data(task_data)
 
-            # In case of an unexpected message type, log an error and stop
             case _:
                 st.error(f"Unexpected ChatMessage type: {msg.type}")
                 st.write(msg)

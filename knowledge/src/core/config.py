@@ -3,6 +3,9 @@ from pydantic_core import MultiHostUrl
 from pydantic import computed_field
 
 class Settings(BaseSettings):
+    """Postgres schema for all Knowledge service tables (created on startup + migrations)."""
+    KNOWLEDGE_SCHEMA: str = "knowledge_schema"
+
     UPLOAD_DIR: str = "./uploads"
     MAX_CONCURRENT_WORKERS: int = 10 
     BATCH_SIZE: int = 50

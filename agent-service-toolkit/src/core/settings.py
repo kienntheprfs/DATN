@@ -269,6 +269,15 @@ class Settings(BaseSettings):
                 case _:
                     raise ValueError(f"Unknown provider: {provider}")
 
+    STORAGE_TYPE: str | None = "local"
+    UPLOAD_DIR: str | None = "./uploads"
+
+    S3_ENDPOINT: str | None = None
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_BUCKET: str | None = None
+    S3_REGION: str | None = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def BASE_URL(self) -> str:
