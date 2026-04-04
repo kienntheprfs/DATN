@@ -8,8 +8,7 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -202,6 +201,7 @@ async def _handle_input(
 @router.post("/invoke")
 async def invoke(
     user_input: UserInput, 
+    background_tasks: BackgroundTasks,
     agent_id: str = DEFAULT_AGENT,
     chat_service: ChatService = Depends(get_chat_service),           
     ) -> ChatMessage:
@@ -220,7 +220,11 @@ async def invoke(
     # in that case.
     agent: AgentGraph = get_agent(agent_id)
 
-    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
+    valid_thread_id = await chat_service.get_or_create_thread(
+        thread_id=user_input.thread_id, 
+        user_query=user_input.message,
+        background_tasks=background_tasks
+    )
 
     kwargs, run_id = await _handle_input(user_input, agent, chat_service.user_id, valid_thread_id)
 
@@ -582,6 +586,7 @@ def _sse_response_example() -> dict[int | str, Any]:
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
     user_input: StreamInput, 
+    background_tasks: BackgroundTasks,
     chat_service: ChatService = Depends(get_chat_service),
     agent_id: str = DEFAULT_AGENT
     ) -> StreamingResponse:
@@ -595,8 +600,11 @@ async def stream(
 
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
-    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
-
+    valid_thread_id = await chat_service.get_or_create_thread(
+        thread_id=user_input.thread_id, 
+        user_query=user_input.message,
+        background_tasks=background_tasks
+    )
     return StreamingResponse(
         message_generator(user_input, chat_service.user_id, valid_thread_id, agent_id),
         media_type="text/event-stream",
