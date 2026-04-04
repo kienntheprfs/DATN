@@ -57,13 +57,6 @@ logs/
 *.ogg
 *.m4a
 
-# Model files (too large for git)
-models/
-*.bin
-*.onnx
-*.pth
-*.pt
-
 # Piper TTS data files (too large for git)
 piper_tts/piper/espeak-ng-data/
 piper_tts/piper/*.dll
