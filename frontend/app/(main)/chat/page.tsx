@@ -10,6 +10,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
 import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
+import { getUserId } from "@/services/auth-api";
 
 function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const searchParams = useSearchParams();
@@ -61,6 +62,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		agentId: agent || "chatbot",
 		model,
 		threadId: threadId,
+		userId: getUserId() || undefined,
 		createThread: async () => {
 			return crypto.randomUUID();
 		},
@@ -70,9 +72,9 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 				clearVoiceTools();
 			}
 		},
-		onBotOutput: (text) => {
+		onBotOutput: (text, runId) => {
 			if (text.trim()) {
-				appendBotMessage(text);
+				appendBotMessage(text, runId);
 			}
 		},
 		onToolStarted: (toolCalls) => {

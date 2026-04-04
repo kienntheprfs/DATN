@@ -22,12 +22,10 @@ export interface RatingResponse {
 	updated_at: string;
 }
 
-const DASHBOARD_API_BASE = '/api';
-
 export const ratingService = {
 	async createOrUpdate(rating: RatingCreate): Promise<RatingResponse> {
 		const response = await apiClient.post<RatingResponse>(
-			`${DASHBOARD_API_BASE}/dashboard/ratings`,
+			`/dashboard/ratings`,
 			rating
 		);
 		return response.data;
@@ -35,13 +33,13 @@ export const ratingService = {
 
 	async getThreadRatings(threadId: string): Promise<RatingResponse[]> {
 		const response = await apiClient.get<RatingResponse[]>(
-			`${DASHBOARD_API_BASE}/dashboard/ratings/thread/${threadId}`
+			`/dashboard/ratings/thread/${threadId}`
 		);
 		return response.data;
 	},
 
 	async deleteRating(ratingId: string): Promise<void> {
-		await apiClient.delete(`${DASHBOARD_API_BASE}/dashboard/ratings/${ratingId}`);
+		await apiClient.delete(`/dashboard/ratings/${ratingId}`);
 	},
 };
 

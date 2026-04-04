@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { RatingValue, ratingService } from "@/services/rating-api";
+import { apiClient } from "@/services/auth-api";
 
 interface RatingButtonsProps {
 	runId: string;
@@ -151,11 +152,9 @@ export function RatingButtons({ runId, threadId, agentId }: RatingButtonsProps) 
 	useEffect(() => {
 		if (!isAuthenticated()) return;
 
-		fetch(`/api/dashboard/ratings/thread/${threadId}`, {
-			headers: { "Content-Type": "application/json" },
-		})
-			.then((res) => res.json())
-			.then((ratings: Array<{ id: string; run_id: string; rating: RatingValue }>) => {
+		apiClient.get<Array<{ id: string; run_id: string; rating: RatingValue }>>(`/dashboard/ratings/thread/${threadId}`)
+			.then((res) => {
+				const ratings = res.data;
 				const existingRating = ratings.find((r) => r.run_id === runId);
 				if (existingRating) {
 					setRated(existingRating.rating);

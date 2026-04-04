@@ -156,6 +156,10 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
                                 msg_type_inner = content.get("type")
 
                                 if msg_type_inner == "ai":
+                                    logger.info(
+                                        f"[Voice] AI message content keys: {content.keys() if isinstance(content, dict) else 'not dict'}"
+                                    )
+                                    logger.info(f"[Voice] Full content: {content}")
                                     tool_calls = content.get("tool_calls", [])
                                     if tool_calls:
                                         if self._on_tool_calls:

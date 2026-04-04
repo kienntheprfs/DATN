@@ -35,7 +35,7 @@ interface UseChatReturn {
 	sendMessage: (message: string, queryMode?: "normal" | "deep") => Promise<void>;
 	addUserMessage: (content: string) => string;
 	addBotMessage: (content: string) => string;
-	appendBotMessage: (content: string) => void;
+	appendBotMessage: (content: string, runId?: string) => void;
 	updateLastBotMessage: (content: string) => void;
 	addVoiceToolCall: (tool: { id: string; name: string; args?: Record<string, unknown> }) => void;
 	updateVoiceToolResult: (toolCallId: string, content: string) => void;
@@ -290,17 +290,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		return id;
 	}, []);
 
-	const appendBotMessage = useCallback((content: string) => {
+	const appendBotMessage = useCallback((content: string, runId?: string) => {
+		console.log("[use-chat] appendBotMessage:", content.substring(0, 50), "runId:", runId);
 		setMessages((prev) => {
 			const lastIdx = prev.length - 1;
 			if (lastIdx >= 0 && prev[lastIdx].role === "assistant") {
 				return prev.map((m, i) => 
-					i === lastIdx ? { ...m, content: (m.content || "") + "\n" + content } : m
+					i === lastIdx ? { ...m, content: (m.content || "") + "\n" + content, run_id: runId ?? m.run_id } : m
 				);
 			}
 			// If no assistant message exists, create one
 			const id = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-			return [...prev, { id, role: "assistant", content }];
+			return [...prev, { id, role: "assistant", content, run_id: runId }];
 		});
 	}, []);
 

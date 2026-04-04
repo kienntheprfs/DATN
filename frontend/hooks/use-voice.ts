@@ -77,6 +77,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const [partialText, setPartialText] = useState<string>("");
   const [lastRunId, setLastRunId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const lastRunIdRef = useRef<string | null>(null);
   const partialTextRef = useRef<string>("");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -222,14 +223,17 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
               }
 
               if (onBotOutput) {
-                onBotOutput(trimmedText, message.data.run_id);
+                console.log("[RTVI] onBotOutput:", trimmedText, "run_id from ref:", lastRunIdRef.current);
+                onBotOutput(trimmedText, lastRunIdRef.current || undefined);
               }
             }
             break;
 
           case "run-id":
             if (message.data?.run_id) {
+              lastRunIdRef.current = message.data.run_id;
               setLastRunId(message.data.run_id);
+              console.log("[RTVI] run-id received, stored in ref:", message.data.run_id);
             }
             break;
 

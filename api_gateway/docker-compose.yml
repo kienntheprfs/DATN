@@ -11,7 +11,7 @@ services:
       AGENT_UPSTREAM_ADDR: host.docker.internal:8080
       KNOWLEDGE_UPSTREAM_ADDR: host.docker.internal:8000
       WAYFINDER_UPSTREAM_ADDR: host.docker.internal:8001
-      DASHBOARD_UPSTREAM_ADDR: host.docker.internal:8010
+      DASHBOARD_UPSTREAM_ADDR: host.docker.internal:8007
       VOICE_UPSTREAM_ADDR: host.docker.internal:7860
       INTERNAL_SECRET: ${INTERNAL_SECRET:-your-internal-secret-for-service-to-service-auth}
     extra_hosts:

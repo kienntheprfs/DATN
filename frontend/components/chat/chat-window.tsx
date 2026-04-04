@@ -291,15 +291,20 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 
 		for (const m of visibleMessages) {
 			const lastGroup = groups[groups.length - 1];
-			if (lastGroup && lastGroup.role === m.role && m.role === "assistant" && currentTools.length === 0) {
-				lastGroup.messages.push(m);
-			} else {
-				groups.push({ role: m.role, messages: [m] });
-			}
+			groups.push({ role: m.role, messages: [m] });
 		}
 
 		return groups;
-	}, [visibleMessages, currentTools.length]);
+	}, [visibleMessages]);
+
+	const getGroupRunId = (group: GroupedMessages): string | undefined => {
+		if (group.role !== "assistant") return undefined;
+		for (let i = group.messages.length - 1; i >= 0; i--) {
+			console.log(`[chat-window] group message ${i}: content="${group.messages[i].content?.substring(0,30)}", run_id="${group.messages[i].run_id}"`);
+			if (group.messages[i].run_id) return group.messages[i].run_id;
+		}
+		return undefined;
+	};
 
 	return (
 		<div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -307,11 +312,14 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
 					const isMessageActive = isLastGroup && isActive;
+					const groupRunId = getGroupRunId(group);
 					const combinedContent = group.role === "assistant" 
 						? group.messages.map(m => m.content).filter(Boolean).join(" ")
 						: "";
 					const isThinkingMessage = isMessageActive && !combinedContent && !isVoiceMode && currentTools.length === 0;
 					const showToolsForThisGroup = isLastGroup && currentTools.length > 0;
+					const showRating = groupRunId && threadId && group.role === "assistant" && combinedContent;
+					console.log(`[chat-window] group ${groupIndex}: isLastGroup=${isLastGroup}, role=${group.role}, groupRunId=${groupRunId}, threadId=${threadId}, combinedContentLength=${combinedContent.length}, showRating=${showRating}`);
 
 					if (group.role === "user") {
 						return (
@@ -345,21 +353,6 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 						);
 					}
 
-					if (showToolsForThisGroup && !combinedContent && !routeData) {
-						return (
-							<div key={`group-${groupIndex}`} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-								<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
-									<Bot className="size-6" />
-								</div>
-								<div className="flex-1 max-w-[85%]">
-									{currentTools.map((tool) => (
-										<ToolCollapsible key={tool.id} tool={tool} />
-									))}
-								</div>
-							</div>
-						);
-					}
-
 					return (
 						<div key={`group-${groupIndex}`} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 							<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
@@ -378,10 +371,10 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 										</div>
 									</div>
 								)}
-								{combinedContent && (lastBotMessage?.run_id || lastRunId) && threadId && (
+								{showRating && (
 									<div className="flex items-center gap-1 pl-2">
 										<RatingButtons
-											runId={lastBotMessage?.run_id || lastRunId || ""}
+											runId={groupRunId || ""}
 											threadId={threadId}
 											agentId={agentId}
 										/>

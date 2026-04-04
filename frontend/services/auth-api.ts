@@ -254,4 +254,16 @@ export const authService = {
 
 export const getAuthHeaders = () => getCommonHeaders();
 
+export const getUserId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const user = localStorage.getItem("user");
+  if (!user) return null;
+  try {
+    const parsed = JSON.parse(user);
+    return parsed.id?.toString() || parsed.sub?.toString() || null;
+  } catch {
+    return null;
+  }
+};
+
 export default authService;
