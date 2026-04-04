@@ -6,16 +6,43 @@ from ..repositories.document_storage_repository import StorageRepository
 from ..schemas.document_storage import StorageCreate, StorageUpdate
 from ..models.models import DocumentStorage
 
+from ..core.vector_db_setup import QdrantManager
+from .vector_db import VectorDBService
+
 class StorageService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = StorageRepository(db)
 
+    # async def create_storage(self, payload: StorageCreate) -> DocumentStorage:
+    #     # Business Logic: Có thể check trùng tên ở đây nếu muốn
+    #     storage = await self.repo.create(payload.model_dump())
+    #     await self.db.commit()
+    #     await self.db.refresh(storage)
+    #     return storage
+    
     async def create_storage(self, payload: StorageCreate) -> DocumentStorage:
-        # Business Logic: Có thể check trùng tên ở đây nếu muốn
+        # 1. Tạo Storage trên Postgres
         storage = await self.repo.create(payload.model_dump())
         await self.db.commit()
         await self.db.refresh(storage)
+
+        # 2. Khởi tạo Qdrant Collection ngay lập tức
+        try:
+            qdrant_client = QdrantManager.get_client()
+            collection_name = f"kb_{storage.id}"
+            
+            # Khởi tạo VectorDBService và gọi hàm ensure
+            vector_db = VectorDBService(qdrant_client, collection_name)
+            await vector_db.ensure_hybrid_collection()
+            
+        except Exception as e:
+            # Tuỳ thuộc vào nghiệp vụ, bạn có thể rollback Postgres ở đây 
+            # nếu bắt buộc phải có Collection thì mới cho tạo Storage.
+            print(f"Lỗi khi tạo Qdrant collection cho storage {storage.id}: {e}")
+            await self.db.rollback() 
+            raise HTTPException(status_code=500, detail="Failed to create vector collection")
+
         return storage
 
     async def get_storage(self, storage_id: int) -> DocumentStorage:

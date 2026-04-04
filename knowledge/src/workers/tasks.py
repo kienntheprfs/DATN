@@ -1,87 +1,77 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from src.core.sql_db_setup import AsyncSessionLocal
-from src.core.vector_db_setup import QdrantManager  # Import Singleton Manager
+from src.core.vector_db_setup import QdrantManager
 from src.core.config import settings
 from src.core.transaction import QdrantTransaction
-from src.models.models import Chunk, ProcessingStatus, DocumentVersion
+from src.models.models import ProcessingStatus
 from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 from src.repositories.document_repository import DocumentRepository
-from src.services.file_storage import get_storage # CHECK: Co nen import o day khong (hay o main/...), worker dung chung co sao khong
+from src.services.file_storage import get_storage
 
 logger = logging.getLogger(__name__)
 
+
 async def process_batch_safe(
-    batch_chunks: list[dict], 
-    version_id: int, 
+    batch_chunks: list[dict],
     document_id: int,
     ingestion_svc: IngestionService,
-    vector_svc: VectorDBService
-) -> Tuple[List[Chunk], List[str]]:
-    """
-    Xử lý 1 batch: Embed Hybrid -> Upsert Qdrant -> Return PG Models
-    """
+    vector_svc: VectorDBService,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     try:
         texts = [c["text"] for c in batch_chunks]
-        
-        # 1. Hybrid Embedding 
-        # Output expectation: List[{'dense': [...], 'sparse': {'indices': [], 'values': []}}]
         embeddings_data = await ingestion_svc.embed_hybrid_batch(texts)
-        
-        # 2. Prepare Payload cho Qdrant
+
         points_data = []
         for i, chunk_data in enumerate(batch_chunks):
-            points_data.append({
-                "dense": embeddings_data[i]["dense"],
-                "sparse": embeddings_data[i]["sparse"],
-                "payload": {
-                    "content": chunk_data["text"],
-                    "document_id": document_id,
-                    "version_id": version_id,
-                    "chunk_index": chunk_data["index"],
-                    "metadata": chunk_data.get("metadata", {})
+            points_data.append(
+                {
+                    "dense": embeddings_data[i]["dense"],
+                    "sparse": embeddings_data[i]["sparse"],
+                    "payload": {
+                        "content": chunk_data["text"],
+                        "doc_id": document_id,
+                        "chunk_index": chunk_data["index"],
+                        "type": "chunk",
+                        "metadata": chunk_data.get("metadata", {}),
+                    },
                 }
-            })
+            )
 
-        # 3. Upsert Qdrant (Dùng hàm mới trong VectorDBService)
-        # Hàm này trả về list UUID vừa tạo
         new_point_ids = await vector_svc.upsert_hybrid_batch(points_data)
 
-        # 4. Map sang Postgres Model
-        pg_chunks = []
+        pg_rows = []
         for i, point_id in enumerate(new_point_ids):
-            pg_chunks.append(Chunk(
-                document_id=document_id,
-                document_version_id=version_id,
-                chunk_index=batch_chunks[i]["index"],
-                content=batch_chunks[i]["text"],
-                embedding_id=point_id, # Lưu UUID của vector để map
-                chunk_metadata={"length": len(batch_chunks[i]["text"])}
-            ))
-        
-        return pg_chunks, new_point_ids
+            pg_rows.append(
+                {
+                    "document_id": document_id,
+                    "chunk_index": batch_chunks[i]["index"],
+                    "content": batch_chunks[i]["text"],
+                    "embedding_id": point_id,
+                    "chunk_metadata": {"length": len(batch_chunks[i]["text"])},
+                }
+            )
+
+        return pg_rows, new_point_ids
 
     except Exception as e:
-        logger.error(f"Error processing batch v{version_id}: {str(e)}")
+        logger.error(f"Error processing batch for document {document_id}: {str(e)}")
         raise e
+
 
 async def batch_worker(
     name: str,
     queue: asyncio.Queue,
-    version_id: int,
     document_id: int,
     ingestion: IngestionService,
     vector_db: VectorDBService,
     results: list,
     errors: list,
 ):
-    """
-    Worker đơn giản lấy task từ Queue và chạy process_batch_safe
-    """
     while True:
         batch = await queue.get()
         if batch is None:
@@ -90,7 +80,7 @@ async def batch_worker(
 
         try:
             pg_chunks, qdrant_ids = await process_batch_safe(
-                batch, version_id, document_id, ingestion, vector_db
+                batch, document_id, ingestion, vector_db
             )
             results.append((pg_chunks, qdrant_ids))
         except Exception as e:
@@ -100,103 +90,79 @@ async def batch_worker(
             queue.task_done()
 
 
-async def background_index_document(version_id: int):
-    # =========================
-    # PHASE 1 — PREPARE (DB Interaction)
-    # =========================
+async def background_index_document(document_id: int):
     async with AsyncSessionLocal() as session:
         repo = DocumentRepository(session)
         storage = get_storage()
-        version = await repo.get_version_with_details(version_id)
-        if not version:
-            logger.error(f"Version {version_id} not found")
+        doc_row = await repo.get_for_ingestion(document_id)
+        if not doc_row:
+            logger.error(f"Document {document_id} not found")
             return
 
-        document_id = version.document_id
-        collection_name = f"kb_{version.document.storage_id}"
+        collection_name = f"kb_{doc_row.storage_id}"
 
-        version.processing_status = ProcessingStatus.PROCESSING
-        version.processing_started_at = datetime.now()
+        doc_row.processing_status = ProcessingStatus.PROCESSING
+        doc_row.processing_started_at = datetime.now()
         await session.commit()
+        file_path = doc_row.file_path
+        doc_type = doc_row.document_type
 
-    # =========================
-    # PHASE 2 — PROCESSING
-    # =========================
-    # Sử dụng Singleton Manager -> Không cần try/finally để close client
     qdrant_client = QdrantManager.get_client()
-    
+
     try:
         ingestion = IngestionService()
         vector_db = VectorDBService(qdrant_client, collection_name)
 
-        # BƯỚC QUAN TRỌNG: Đảm bảo Collection có cấu hình Hybrid
-        # Nếu không có bước này, upsert sparse vector sẽ lỗi
         await vector_db.ensure_hybrid_collection()
 
-        # ---- Extract & Chunk ----
-        logger.info(f"[Version {version_id}] Extracting...")
+        logger.info(f"[Document {document_id}] Extracting...")
 
-        async with storage.download_stream(version.file_path) as file_stream:
-            # Tránh blocking
+        async with storage.download_stream(file_path) as file_stream:
             raw_text = await asyncio.to_thread(
                 ingestion.extract_text,
-                file_stream=file_stream,  # <--- Truyền stream
-                doc_type=version.document_type,
-                filename=version.file_path
+                file_stream=file_stream,
+                doc_type=doc_type,
+                filename=file_path,
             )
 
-        # Validate kết quả
         if not raw_text or len(raw_text.strip()) == 0:
-             raise ValueError("Document is empty or text could not be extracted")
+            raise ValueError("Document is empty or text could not be extracted")
 
-        logger.info(f"[Version {version_id}] Chunking...")
+        logger.info(f"[Document {document_id}] Chunking...")
         text_chunks = await ingestion.chunk_text_recursive(raw_text)
 
         if not text_chunks:
             raise RuntimeError("No chunks extracted")
 
-        formatted_chunks = [
-            {"text": text, "index": i} for i, text in enumerate(text_chunks)
-        ]
+        formatted_chunks = [{"text": text, "index": i} for i, text in enumerate(text_chunks)]
 
-        # Chia Batch
         batch_size = settings.BATCH_SIZE
         batches = [
-            formatted_chunks[i:i + batch_size]
+            formatted_chunks[i : i + batch_size]
             for i in range(0, len(formatted_chunks), batch_size)
         ]
 
-        logger.info(f"[Version {version_id}] Processing {len(batches)} batches...")
+        logger.info(f"[Document {document_id}] Processing {len(batches)} batches...")
 
-        # =========================
-        # PHASE 2.5 — TRANSACTION & EXECUTION
-        # =========================
         async with QdrantTransaction(qdrant_client, collection_name) as trx:
-            
-            # Clean old data (Dùng lại hàm backup cũ của bạn)
             await trx.delete_with_backup(doc_id=document_id)
 
-            # ---- Setup Worker Pool ----
             queue: asyncio.Queue = asyncio.Queue()
             results: list = []
             errors: list = []
 
-            # Push tasks
             for batch in batches:
                 queue.put_nowait(batch)
-            
-            # Sentinel (tín hiệu dừng)
+
             num_workers = settings.MAX_CONCURRENT_WORKERS
             for _ in range(num_workers):
                 queue.put_nowait(None)
 
-            # Start Workers
             workers = [
                 asyncio.create_task(
                     batch_worker(
                         name=f"Worker-{i}",
                         queue=queue,
-                        version_id=version_id,
                         document_id=document_id,
                         ingestion=ingestion,
                         vector_db=vector_db,
@@ -207,53 +173,43 @@ async def background_index_document(version_id: int):
                 for i in range(num_workers)
             ]
 
-            # Wait for Queue to empty
             await queue.join()
-            
-            # Wait for Workers to finish cleanly
             await asyncio.gather(*workers)
 
-            # Check errors
             if errors:
                 raise RuntimeError(f"Indexing failed with {len(errors)} batch errors.")
 
-            # ---- Aggregate Results ----
-            all_pg_chunks: List[Chunk] = []
+            all_pg_rows: List[Dict[str, Any]] = []
             all_qdrant_ids: List[str] = []
 
             for pg_list, q_ids in results:
-                all_pg_chunks.extend(pg_list)
+                all_pg_rows.extend(pg_list)
                 all_qdrant_ids.extend(q_ids)
 
-            # Track ID để Rollback nếu bước Save DB bên dưới lỗi
             trx.track_upsert(all_qdrant_ids)
 
-            # =========================
-            # PHASE 3 — SAVE POSTGRES
-            # =========================
             async with AsyncSessionLocal() as db_session:
-                db_session.add_all(all_pg_chunks)
-                
-                v_update = await db_session.get(DocumentVersion, version_id)
-                v_update.processing_status = ProcessingStatus.COMPLETED
-                v_update.processing_completed_at = datetime.now()
-                
+                doc_repo = DocumentRepository(db_session)
+                await doc_repo.bulk_create_chunks(all_pg_rows)
+                await doc_repo.update_processing_status(
+                    document_id, ProcessingStatus.COMPLETED
+                )
                 await db_session.commit()
 
-        logger.info(f"[Version {version_id}] DONE. Indexed {len(all_pg_chunks)} chunks.")
+        logger.info(f"[Document {document_id}] DONE. Indexed {len(all_pg_rows)} chunks.")
 
-    # =========================
-    # FAILURE HANDLING
-    # =========================
     except Exception as e:
-        logger.exception(f"[Version {version_id}] FAILED")
-        
+        logger.exception(f"[Document {document_id}] FAILED")
+
         async with AsyncSessionLocal() as session:
-            v = await session.get(DocumentVersion, version_id)
-            if v:
-                v.processing_status = ProcessingStatus.FAILED
-                v.processing_error = str(e)[:1000]
-                await session.commit()
+            doc_repo = DocumentRepository(session)
+            await doc_repo.update_processing_status(
+                document_id,
+                ProcessingStatus.FAILED,
+                error_msg=str(e)[:1000],
+            )
+            await session.commit()
+
 
 # ===============================
 
