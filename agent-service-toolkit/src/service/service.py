@@ -42,10 +42,11 @@ from service.utils import (
     langchain_to_chat_message,
     remove_tool_calls,
 )
-from service.chat_service import ChatService
 from repositories.chat_repo import ChatRepository
+from service.chat_service import ChatService
 from service.dependencies import get_chat_service
-from core.database import engine
+from rag_utils.reference import reference_service
+from core.database import AsyncSessionLocal
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -245,6 +246,27 @@ async def invoke(
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 
+import asyncio
+
+# Hàm chạy ngầm xử lý việc lấy URL S3 và đẩy vào Queue
+async def background_s3_task(artifacts: list, queue: asyncio.Queue):
+    try:
+        from rag_utils.reference import reference_service
+        from core.database import AsyncSessionLocal
+        
+        async with AsyncSessionLocal() as db:
+            resolved_citations = await reference_service.resolve_citations(artifacts, db)
+            if resolved_citations:
+                sse_data = {
+                    "type": "citations_ready",
+                    "content": resolved_citations
+                }
+                await queue.put(f"data: {json.dumps(sse_data, ensure_ascii=False)}\n\n")
+    except Exception as e:
+        logger.error(f"Lỗi khi xử lý link S3: {e}")
+
+# =========================================================================
+
 async def message_generator(
     user_input: StreamInput, 
     user_id: str,    
@@ -259,106 +281,275 @@ async def message_generator(
     agent: AgentGraph = get_agent(agent_id)
     kwargs, run_id = await _handle_input(user_input, agent, user_id, thread_id)
 
-    try:
-        # Process streamed events from the graph and yield messages over the SSE stream.
-        async for stream_event in agent.astream(
-            **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
-        ):
-            if not isinstance(stream_event, tuple):
-                continue
-            # Handle different stream event structures based on subgraphs
-            if len(stream_event) == 3:
-                # With subgraphs=True: (node_path, stream_mode, event)
-                _, stream_mode, event = stream_event
-            else:
-                # Without subgraphs: (stream_mode, event)
-                stream_mode, event = stream_event
-            new_messages = []
-            if stream_mode == "updates":
-                for node, updates in event.items():
-                    # A simple approach to handle agent interrupts.
-                    # In a more sophisticated implementation, we could add
-                    # some structured ChatMessage type to return the interrupt value.
-                    if node == "__interrupt__":
-                        interrupt: Interrupt
-                        for interrupt in updates:
-                            new_messages.append(AIMessage(content=interrupt.value))
-                        continue
-                    updates = updates or {}
-                    update_messages = updates.get("messages", [])
-                    # special cases for using langgraph-supervisor library
-                    if "supervisor" in node or "sub-agent" in node:
-                        # the only tools that come from the actual agent are the handoff and handback tools
-                        if isinstance(update_messages[-1], ToolMessage):
-                            if "sub-agent" in node and len(update_messages) > 1:
-                                # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
-                                update_messages = update_messages[-2:]
-                            else:
-                                # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
-                                update_messages = [update_messages[-1]]
-                        else:
-                            update_messages = []
-                    new_messages.extend(update_messages)
+    # THÊM MỚI: Khởi tạo hàng đợi trung chuyển và tập hợp quản lý task ngầm
+    queue = asyncio.Queue()
+    background_tasks = set()
 
-            if stream_mode == "custom":
-                new_messages = [event]
-
-            # LangGraph streaming may emit tuples: (field_name, field_value)
-            # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
-            # We accumulate only supported fields into `parts` and skip unsupported metadata.
-            # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
-            processed_messages = []
-            current_message: dict[str, Any] = {}
-            for message in new_messages:
-                if isinstance(message, tuple):
-                    key, value = message
-                    # Store parts in temporary dict
-                    current_message[key] = value
+    # THÊM MỚI: Bọc toàn bộ logic LangGraph gốc vào một hàm bất đồng bộ
+    async def _run_graph():
+        try:
+            # Process streamed events from the graph and yield messages over the SSE stream.
+            async for stream_event in agent.astream(
+                **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
+            ):
+                if not isinstance(stream_event, tuple):
+                    continue
+                # Handle different stream event structures based on subgraphs
+                if len(stream_event) == 3:
+                    # With subgraphs=True: (node_path, stream_mode, event)
+                    _, stream_mode, event = stream_event
                 else:
-                    # Add complete message if we have one in progress
-                    if current_message:
-                        processed_messages.append(_create_ai_message(current_message))
-                        current_message = {}
-                    processed_messages.append(message)
+                    # Without subgraphs: (stream_mode, event)
+                    stream_mode, event = stream_event
+                new_messages = []
+                if stream_mode == "updates":
+                    for node, updates in event.items():
+                        # A simple approach to handle agent interrupts.
+                        # In a more sophisticated implementation, we could add
+                        # some structured ChatMessage type to return the interrupt value.
+                        if node == "__interrupt__":
+                            interrupt: Interrupt
+                            for interrupt in updates:
+                                new_messages.append(AIMessage(content=interrupt.value))
+                            continue
+                        updates = updates or {}
+                        update_messages = updates.get("messages", [])
+                        # special cases for using langgraph-supervisor library
+                        if "supervisor" in node or "sub-agent" in node:
+                            # the only tools that come from the actual agent are the handoff and handback tools
+                            if isinstance(update_messages[-1], ToolMessage):
+                                if "sub-agent" in node and len(update_messages) > 1:
+                                    # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
+                                    update_messages = update_messages[-2:]
+                                else:
+                                    # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
+                                    update_messages = [update_messages[-1]]
+                            else:
+                                update_messages = []
+                        new_messages.extend(update_messages)
 
-            # Add any remaining message parts
-            if current_message:
-                processed_messages.append(_create_ai_message(current_message))
+                if stream_mode == "custom":
+                    new_messages = [event]
 
-            for message in processed_messages:
-                try:
-                    chat_message = langchain_to_chat_message(message)
-                    chat_message.run_id = str(run_id)
-                except Exception as e:
-                    logger.error(f"Error parsing message: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
-                    continue
-                # LangGraph re-sends the input message, which feels weird, so drop it
-                if chat_message.type == "human" and chat_message.content == user_input.message:
-                    continue
-                yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+                # THÊM MỚI: Quét qua các tin nhắn mới, nếu là Tool RAG thì kích hoạt background task
+                for msg in new_messages:
+                    if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == "lookup_hcmut_info":
+                        artifacts = getattr(msg, "artifact", [])
+                        if artifacts:
+                            # Phóng task ngầm xử lý S3
+                            task = asyncio.create_task(background_s3_task(artifacts, queue))
+                            background_tasks.add(task)
+                            task.add_done_callback(background_tasks.discard)
 
-            if stream_mode == "messages":
-                if not user_input.stream_tokens:
-                    continue
-                msg, metadata = event
-                if "skip_stream" in metadata.get("tags", []):
-                    continue
-                # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
-                # Drop them.
-                if not isinstance(msg, AIMessageChunk):
-                    continue
-                content = remove_tool_calls(msg.content)
-                if content:
-                    # Empty content in the context of OpenAI usually means
-                    # that the model is asking for a tool to be invoked.
-                    # So we only print non-empty content.
-                    yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
-    except Exception as e:
-        logger.error(f"Error in message generator: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
-    finally:
-        yield "data: [DONE]\n\n"
+                # LangGraph streaming may emit tuples: (field_name, field_value)
+                # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
+                # We accumulate only supported fields into `parts` and skip unsupported metadata.
+                # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
+                processed_messages = []
+                current_message: dict[str, Any] = {}
+                for message in new_messages:
+                    if isinstance(message, tuple):
+                        key, value = message
+                        # Store parts in temporary dict
+                        current_message[key] = value
+                    else:
+                        # Add complete message if we have one in progress
+                        if current_message:
+                            processed_messages.append(_create_ai_message(current_message))
+                            current_message = {}
+                        processed_messages.append(message)
+
+                # Add any remaining message parts
+                if current_message:
+                    processed_messages.append(_create_ai_message(current_message))
+
+                for message in processed_messages:
+                    try:
+                        chat_message = langchain_to_chat_message(message)
+                        chat_message.run_id = str(run_id)
+                    except Exception as e:
+                        logger.error(f"Error parsing message: {e}")
+                        # SỬA ĐỔI: yield -> await queue.put
+                        await queue.put(f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n")
+                        continue
+                    # LangGraph re-sends the input message, which feels weird, so drop it
+                    if chat_message.type == "human" and chat_message.content == user_input.message:
+                        continue
+                    
+                    # SỬA ĐỔI: yield -> await queue.put
+                    await queue.put(f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n")
+
+                if stream_mode == "messages":
+                    if not user_input.stream_tokens:
+                        continue
+                    msg, metadata = event
+                    if "skip_stream" in metadata.get("tags", []):
+                        continue
+                    # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
+                    # Drop them.
+                    if not isinstance(msg, AIMessageChunk):
+                        continue
+                    content = remove_tool_calls(msg.content)
+                    if content:
+                        # Empty content in the context of OpenAI usually means
+                        # that the model is asking for a tool to be invoked.
+                        # So we only print non-empty content.
+                        
+                        # SỬA ĐỔI: yield -> await queue.put
+                        await queue.put(f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n")
+        
+        except Exception as e:
+            logger.error(f"Error in message generator: {e}")
+            # SỬA ĐỔI: yield -> await queue.put
+            await queue.put(f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n")
+        finally:
+            # THÊM MỚI: Đợi các task lấy link S3 hoàn tất (nếu có) trước khi đóng stream
+            if background_tasks:
+                await asyncio.gather(*background_tasks, return_exceptions=True)
+            
+            # SỬA ĐỔI: yield -> await queue.put
+            await queue.put("data: [DONE]\n\n")
+            
+            # THÊM MỚI: Gửi Sentinel value (None) để báo hiệu vòng lặp chính kết thúc
+            await queue.put(None)
+
+    # THÊM MỚI: Kích hoạt _run_graph() chạy ngầm
+    asyncio.create_task(_run_graph())
+
+    # THÊM MỚI: Vòng lặp chính liên tục rút dữ liệu từ queue và yield ra Client
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        yield item
+# ---------------
+# import asyncio
+# async def background_s3_task(artifacts: list, queue: asyncio.Queue):
+#     """ Mở kết nối DB, dùng Reference Service giải mã path và đẩy vào Queue """
+#     try:
+#         # Tạo session độc lập không chặn luồng chính
+#         async with AsyncSessionLocal() as db:
+#             resolved_citations = await reference_service.resolve_citations(artifacts, db)
+            
+#             # Đẩy vào stream cho Client
+#             await queue.put(f"data: {json.dumps({'type': 'citations_ready', 'content': resolved_citations})}\n\n")
+#     except Exception as e:
+#         logger.error(f"Lỗi khi resolve S3 citations: {e}")
+
+# async def message_generator(
+#     user_input: StreamInput, 
+#     user_id: str,    
+#     thread_id: str,
+#     agent_id: str = DEFAULT_AGENT,
+# ) -> AsyncGenerator[str, None]:
+#     """
+#     Generate a stream of messages from the agent.
+
+#     This is the workhorse method for the /stream endpoint.
+#     """
+#     agent: AgentGraph = get_agent(agent_id)
+#     kwargs, run_id = await _handle_input(user_input, agent, user_id, thread_id)
+
+#     try:
+#         # Process streamed events from the graph and yield messages over the SSE stream.
+#         async for stream_event in agent.astream(
+#             **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
+#         ):
+#             if not isinstance(stream_event, tuple):
+#                 continue
+#             # Handle different stream event structures based on subgraphs
+#             if len(stream_event) == 3:
+#                 # With subgraphs=True: (node_path, stream_mode, event)
+#                 _, stream_mode, event = stream_event
+#             else:
+#                 # Without subgraphs: (stream_mode, event)
+#                 stream_mode, event = stream_event
+#             new_messages = []
+#             if stream_mode == "updates":
+#                 for node, updates in event.items():
+#                     # A simple approach to handle agent interrupts.
+#                     # In a more sophisticated implementation, we could add
+#                     # some structured ChatMessage type to return the interrupt value.
+#                     if node == "__interrupt__":
+#                         interrupt: Interrupt
+#                         for interrupt in updates:
+#                             new_messages.append(AIMessage(content=interrupt.value))
+#                         continue
+#                     updates = updates or {}
+#                     update_messages = updates.get("messages", [])
+#                     # special cases for using langgraph-supervisor library
+#                     if "supervisor" in node or "sub-agent" in node:
+#                         # the only tools that come from the actual agent are the handoff and handback tools
+#                         if isinstance(update_messages[-1], ToolMessage):
+#                             if "sub-agent" in node and len(update_messages) > 1:
+#                                 # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
+#                                 update_messages = update_messages[-2:]
+#                             else:
+#                                 # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
+#                                 update_messages = [update_messages[-1]]
+#                         else:
+#                             update_messages = []
+#                     new_messages.extend(update_messages)
+
+#             if stream_mode == "custom":
+#                 new_messages = [event]
+
+#             # LangGraph streaming may emit tuples: (field_name, field_value)
+#             # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
+#             # We accumulate only supported fields into `parts` and skip unsupported metadata.
+#             # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
+#             processed_messages = []
+#             current_message: dict[str, Any] = {}
+#             for message in new_messages:
+#                 if isinstance(message, tuple):
+#                     key, value = message
+#                     # Store parts in temporary dict
+#                     current_message[key] = value
+#                 else:
+#                     # Add complete message if we have one in progress
+#                     if current_message:
+#                         processed_messages.append(_create_ai_message(current_message))
+#                         current_message = {}
+#                     processed_messages.append(message)
+
+#             # Add any remaining message parts
+#             if current_message:
+#                 processed_messages.append(_create_ai_message(current_message))
+
+#             for message in processed_messages:
+#                 try:
+#                     chat_message = langchain_to_chat_message(message)
+#                     chat_message.run_id = str(run_id)
+#                 except Exception as e:
+#                     logger.error(f"Error parsing message: {e}")
+#                     yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
+#                     continue
+#                 # LangGraph re-sends the input message, which feels weird, so drop it
+#                 if chat_message.type == "human" and chat_message.content == user_input.message:
+#                     continue
+#                 yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+
+#             if stream_mode == "messages":
+#                 if not user_input.stream_tokens:
+#                     continue
+#                 msg, metadata = event
+#                 if "skip_stream" in metadata.get("tags", []):
+#                     continue
+#                 # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
+#                 # Drop them.
+#                 if not isinstance(msg, AIMessageChunk):
+#                     continue
+#                 content = remove_tool_calls(msg.content)
+#                 if content:
+#                     # Empty content in the context of OpenAI usually means
+#                     # that the model is asking for a tool to be invoked.
+#                     # So we only print non-empty content.
+#                     yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+#     except Exception as e:
+#         logger.error(f"Error in message generator: {e}")
+#         yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
+#     finally:
+#         yield "data: [DONE]\n\n"
 
 
 def _create_ai_message(parts: dict) -> AIMessage:

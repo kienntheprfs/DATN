@@ -13,7 +13,7 @@ class RetrievedChunk(BaseModel):
     chunk_id: str
     content: str       # Nội dung trả lời
     score: float       # Độ liên quan
-    doc_id: int        # ID file gốc (để trích dẫn nếu cần)
+    doc_id: int | str       # ID file gốc (để trích dẫn nếu cần)
     source_type: str   # 'pdf', 'docx', etc.
     answer: Optional[str]
     metadata: Dict[str, Any]

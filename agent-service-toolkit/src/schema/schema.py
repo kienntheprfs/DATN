@@ -129,6 +129,8 @@ class ChatMessage(BaseModel):
     )
     timestamp: Optional[str] = None
 
+    citations: list[dict[str, Any]] | None = Field(default=None)
+
     def pretty_repr(self) -> str:
         """Get a pretty representation of the message."""
         base_title = self.type.title() + " Message"
