@@ -97,7 +97,7 @@ export default function ProfilePage() {
 	if (isLoading) {
 		return (
 			<div className="flex-1 overflow-auto p-6">
-				<div className="max-w-[1400px] mx-auto w-full space-y-6">
+				<div className="max-w-350 mx-auto w-full space-y-6">
 					<Card>
 						<CardContent className="p-8">
 							<div className="flex flex-col md:flex-row gap-6 items-start">

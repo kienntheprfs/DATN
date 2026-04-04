@@ -21,6 +21,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { PlusIcon, UploadIcon, Building2Icon, LayersIcon } from "lucide-react";
+import { toast } from "sonner";
 
 interface BuildingModalProps {
     nodeId?: number;
@@ -89,8 +90,10 @@ export const BuildingModal = ({ nodeId, initialBuildingId, onClose, onSuccess }:
             await linkNodeToBuilding(newBuilding.id);
             setNewBuildingName("");
             onSuccess?.();
-        } catch {
-            alert("Lỗi tạo tòa nhà");
+        } catch (error) {
+            toast.error("Lỗi tạo tòa nhà", {
+                description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+            });
         } finally {
             setIsLoading(false);
         }
@@ -111,9 +114,12 @@ export const BuildingModal = ({ nodeId, initialBuildingId, onClose, onSuccess }:
 
             await mapApi.upload(formData);
             await loadFloors(selectedBuildingId);
+            toast.success("Upload thành công!");
         } catch (error) {
             console.error(error);
-            alert("Upload thất bại!");
+            toast.error("Upload thất bại!", {
+                description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+            });
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";

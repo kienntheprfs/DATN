@@ -22,6 +22,7 @@ import { eventsApi } from '@/services/events-api';
 import { locationApi } from '@/services/location-api';
 import { Event, EventCreate } from '@/types';
 import { LocationSuggestion } from '@/types/wayfinding';
+import { toast } from 'sonner';
 
 const CATEGORIES = [
   { value: '', label: 'Tất cả' },
@@ -238,6 +239,9 @@ export default function EventsPage() {
       setEvents(data);
     } catch (error) {
       console.error('Failed to load events:', error);
+      toast.error('Không thể tải danh sách sự kiện', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     } finally {
       setLoading(false);
     }
@@ -277,7 +281,9 @@ export default function EventsPage() {
       loadEvents();
     } catch (error) {
       console.error('Failed to save event:', error);
-      alert('Lỗi khi lưu sự kiện!');
+      toast.error('Lỗi khi lưu sự kiện!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -305,9 +311,12 @@ export default function EventsPage() {
     try {
       await eventsApi.delete(id);
       loadEvents();
+      toast.success('Xóa sự kiện thành công!');
     } catch (error) {
       console.error('Failed to delete event:', error);
-      alert('Lỗi khi xóa sự kiện!');
+      toast.error('Lỗi khi xóa sự kiện!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 

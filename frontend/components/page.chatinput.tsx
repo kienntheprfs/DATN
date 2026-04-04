@@ -16,7 +16,6 @@ interface ChatInputProps {
   onSubmitMessage?: (message: string, queryMode?: QueryMode) => void;
   onSubmitAndRedirect?: (message: string, queryMode?: QueryMode) => void;
   isLoading?: boolean;
-  apiGatewayUrl?: string;
   voiceAgentId?: string;
   userId?: string;
   voiceModel?: string;
@@ -36,7 +35,6 @@ export function ChatInput({
   onSubmitMessage,
   onSubmitAndRedirect,
   isLoading = false,
-  apiGatewayUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
   voiceAgentId = "chatbot",
   userId,
   voiceModel,
@@ -167,7 +165,6 @@ export function ChatInput({
             )}
 
             <VoiceButton
-              apiGatewayUrl={apiGatewayUrl}
               agentId={voiceAgentId}
               userId={userId}
               model={voiceModel}

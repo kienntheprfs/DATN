@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { BuildingModal } from './BuildingModal';
 import { Building2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface EditorInspectorProps {
   currentMap: MapData | null;
@@ -117,9 +118,12 @@ export function EditorInspector({
       setEditedData(null);
       onSetEditing(false);
       onRefreshNodes();
+      toast.success('Lưu thành công!');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Lỗi khi lưu!');
+      toast.error('Lỗi khi lưu!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 
@@ -130,15 +134,19 @@ export function EditorInspector({
       if (selectedType === 'node') {
         await editorApi.deleteNode(selectedId);
         onNodeDelete(selectedId);
+        toast.success('Đã xóa node!');
       } else if (selectedType === 'edge') {
         await editorApi.deleteEdge(selectedId);
         onEdgeDelete(selectedId);
+        toast.success('Đã xóa edge!');
       }
       setEditedData(null);
       onSelect(null, null);
     } catch (error) {
       console.error('Error deleting:', error);
-      alert('Lỗi khi xóa!');
+      toast.error('Lỗi khi xóa!', {
+        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
+      });
     }
   };
 

@@ -1,4 +1,4 @@
-import { apiClient } from './auth-api';
+import { apiClient, getAuthHeaders } from './auth-api';
 
 export interface ServiceInfo {
 	models: string[];
@@ -81,10 +81,11 @@ export const agentClient = {
 		if (model) requestBody.model = model;
 		requestBody.agent = agent;
 
+		const authHeaders = getAuthHeaders();
 		const response = await fetch(`/api/agent/stream?agent_id=${agent}`, {
 			method: "POST",
 			headers: {
-				'Content-Type': 'application/json',
+				...authHeaders,
 			},
 			body: JSON.stringify(requestBody),
 			signal,

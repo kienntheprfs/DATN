@@ -11,6 +11,7 @@ import { LocationSearch } from './LocationSearch';
 import { Button } from '@/components/ui/button';
 import { ArrowUpDown, Navigation, RefreshCw} from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 
 const ACTION_ICONS: Record<string, string> = {
   start: 'trip_origin',
@@ -190,9 +191,11 @@ export default function NavigationPage() {
   const handleRefreshCache = async () => {
     try {
       const result = await wayfindingApi.refreshCache();
-      alert(`Đã cập nhật cache: ${result.node_count} nodes`);
+      toast.success('Đã cập nhật cache', {
+        description: `${result.node_count} nodes đã được làm mới.`,
+      });
     } catch (err) {
-      alert('Lỗi khi refresh cache');
+      toast.error('Lỗi khi refresh cache');
     }
   };
 

@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 from loguru import logger
 from pipecat.services.openai.base_llm import BaseOpenAILLMService, OpenAILLMSettings
 from openai.types.chat import ChatCompletionChunk
+from pipecat.frames.frames import OutputTransportMessageFrame
 
 
 def strip_markdown(text: str) -> str:
@@ -63,6 +64,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         session: Optional[aiohttp.ClientSession] = None,
         on_tool_calls: Optional[ToolCallCallback] = None,
         on_tool_result: Optional[ToolResultCallback] = None,
+        transport=None,
         **kwargs,
     ):
         settings = OpenAILLMSettings(model="dummy")
@@ -76,6 +78,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self._client_session_owned = False
         self._on_tool_calls = on_tool_calls
         self._on_tool_result = on_tool_result
+        self._transport = transport
 
     async def get_chat_completions(self, params_from_context):
         if hasattr(params_from_context, "messages"):
@@ -157,6 +160,19 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
                                     if tool_calls:
                                         if self._on_tool_calls:
                                             await self._on_tool_calls(tool_calls)
+                                    run_id = content.get("run_id", "")
+                                    if run_id and self._transport:
+                                        try:
+                                            msg = {
+                                                "label": "rtvi-ai",
+                                                "type": "run-id",
+                                                "data": {"run_id": run_id},
+                                            }
+                                            await self._transport.output().send_message(
+                                                OutputTransportMessageFrame(message=msg)
+                                            )
+                                        except Exception as e:
+                                            logger.error(f"Failed to send run-id: {e}")
 
                                 elif msg_type_inner == "tool":
                                     tool_call_id = content.get("tool_call_id", "")

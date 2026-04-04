@@ -128,12 +128,12 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-apiClient.interceptors.response.use(
+  apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._skipAuthRefresh) {
       originalRequest._retry = true;
       
       if (!isRefreshing) {
@@ -167,12 +167,16 @@ apiClient.interceptors.response.use(
 
 export const authService = {
   register: async (data: RegisterRequest): Promise<User> => {
-    const response = await apiClient.post<User>('/auth/register', data);
+    const response = await apiClient.post<User>('/auth/register', data, {
+      _skipAuthRefresh: true,
+    } as any);
     return response.data;
   },
 
   login: async (email: string, password: string): Promise<TokenResponse> => {
-    const response = await apiClient.post<TokenResponse>('/auth/login', { email, password });
+    const response = await apiClient.post<TokenResponse>('/auth/login', { email, password }, {
+      _skipAuthRefresh: true,
+    } as any);
     if (response.data.access_token) {
       localStorage.setItem('access_token', response.data.access_token);
       localStorage.setItem('refresh_token', response.data.refresh_token || '');
@@ -187,7 +191,9 @@ export const authService = {
   },
 
   googleLogin: async (credential: string): Promise<TokenResponse> => {
-    const response = await apiClient.post<TokenResponse>('/auth/google', { credential });
+    const response = await apiClient.post<TokenResponse>('/auth/google', { credential }, {
+      _skipAuthRefresh: true,
+    } as any);
     if (response.data.access_token) {
       localStorage.setItem('access_token', response.data.access_token);
       localStorage.setItem('refresh_token', response.data.refresh_token || '');
@@ -205,7 +211,9 @@ export const authService = {
     const refreshToken = localStorage.getItem('refresh_token');
     if (refreshToken) {
       try {
-        await apiClient.post('/auth/logout', { refresh_token: refreshToken });
+        await apiClient.post('/auth/logout', { refresh_token: refreshToken }, {
+          _skipAuthRefresh: true,
+        } as any);
       } catch {
         // Ignore logout errors
       }

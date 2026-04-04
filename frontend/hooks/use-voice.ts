@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAuthHeaders } from "@/services/auth-api";
 
 export type VoiceConnectionState =
   | "idle"
@@ -24,7 +25,6 @@ export interface VoiceToolResult {
 }
 
 interface UseVoiceOptions {
-  apiGatewayUrl: string;
   agentId?: string;
   userId?: string;
   model?: string;
@@ -55,7 +55,6 @@ interface UseVoiceReturn {
 
 export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const {
-    apiGatewayUrl,
     agentId = "chatbot",
     userId,
     model,
@@ -127,14 +126,12 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     if (!pcIdRef.current) return;
 
     try {
-      const targetUrl = `${apiGatewayUrl}/voice/offer`;
-      const token = localStorage.getItem('access_token');
+      const authHeaders = getAuthHeaders();
       
-      await fetch(targetUrl, {
+      await fetch("/api/voice/offer", {
         method: "PATCH",
         headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          ...authHeaders,
         },
         body: JSON.stringify({
           pc_id: pcIdRef.current,
@@ -148,7 +145,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     } catch (err) {
       console.error("Failed to send ICE candidate:", err);
     }
-  }, [apiGatewayUrl]);
+  }, []);
 
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
     const MESSAGE_DEBOUNCE_TIME = 500;
@@ -226,10 +223,13 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
 
               if (onBotOutput) {
                 onBotOutput(trimmedText, message.data.run_id);
-                if (message.data.run_id) {
-                  setLastRunId(message.data.run_id);
-                }
               }
+            }
+            break;
+
+          case "run-id":
+            if (message.data?.run_id) {
+              setLastRunId(message.data.run_id);
             }
             break;
 
@@ -374,9 +374,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
         type: pc.localDescription?.type,
       };
 
-      // Determine the target URL
-      const targetUrl = `${apiGatewayUrl}/voice/offer`;
-      const token = localStorage.getItem('access_token');
+      const authHeaders = getAuthHeaders();
 
       // Create thread if not provided
       let threadIdToUse = threadIdProp;
@@ -398,11 +396,10 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
         requestBody.request_data = requestData;
       }
 
-      const response = await fetch(targetUrl, {
+      const response = await fetch("/api/voice/offer", {
         method: "POST",
         headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+          ...authHeaders,
         },
         body: JSON.stringify(requestBody),
       });
@@ -436,7 +433,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
       cleanup();
       onError?.(errorMessage);
     }
-  }, [state, apiGatewayUrl, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
+  }, [state, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
 
   const stopConversation = useCallback(() => {
     cleanup();
