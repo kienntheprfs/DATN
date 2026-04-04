@@ -682,6 +682,42 @@ async def get_history_threads(
         # Không nên throw chi tiết lỗi hệ thống ra cho client, chỉ trả về 500
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
+@router.delete(
+    "/threads/{thread_id}",
+    summary="Xóa một lịch sử hội thoại",
+    description="Thực hiện xóa (soft delete) một hội thoại theo thread_id của user hiện tại."
+)
+async def delete_thread(
+    thread_id: str,
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    try:
+        await chat_service.delete_thread(thread_id)
+        return {"message": "Đã xóa hội thoại thành công.", "thread_id": thread_id}
+    except HTTPException as he:
+        # Cho phép các lỗi 403, 404 từ get_thread_strictly bay thẳng ra client
+        raise he
+    except Exception as e:
+        logger.error(f"An exception occurred while deleting thread {thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# THÊM MỚI: API Xóa tất cả thread của user
+@router.delete(
+    "/threads",
+    summary="Xóa toàn bộ lịch sử hội thoại",
+    description="Thực hiện xóa (soft delete) tất cả các hội thoại của user hiện tại."
+)
+async def delete_all_threads(
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    try:
+        await chat_service.delete_all_threads()
+        return {"message": "Đã xóa tất cả lịch sử hội thoại thành công."}
+    except Exception as e:
+        logger.error(f"An exception occurred while deleting all threads for user {chat_service.user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""

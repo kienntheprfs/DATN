@@ -116,3 +116,17 @@ class ChatService:
         )
 
         return threads
+    
+    async def delete_thread(self, thread_id: str) -> bool:
+        # Tận dụng hàm cũ để kiểm tra xem thread có tồn tại và có thuộc về user hiện tại không
+        # Nếu không thỏa mãn, hàm get_thread_strictly sẽ tự động ném ra HTTPException 404 hoặc 403
+        await self.get_thread_strictly(thread_id) 
+        
+        # Nếu qua được bước trên, tiến hành soft delete
+        await self.repo.delete_thread(thread_id)
+        return True
+
+    # THÊM MỚI: Xử lý logic xóa tất cả thread của user hiện tại
+    async def delete_all_threads(self) -> bool:
+        await self.repo.delete_all_threads_by_user(self.user_id)
+        return True
