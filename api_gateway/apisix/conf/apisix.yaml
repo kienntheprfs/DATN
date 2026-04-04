@@ -108,6 +108,9 @@ routes:
         headers:
           set:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
+      proxy-buffering:
+        disable_proxy_buffering: true
+        
     upstream_id: u-agent-stream
 
   - id: agent-info-public
