@@ -92,7 +92,7 @@ function DislikeDialog({ open, onClose, runId, threadId, agentId, onSubmit }: {
 
 	return (
 		<Dialog open={open} onOpenChange={handleClose}>
-			<DialogContent className="sm:max-w-[425px]">
+			<DialogContent className="sm:max-w-106.25">
 				<DialogHeader>
 					<DialogTitle>Phản hồi về câu trả lời</DialogTitle>
 				</DialogHeader>

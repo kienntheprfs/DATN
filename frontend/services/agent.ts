@@ -86,6 +86,7 @@ export const agentClient = {
 			method: "POST",
 			headers: {
 				...authHeaders,
+				"Accept": "text/event-stream",
 			},
 			body: JSON.stringify(requestBody),
 			signal,
