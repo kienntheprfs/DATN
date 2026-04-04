@@ -4,7 +4,6 @@ import type { AppState} from '@/types/state'
 import type { HistoryItem, User } from '@/types'
 import { authService } from '@/services/auth-api'
 import { agentClient } from '@/services/agent'
-import { formatTimeAgo } from '@/lib/utils'
 
 const MOCK_USERS = [
   { name: "Nguyễn Văn A", email: "nguyen.van.a@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=nguyenvana" },
@@ -72,7 +71,7 @@ export const useAppStore = create<AppState>()(
               id: thread.id,
               title: thread.title || "Cuộc trò chuyện mới",
               url: `/chat?thread_id=${thread.id}`,
-              timestamp: thread.updated_at ? formatTimeAgo(thread.updated_at) : "",
+              updatedAt: thread.updated_at || undefined,
               preview: thread.title || "",
             }));
 
@@ -93,11 +92,6 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "app-storage",
-      partialize: (state) => ({
-        history: state.history,
-        currentPage: state.currentPage,
-        hasMoreHistory: state.hasMoreHistory,
-      }),
     }
   )
 )

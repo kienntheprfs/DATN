@@ -54,6 +54,20 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 		key: chatKey,
 	});
 
+	const citations = useMemo(() => {
+		const allCitations: Array<{ file_name: string; s3_url: string; text_preview: string; source_type: string }> = [];
+		messages.forEach((msg) => {
+			if (msg.citations && msg.citations.length > 0) {
+				msg.citations.forEach((cite) => {
+					if (!allCitations.some((c) => c.file_name === cite.file_name)) {
+						allCitations.push(cite);
+					}
+				});
+			}
+		});
+		return allCitations;
+	}, [messages]);
+
 	useEffect(() => {
 		if (error) {
 			toast.error("Đã xảy ra lỗi", {
@@ -178,7 +192,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 						<>
 							<ResizableHandle withHandle />
 							<ResizablePanel defaultSize={50}>
-								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} />
+								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} citations={citations} />
 							</ResizablePanel>
 						</>
 					)}

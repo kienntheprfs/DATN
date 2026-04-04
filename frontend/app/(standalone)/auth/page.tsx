@@ -35,9 +35,7 @@ function AuthForm() {
 
 	useEffect(() => {
 		if (searchParams.get("redirected") === "true") {
-			setTimeout(() => {
-				toast.warning("Vui lòng đăng nhập để sử dụng tính năng này");
-			}, 100);
+			toast.warning("Vui lòng đăng nhập để sử dụng tính năng này");
 		}
 	}, [searchParams]);
 

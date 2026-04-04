@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, SortDesc, Download, Trash2, ExternalLink } from "lucide-react";
+import { Search, SortDesc, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/stores/app.store";
 import { authService } from "@/services/auth-api";
 import type { HistoryItem } from "@/types/history";
+import { formatTimeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,36 +24,39 @@ export default function HistoryPage() {
   const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, login } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
-  const [filteredHistory, setFilteredHistory] = useState<HistoryItem[]>([]);
+  const [filteredHistory, setFilteredHistory] = useState<Array<HistoryItem & { displayTimestamp?: string }>>([]);
+  const [tick, setTick] = useState(0);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!authService.isAuthenticated()) {
+      try {
+        await authService.me();
+      } catch {
         router.push("/auth?redirected=true");
         return;
-      }
-      if (!user) {
-        await login();
       }
       setIsCheckingAuth(false);
     };
     checkAuth();
-  }, [login]);
+  }, [router]);
 
   useEffect(() => {
-    if (isCheckingAuth) return;
-    if (!user) {
-      router.push("/auth?redirected=true");
-      return;
-    }
-    if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
-      fetchMoreHistory();
-    }
-  }, [isCheckingAuth, user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory, router]);
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const historyWithRecalculatedTime = useMemo(() => {
+    return history.map((item) => ({
+      ...item,
+      displayTimestamp: item.updatedAt ? formatTimeAgo(item.updatedAt) : item.timestamp,
+    }));
+  }, [history, tick]);
 
   useEffect(() => {
-    let filtered = history.filter((item) =>
+    let filtered = historyWithRecalculatedTime.filter((item) =>
       item.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -68,11 +73,19 @@ export default function HistoryPage() {
     }
 
     setFilteredHistory(filtered);
-  }, [history, searchQuery, sortBy]);
+  }, [historyWithRecalculatedTime, searchQuery, sortBy]);
 
   const handleReopen = (item: HistoryItem) => {
     router.push(`/chat?thread_id=${item.id}`);
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto w-full p-6 lg:p-10">
@@ -127,14 +140,6 @@ export default function HistoryPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Export Logs
-            </Button>
-            <Button variant="destructive" size="sm">
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear History
-            </Button>
           </div>
         </div>
 
@@ -144,9 +149,9 @@ export default function HistoryPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : filteredHistory.length > 0 ? (
-            filteredHistory.map((item) => (
+            filteredHistory.map((item, index) => (
               <div
-                key={item.id}
+                key={`${item.id}-${index}`}
                 className="flex flex-col bg-slate-50 border border-border rounded-lg p-5 hover:border-primary/40 transition-colors"
               >
                 <div className="flex justify-between items-start gap-4 mb-3">
@@ -154,7 +159,7 @@ export default function HistoryPage() {
                     {item.title}
                   </h3>
                   <span className="text-xs font-mono text-muted-foreground whitespace-nowrap bg-background px-2 py-1 border border-border rounded">
-                    {item.timestamp}
+                    {item.displayTimestamp}
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4 leading-relaxed">

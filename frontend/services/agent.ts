@@ -15,6 +15,12 @@ export interface ChatMessage {
 	run_id?: string;
 	msgType?: "text" | "tool";
 	toolName?: string;
+	citations?: Array<{
+		file_name: string;
+		s3_url: string;
+		text_preview: string;
+		source_type: string;
+	}>;
 }
 
 interface BackendChatMessage {
@@ -27,6 +33,12 @@ interface BackendChatMessage {
 		name: string;
 	}>;
 	tool_call_id?: string;
+	citations?: Array<{
+		file_name: string;
+		s3_url: string;
+		text_preview: string;
+		source_type: string;
+	}>;
 }
 
 export interface ChatHistory {

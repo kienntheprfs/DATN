@@ -60,6 +60,7 @@ interface ChatWindowProps {
 	lastRunId?: string;
 	voiceThreadId?: string;
 	voiceState?: string;
+	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview: string; source_type: string }) => void;
 }
 
 function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {
@@ -432,6 +433,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					const isThinkingMessage = isMessageActive && !combinedContent && !isVoiceMode && currentTools.length === 0;
 					const showToolsForThisGroup = isLastGroup && currentTools.length > 0;
 					const showRating = groupRunId && threadId && group.role === "assistant" && combinedContent;
+					const citations = group.messages.find(m => m.citations)?.citations;
 					console.log(`[chat-window] group ${groupIndex}: isLastGroup=${isLastGroup}, role=${group.role}, groupRunId=${groupRunId}, threadId=${threadId}, combinedContentLength=${combinedContent.length}, showRating=${showRating}`);
 
 					if (group.role === "user") {
@@ -503,6 +505,20 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 											threadId={threadId}
 											agentId={agentId}
 										/>
+									</div>
+								)}
+								{citations && citations.length > 0 && (
+									<div className="mt-2 p-3 bg-muted/50 rounded-lg border">
+										<div className="text-xs font-semibold text-muted-foreground mb-2">Nguồn tham khảo</div>
+										<div className="space-y-1">
+											{citations.map((cite, idx) => (
+												<div key={idx} className="text-xs">
+													<span className="font-medium">[{idx + 1}]</span>{" "}
+													<span className="text-primary">{cite.file_name}</span>
+													<span className="text-muted-foreground"> - {cite.source_type}</span>
+												</div>
+											))}
+										</div>
 									</div>
 								)}
 							</div>

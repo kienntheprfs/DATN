@@ -3,5 +3,6 @@ export interface HistoryItem {
   title: string;
   url: string;
   timestamp?: string;
+  updatedAt?: string;
   preview?: string;
 }

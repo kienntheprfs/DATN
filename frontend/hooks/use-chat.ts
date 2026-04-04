@@ -28,6 +28,12 @@ interface MessageChunk {
 	toolCallId?: string;
 	content: string;
 	run_id?: string;
+	citations?: Array<{
+		file_name: string;
+		s3_url: string;
+		text_preview: string;
+		source_type: string;
+	}>;
 }
 
 interface UseChatReturn {
@@ -137,6 +143,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 						run_id: msg.run_id,
 						msgType: msg.type === "tool" ? "tool" : "text",
 						toolName: msg.type === "tool" ? (toolCallsMap[msg.tool_call_id || ""] || "tool") : undefined,
+						citations: msg.citations,
 					}));
 					setMessages(formattedMessages);
 				} else {
@@ -221,6 +228,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 						const toolCallId = msgChunk.toolCallId;
 						const content = msgChunk.content;
 						const runId = msgChunk.run_id;
+						const citations = msgChunk.citations;
 
 						if (runId) {
 							currentRunIdRef.current = runId;
@@ -267,11 +275,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 								if (existing) {
 									return prev.map((m) =>
 										m.id === assistantMsgId
-											? { ...m, content: content }
+											? { ...m, content: content, ...(citations ? { citations } : {}) }
 											: m
 									);
 								}
-								return [...prev, { id: assistantMsgId, role: "assistant", content: content }];
+								return [...prev, { id: assistantMsgId, role: "assistant", content: content, ...(citations ? { citations } : {}) }];
+							});
+						}
+						break;
+					} else if (chunk.type === "citations_ready") {
+						const citations = (chunk as any).data;
+						console.log("[use-chat] citations_ready:", citations);
+						if (citations && Array.isArray(citations)) {
+							setMessages((prev) => {
+								return prev.map((m) =>
+									m.id === assistantMsgId
+										? { ...m, citations }
+										: m
+								);
 							});
 						}
 						break;
