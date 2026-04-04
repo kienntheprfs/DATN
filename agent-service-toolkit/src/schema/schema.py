@@ -201,3 +201,7 @@ class ThreadListResponse(BaseModel):
     items: list[ConversationResponse]
     limit: int
     offset: int
+
+# Định nghĩa payload nhận vào khi update title
+class UpdateTitleRequest(BaseModel):
+    new_title: str = Field(..., min_length=1, description="Tiêu đề mới của hội thoại")

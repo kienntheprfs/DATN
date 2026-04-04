@@ -113,7 +113,10 @@ class DocumentRepository:
         await self.db.execute(stmt)
         await self.db.flush()
 
-    async def cleanup_failed_document(self, document_id: int) -> None:
+    async def delete_chunks_for_document(self, document_id: int) -> None:
         stmt = delete(Chunk).where(Chunk.document_id == document_id)
         await self.db.execute(stmt)
         await self.db.flush()
+
+    async def cleanup_failed_document(self, document_id: int) -> None:
+        await self.delete_chunks_for_document(document_id)

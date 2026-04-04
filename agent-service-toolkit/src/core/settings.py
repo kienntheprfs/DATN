@@ -158,6 +158,8 @@ class Settings(BaseSettings):
     POSTGRES_APPLICATION_NAME: str = "agent-service-toolkit"
     POSTGRES_MIN_CONNECTIONS_PER_POOL: int = 1
     POSTGRES_MAX_CONNECTIONS_PER_POOL: int = 1
+    
+    POSTGRES_SSL_MODE: str = "disable"
 
     # MongoDB Configuration
     MONGO_HOST: str | None = None

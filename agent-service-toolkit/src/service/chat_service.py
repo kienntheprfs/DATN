@@ -130,3 +130,15 @@ class ChatService:
     async def delete_all_threads(self) -> bool:
         await self.repo.delete_all_threads_by_user(self.user_id)
         return True
+    
+    async def update_thread_title(self, thread_id: str, new_title: str):
+        if not new_title.strip():
+            raise HTTPException(status_code=400, detail="Title không thể là chuỗi rỗng.")
+
+        conversation = await self.get_thread_strictly(thread_id)
+        if conversation.title == new_title:
+            return 
+        else:
+            await self.repo.update_thread_title(thread_id, new_title)
+
+

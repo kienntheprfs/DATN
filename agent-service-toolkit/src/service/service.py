@@ -34,7 +34,8 @@ from schema import (
     ServiceMetadata,
     StreamInput,
     UserInput,
-    ThreadListResponse
+    ThreadListResponse,
+    UpdateTitleRequest
 )
 from service.utils import (
     convert_message_content_to_string,
@@ -77,6 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     try:
         from core.database import Base, engine
+        import schema.missing_knowledge  # noqa: F401 — đăng ký MissingKnowledgeLog trên Base.metadata trước create_all
+
         async with engine.begin() as conn:
             # Lệnh này sẽ quét các model kế thừa từ Base và tạo bảng nếu chưa có
             await conn.run_sync(Base.metadata.create_all)
@@ -682,6 +685,30 @@ async def get_history_threads(
         # Không nên throw chi tiết lỗi hệ thống ra cho client, chỉ trả về 500
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.patch(
+    "/threads/{thread_id}/title",
+    summary="Cập nhật tiêu đề hội thoại",
+    description="Đổi tên (title) của một hội thoại theo thread_id của user hiện tại."
+)
+async def update_thread_title(
+    thread_id: str,
+    payload: UpdateTitleRequest,
+    status_code=status.HTTP_204_NO_CONTENT,
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    try:
+        await chat_service.update_thread_title(thread_id, payload.new_title)
+        return {
+            "message": "Cập nhật tiêu đề hội thoại thành công.",
+            "thread_id": thread_id,
+            "new_title": payload.new_title
+        }
+    except HTTPException as he:
+        # Bắt và trả về nguyên trạng các lỗi 400, 403, 404 từ tầng chat_service
+        raise he
+    except Exception as e:
+        logger.error(f"Lỗi khi cập nhật tiêu đề thread {thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.delete(
     "/threads/{thread_id}",

@@ -11,6 +11,9 @@ class VectorDBService:
         self.client = client
         self.collection_name = collection_name
 
+    async def collection_exists(self) -> bool:
+        return await self.client.collection_exists(self.collection_name)
+
     async def ensure_hybrid_collection(self, dense_dim: int = 3072):
         if await self.client.collection_exists(self.collection_name):
             return
@@ -98,6 +101,7 @@ class VectorDBService:
                     ]
                 )
             ),
+            wait=True,
         )
 
     async def delete_points_by_ids(self, point_ids: List[str]):

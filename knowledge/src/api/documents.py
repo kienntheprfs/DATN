@@ -13,7 +13,7 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 async def upload_document(
     # Bỏ BackgroundTasks vì ta dùng Celery
     file: UploadFile = File(...),
-    storage_id: int = Form(...),
+    storage_id: int = Form(2),
     db: AsyncSession = Depends(get_db),
     auto_generate_faq: bool = Form(False),
     is_formal_doc: bool = Form(False)

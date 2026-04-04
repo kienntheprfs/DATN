@@ -160,7 +160,7 @@ def process_batch(self, batch_data: list, metadata: dict):
                     "sparse": embeddings[i]["sparse"],
                     "payload": {
                         "content": chunk["text"],
-                        "document_id": metadata["document_id"],
+                        "doc_id": metadata["document_id"],
                         "chunk_index": chunk["index"],
                         "type": "chunk",
                     },
@@ -268,7 +268,7 @@ def process_faq_batch(self, batch_chunks: list, metadata: dict):
                     "content": info["text"],
                     "answer_preview": info["answer"][:300],
                     "type": "faq",
-                    "document_id": metadata["document_id"],
+                    "doc_id": metadata["document_id"],
                     "chunk_source_index": chunk["index"],
                     "is_variant": not info["is_root"],
                     "faq_source": "document",
