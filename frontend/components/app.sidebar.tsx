@@ -56,12 +56,14 @@ const data = {
             icon: History,
             isActive: true,
             isDynamicHistory: true,
+            requiresAuth: true,
         },
         {
             title: "Chi tiết lịch sử",
             url: "/history",
             icon: Bookmark,
             isActive: true,
+            requiresAuth: true,
         },
     ],
 };
@@ -72,11 +74,13 @@ export function AppSidebar() {
 
     useEffect(() => {
         login();
-        
-        if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
+    }, []);
+
+    useEffect(() => {
+        if (user && history.length === 0 && hasMoreHistory && !isLoadingHistory) {
             fetchMoreHistory();
         }
-    }, []);
+    }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory]);
 
     const handleLogout = async () => {
         await authService.logout();
@@ -118,6 +122,7 @@ export function AppSidebar() {
                     <SidebarMenu>
                         {data.navMain.map((item) => {
                             if (item.isDynamicHistory) {
+                                if (!user) return null;
                                 return (
                                     <Collapsible key={item.title} defaultOpen={item.isActive} className="group/collapsible">
                                         <SidebarMenuItem>
@@ -135,12 +140,15 @@ export function AppSidebar() {
                                             <CollapsibleContent>
                                                 <SidebarMenuSub>
                                                     {isLoadingHistory && history.length === 0 ? (
-                                                        <SidebarMenuSubItem>
-                                                            <SidebarMenuSubButton className="opacity-50 pointer-events-none text-white/60">
-                                                                <Loader2 className="size-4 animate-spin" />
-                                                                <span>Đang tải...</span>
-                                                            </SidebarMenuSubButton>
-                                                        </SidebarMenuSubItem>
+                                                        <>
+                                                            {[1, 2, 3, 4, 5].map((i) => (
+                                                                <SidebarMenuSubItem key={i}>
+                                                                    <SidebarMenuSubButton className="pointer-events-none">
+                                                                        <Skeleton className="h-4 w-32 bg-white/20" />
+                                                                    </SidebarMenuSubButton>
+                                                                </SidebarMenuSubItem>
+                                                            ))}
+                                                        </>
                                                     ) : history.length > 0 ? (
                                                         <>
                                                             {history.map((historyItem) => (
@@ -169,6 +177,17 @@ export function AppSidebar() {
                                                                     </SidebarMenuSubButton>
                                                                 </SidebarMenuSubItem>
                                                             )}
+                                                            {isLoadingHistory && (
+                                                                <>
+                                                                    {[1, 2].map((i) => (
+                                                                        <SidebarMenuSubItem key={`loading-${i}`}>
+                                                                            <SidebarMenuSubButton className="pointer-events-none">
+                                                                                <Skeleton className="h-4 w-24 bg-white/20" />
+                                                                            </SidebarMenuSubButton>
+                                                                        </SidebarMenuSubItem>
+                                                                    ))}
+                                                                </>
+                                                            )}
                                                         </>
                                                     ) : (
                                                         <SidebarMenuSubItem>
@@ -182,6 +201,10 @@ export function AppSidebar() {
                                         </SidebarMenuItem>
                                     </Collapsible>
                                 );
+                            }
+
+                            if (item.requiresAuth && !user) {
+                                return null;
                             }
 
                             return (
@@ -198,7 +221,7 @@ export function AppSidebar() {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             );
-                        })}
+                        }).filter(Boolean)}
                     </SidebarMenu>
                 </SidebarGroup>
 

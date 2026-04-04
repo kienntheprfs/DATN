@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { InputGroupTextarea } from "@/components/ui/input-group";
@@ -55,7 +56,7 @@ export function ChatInput({
 
   const requireAuth = () => {
     if (!authService.isAuthenticated()) {
-      router.push("/auth");
+      router.push("/auth?redirected=true");
       return false;
     }
     return true;

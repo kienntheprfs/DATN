@@ -13,6 +13,8 @@ export interface ChatMessage {
 	content: string;
 	createdAt?: string;
 	run_id?: string;
+	msgType?: "text" | "tool";
+	toolName?: string;
 }
 
 interface BackendChatMessage {
@@ -47,6 +49,21 @@ export class AgentClientError extends Error {
 	}
 }
 
+export interface ThreadItem {
+  id: string;
+  user_id: string;
+  title: string | null;
+  is_archived: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ThreadListResponse {
+  items: ThreadItem[];
+  limit: number;
+  offset: number;
+}
+
 export const agentClient = {
 	async getInfo(): Promise<ServiceInfo> {
 		const response = await apiClient.get<ServiceInfo>('/agent/info');
@@ -54,7 +71,12 @@ export const agentClient = {
 	},
 
 	async getHistory(threadId: string): Promise<ChatHistory> {
-		const response = await apiClient.get<ChatHistory>(`/agent/history/${threadId}`);
+		const response = await apiClient.post<ChatHistory>('/agent/history', { thread_id: threadId });
+		return response.data;
+	},
+
+	async getThreads(limit: number = 20, offset: number = 0): Promise<ThreadListResponse> {
+		const response = await apiClient.get<ThreadListResponse>(`/agent/threads?limit=${limit}&offset=${offset}`);
 		return response.data;
 	},
 

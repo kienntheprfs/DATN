@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +31,15 @@ export default function AuthPage() {
 	const [errors, setErrors] = useState<FormErrors>({});
 
 	const router = useRouter();
+	const searchParams = useSearchParams();
+
+	useEffect(() => {
+		if (searchParams.get("redirected") === "true") {
+			setTimeout(() => {
+				toast.warning("Vui lòng đăng nhập để sử dụng tính năng này");
+			}, 100);
+		}
+	}, [searchParams]);
 
 	const clearErrors = () => setErrors({});
 

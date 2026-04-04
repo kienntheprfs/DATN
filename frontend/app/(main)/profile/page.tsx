@@ -20,6 +20,7 @@ import {
 	LogOut,
 	Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -49,7 +50,7 @@ export default function ProfilePage() {
 				const userData = await authService.me();
 				setUser(userData);
 			} catch {
-				router.push("/auth");
+				router.push("/auth?redirected=true");
 			} finally {
 				setIsLoading(false);
 			}

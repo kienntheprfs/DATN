@@ -3,23 +3,36 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, SortDesc, Download, Trash2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 import { useAppStore } from "@/stores/app.store";
 import type { HistoryItem } from "@/types/history";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type SortOption = "newest" | "oldest" | "az";
 
 export default function HistoryPage() {
   const router = useRouter();
-  const { history, isLoadingHistory, hasMoreHistory, fetchMoreHistory } = useAppStore();
+  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filteredHistory, setFilteredHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
+    if (!user) {
+      router.push("/auth?redirected=true");
+      return;
+    }
     if (history.length === 0 && hasMoreHistory && !isLoadingHistory) {
       fetchMoreHistory();
     }
-  }, [history, hasMoreHistory, isLoadingHistory, fetchMoreHistory]);
+  }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory, router]);
 
   useEffect(() => {
     let filtered = history.filter((item) =>
@@ -42,7 +55,7 @@ export default function HistoryPage() {
   }, [history, searchQuery, sortBy]);
 
   const handleReopen = (item: HistoryItem) => {
-    router.push(`/chat?message=${encodeURIComponent(item.title)}`);
+    router.push(`/chat?thread_id=${item.id}`);
   };
 
   return (
@@ -60,56 +73,52 @@ export default function HistoryPage() {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-muted-foreground" />
               </div>
-              <input
+              <Input
                 type="text"
                 placeholder="Tìm kiếm theo tiêu đề hoặc nội dung hội thoại..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-border rounded-md text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-sans bg-background"
+                className="pl-10"
               />
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-            <div className="relative group">
-              <button className="flex items-center gap-2 px-4 py-2 bg-background border border-border text-foreground rounded-md shadow-sm hover:bg-accent transition-colors text-sm font-medium">
-                <SortDesc className="h-4 w-4" />
-                Sắp xếp
-              </button>
-              <div className="absolute right-0 mt-1 w-48 bg-background border border-border shadow-lg rounded-md py-1 hidden group-hover:block z-50">
-                <button
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <SortDesc className="h-4 w-4 mr-2" />
+                  Sắp xếp
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
                   onClick={() => setSortBy("newest")}
-                  className={`block w-full text-left px-4 py-2 text-sm hover:bg-accent ${
-                    sortBy === "newest" ? "bg-accent font-medium" : ""
-                  }`}
+                  className={sortBy === "newest" ? "bg-accent font-medium" : ""}
                 >
                   Mới nhất
-                </button>
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuItem 
                   onClick={() => setSortBy("oldest")}
-                  className={`block w-full text-left px-4 py-2 text-sm hover:bg-accent ${
-                    sortBy === "oldest" ? "bg-accent font-medium" : ""
-                  }`}
+                  className={sortBy === "oldest" ? "bg-accent font-medium" : ""}
                 >
                   Cũ nhất
-                </button>
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuItem 
                   onClick={() => setSortBy("az")}
-                  className={`block w-full text-left px-4 py-2 text-sm hover:bg-accent ${
-                    sortBy === "az" ? "bg-accent font-medium" : ""
-                  }`}
+                  className={sortBy === "az" ? "bg-accent font-medium" : ""}
                 >
                   Theo tiêu đề A-Z
-                </button>
-              </div>
-            </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-background border border-border text-foreground rounded-md shadow-sm hover:bg-accent transition-colors text-sm font-medium">
-              <Download className="h-4 w-4" />
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-2" />
               Export Logs
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-md shadow-sm hover:bg-red-100 transition-colors text-sm font-medium">
-              <Trash2 className="h-4 w-4" />
+            </Button>
+            <Button variant="destructive" size="sm">
+              <Trash2 className="h-4 w-4 mr-2" />
               Clear History
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -136,13 +145,10 @@ export default function HistoryPage() {
                   {item.preview}
                 </p>
                 <div className="flex justify-end">
-                  <button
-                    onClick={() => handleReopen(item)}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium shadow-sm"
-                  >
+                  <Button onClick={() => handleReopen(item)} size="sm">
                     Re-open
-                    <ExternalLink className="h-4 w-4" />
-                  </button>
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </Button>
                 </div>
               </div>
             ))
@@ -154,12 +160,9 @@ export default function HistoryPage() {
 
           {hasMoreHistory && !isLoadingHistory && (
             <div className="flex justify-center">
-              <button
-                onClick={fetchMoreHistory}
-                className="flex items-center gap-2 px-6 py-2 bg-background border border-border text-foreground rounded-md hover:bg-accent transition-colors text-sm font-medium"
-              >
+              <Button variant="outline" onClick={fetchMoreHistory}>
                 Xem thêm
-              </button>
+              </Button>
             </div>
           )}
 

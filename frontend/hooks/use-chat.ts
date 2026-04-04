@@ -102,11 +102,25 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			try {
 				const history = await agentClient.getHistory(initialThreadId);
 				if (history.messages && history.messages.length > 0) {
+					const toolCallsMap: Record<string, string> = {};
+					
+					for (const msg of history.messages) {
+						if (msg.type === "ai" && msg.tool_calls) {
+							for (const tc of msg.tool_calls) {
+								if (tc.id) {
+									toolCallsMap[tc.id] = tc.name;
+								}
+							}
+						}
+					}
+
 					const formattedMessages: ChatMessage[] = history.messages.map((msg, idx) => ({
 						id: msg.id || `msg-${idx}`,
 						role: msg.type === "human" ? "user" : "assistant",
 						content: msg.content,
 						run_id: msg.run_id,
+						msgType: msg.type === "tool" ? "tool" : "text",
+						toolName: msg.type === "tool" ? (toolCallsMap[msg.tool_call_id || ""] || "tool") : undefined,
 					}));
 					setMessages(formattedMessages);
 				} else {

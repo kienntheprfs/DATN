@@ -1,5 +1,6 @@
 import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import "@/app/globals.css";
 
 const inter = Inter({ 
@@ -23,6 +24,7 @@ export default function StandaloneLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans">
         <TooltipProvider>
+          <Toaster />
           {children}
         </TooltipProvider>
       </body>

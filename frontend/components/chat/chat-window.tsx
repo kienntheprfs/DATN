@@ -100,6 +100,102 @@ function ThinkingIndicator() {
 	);
 }
 
+function HistoryToolCollapsible({ name, content }: { name: string; content: string }) {
+	const [isOpen, setIsOpen] = useState(false);
+
+	let parsedContent: Record<string, unknown> | null = null;
+	let isJson = false;
+	
+	if (content) {
+		try {
+			parsedContent = JSON.parse(content);
+			isJson = true;
+		} catch {
+			parsedContent = { content };
+		}
+	}
+
+	const isRouteTool = name.toLowerCase().includes('route') || 
+	                    name.toLowerCase().includes('find') ||
+	                    name.toLowerCase().includes('map');
+
+	return (
+		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
+			<CollapsibleTrigger asChild>
+				<Button variant="ghost" className="w-full justify-start h-auto py-3 px-4">
+					<ChevronDown
+						className={`size-4 text-blue-600 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+					/>
+					<div className="flex items-center gap-2">
+						<div className="relative">
+							<div className="size-4 rounded-full bg-blue-500 flex items-center justify-center">
+								<svg className="size-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+								</svg>
+							</div>
+						</div>
+						<span className="text-sm font-medium text-blue-700">
+							{name}
+						</span>
+						<span className="text-xs text-blue-600/70">Hoàn tất</span>
+					</div>
+				</Button>
+			</CollapsibleTrigger>
+			<CollapsibleContent>
+				<div className="px-4 pb-3 text-xs text-blue-600/80 border-t border-blue-200/50 pt-2">
+					{content ? (
+						<div className="bg-blue-100/50 rounded p-2 max-h-64 overflow-y-auto">
+							{isJson ? (
+								<>
+									{parsedContent?.query && (
+										<div className="mb-2">
+											<span className="font-semibold">Query: </span>
+											<span className="font-mono">{String(parsedContent.query)}</span>
+										</div>
+									)}
+									{parsedContent?.results && Array.isArray(parsedContent.results) && (
+										<div className="space-y-1">
+											<span className="font-semibold">Results ({(parsedContent.results as unknown[]).length}):</span>
+											{(parsedContent.results as unknown[]).slice(0, 5).map((r: unknown, i: number) => {
+												const result = r as Record<string, unknown>;
+												return (
+													<div key={i} className="pl-2 border-l-2 border-blue-300">
+														{result.name && <div className="font-medium">{String(result.name)}</div>}
+														{result.description && <div className="text-blue-600/80">{String(result.description)}</div>}
+													</div>
+												);
+											})}
+										</div>
+									)}
+									{parsedContent?.start_name && parsedContent?.end_name && (
+										<div className="mt-2 p-2 bg-blue-200/50 rounded">
+											<div><span className="font-semibold">Từ:</span> {String(parsedContent.start_name)}</div>
+											<div><span className="font-semibold">Đến:</span> {String(parsedContent.end_name)}</div>
+										</div>
+									)}
+									{!parsedContent?.query && !parsedContent?.results && !parsedContent?.start_name && (
+										<pre className="whitespace-pre-wrap font-mono text-xs max-h-48 overflow-auto">
+											{content}
+										</pre>
+									)}
+								</>
+							) : (
+								<pre className="whitespace-pre-wrap font-mono text-xs max-h-48 overflow-auto">
+									{content}
+								</pre>
+							)}
+						</div>
+					) : (
+						<div className="bg-blue-100/50 rounded p-2 font-mono">
+							Không có kết quả
+						</div>
+					)}
+				</div>
+			</CollapsibleContent>
+		</Collapsible>
+	);
+}
+
 function ToolCollapsible({ tool }: { tool: ToolCall }) {
 	const [isOpen, setIsOpen] = useState(false);
 
@@ -245,6 +341,7 @@ function RouteMessage({ routeData }: { routeData: RouteData }) {
 interface GroupedMessages {
 	role: "user" | "assistant";
 	messages: ChatMessage[];
+	toolMessages?: ChatMessage[];
 }
 
 export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState }: ChatWindowProps) {
@@ -290,8 +387,24 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 		const groups: GroupedMessages[] = [];
 
 		for (const m of visibleMessages) {
-			const lastGroup = groups[groups.length - 1];
-			groups.push({ role: m.role, messages: [m] });
+			if (!m.content?.trim() && m.role === "user") continue;
+			
+			if (m.msgType === "tool") {
+				const lastGroup = groups[groups.length - 1];
+				if (lastGroup && lastGroup.role === "assistant") {
+					if (!lastGroup.toolMessages) lastGroup.toolMessages = [];
+					lastGroup.toolMessages.push(m);
+				} else {
+					groups.push({ role: "assistant", messages: [], toolMessages: [m] });
+				}
+			} else {
+				const lastGroup = groups[groups.length - 1];
+				if (lastGroup && lastGroup.role === m.role) {
+					lastGroup.messages.push(m);
+				} else {
+					groups.push({ role: m.role, messages: [m] });
+				}
+			}
 		}
 
 		return groups;
@@ -299,9 +412,9 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 
 	const getGroupRunId = (group: GroupedMessages): string | undefined => {
 		if (group.role !== "assistant") return undefined;
-		for (let i = group.messages.length - 1; i >= 0; i--) {
-			console.log(`[chat-window] group message ${i}: content="${group.messages[i].content?.substring(0,30)}", run_id="${group.messages[i].run_id}"`);
-			if (group.messages[i].run_id) return group.messages[i].run_id;
+		const messagesToCheck = group.messages.length > 0 ? group.messages : group.toolMessages || [];
+		for (let i = messagesToCheck.length - 1; i >= 0; i--) {
+			if (messagesToCheck[i].run_id) return messagesToCheck[i].run_id;
 		}
 		return undefined;
 	};
@@ -359,6 +472,18 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								<Bot className="size-6" />
 							</div>
 							<div className="group relative max-w-[85%] space-y-3">
+								{!routeData && (group.toolMessages?.map((toolMsg) => {
+									const toolData = toolMsg.content ? (() => {
+										try {
+											return JSON.parse(toolMsg.content);
+										} catch {
+											return { content: toolMsg.content };
+										}
+									})() : {};
+									return (
+										<HistoryToolCollapsible key={toolMsg.id} name={toolMsg.toolName || "tool"} content={toolMsg.content} />
+									);
+								}))}
 								{showToolsForThisGroup && !routeData && currentTools.map((tool) => (
 									<ToolCollapsible key={tool.id} tool={tool} />
 								))}
