@@ -35,6 +35,11 @@ const isAuthenticated = (): boolean => {
 	return !!localStorage.getItem("access_token");
 };
 
+const isValidUUID = (str: string): boolean => {
+	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+	return uuidRegex.test(str);
+};
+
 function DislikeDialog({ open, onClose, runId, threadId, agentId, onSubmit }: {
 	open: boolean;
 	onClose: () => void;
@@ -148,6 +153,10 @@ export function RatingButtons({ runId, threadId, agentId }: RatingButtonsProps) 
 	const [ratingId, setRatingId] = useState<string | null>(null);
 	const [showDislikeDialog, setShowDislikeDialog] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	if (!isValidUUID(runId)) {
+		return null;
+	}
 
 	useEffect(() => {
 		if (!isAuthenticated()) return;

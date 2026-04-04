@@ -420,6 +420,12 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 		return undefined;
 	};
 
+	const getGroupId = (group: GroupedMessages): string | undefined => {
+		if (group.role !== "assistant") return undefined;
+		const messagesToCheck = group.messages.length > 0 ? group.messages : group.toolMessages || [];
+		return messagesToCheck[0]?.id;
+	};
+
 	return (
 		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-20">
 			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
@@ -427,14 +433,15 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
 					const isMessageActive = isLastGroup && isActive;
 					const groupRunId = getGroupRunId(group);
+					const groupId = getGroupId(group);
 					const combinedContent = group.role === "assistant" 
 						? group.messages.map(m => m.content).filter(Boolean).join(" ")
 						: "";
 					const isThinkingMessage = isMessageActive && !combinedContent && !isVoiceMode && currentTools.length === 0;
 					const showToolsForThisGroup = isLastGroup && currentTools.length > 0;
-					const showRating = groupRunId && threadId && group.role === "assistant" && combinedContent;
+					const ratingId = groupRunId || groupId;
+					const showRating = ratingId && threadId && group.role === "assistant" && combinedContent;
 					const citations = group.messages.find(m => m.citations)?.citations;
-					console.log(`[chat-window] group ${groupIndex}: isLastGroup=${isLastGroup}, role=${group.role}, groupRunId=${groupRunId}, threadId=${threadId}, combinedContentLength=${combinedContent.length}, showRating=${showRating}`);
 
 					if (group.role === "user") {
 						return (
@@ -501,7 +508,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								{showRating && (
 									<div className="flex items-center gap-1 pl-2">
 										<RatingButtons
-											runId={groupRunId || ""}
+											runId={ratingId || ""}
 											threadId={threadId}
 											agentId={agentId}
 										/>

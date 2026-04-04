@@ -121,8 +121,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		}
 
 		const loadHistory = async () => {
+			console.log("[useChat] Loading history for thread:", initialThreadId);
 			try {
 				const history = await agentClient.getHistory(initialThreadId);
+				console.log("[useChat] History response:", history);
 				if (history.messages && history.messages.length > 0) {
 					const toolCallsMap: Record<string, string> = {};
 					

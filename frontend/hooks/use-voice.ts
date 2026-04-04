@@ -398,6 +398,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
         if (model) requestData.model = model;
         if (threadIdToUse) requestData.thread_id = threadIdToUse;
         requestBody.request_data = requestData;
+        console.log("[useVoice] Sending request_data:", requestData);
       }
 
       const response = await fetch("/api/voice/offer", {

@@ -11,7 +11,9 @@ export default function Home() {
 	const router = useRouter();
 
 	const handleVoiceToggle = () => {
-		router.push("/chat?voice=true");
+		const threadId = crypto.randomUUID();
+		const params = new URLSearchParams({ thread_id: threadId, voice: "true" });
+		router.push(`/chat?${params.toString()}`);
 	};
 
 	const handleSubmitAndRedirect = (message: string, queryMode?: QueryMode) => {

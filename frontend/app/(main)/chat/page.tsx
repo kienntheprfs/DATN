@@ -12,8 +12,9 @@ import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
 import { getUserId } from "@/services/auth-api";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { useAppStore } from "@/stores/app.store";
 
-function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
+function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: () => void; onConversationStart?: () => void }) {
 	const searchParams = useSearchParams();
 	const urlThreadId = searchParams.get("thread_id");
 	const urlMessage = searchParams.get("message");
@@ -95,7 +96,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	const voice = useVoice({
 		agentId: agent || "chatbot",
 		model,
-		threadId: threadId,
+		threadId: urlThreadId || undefined,
 		userId: getUserId() || undefined,
 		createThread: async () => {
 			return crypto.randomUUID();
@@ -143,6 +144,7 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	useEffect(() => {
 		if (voice.state === "connected" && !voiceStarted.current) {
 			voiceStarted.current = true;
+			onConversationStart?.();
 		}
 	}, [voice.state]);
 
@@ -223,16 +225,22 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 }
 
 export default function ChatPage() {
-	const [conversationKey, setConversationKey] = useState(0);
-	const voiceRef = useRef<{ startConversation: () => void } | null>(null);
+	const router = useRouter();
+	const refreshHistory = useAppStore((s) => s.refreshHistory);
 
 	const handleVoiceToggle = () => {
-		setConversationKey((k) => k + 1);
+		const threadId = crypto.randomUUID();
+		const params = new URLSearchParams({ thread_id: threadId, voice: "true" });
+		router.replace(`/chat?${params.toString()}`);
+	};
+
+	const handleConversationStart = () => {
+		refreshHistory();
 	};
 
 	return (
 		<Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-			<ChatContent key={conversationKey} onVoiceToggle={handleVoiceToggle} />
+			<ChatContent onVoiceToggle={handleVoiceToggle} onConversationStart={handleConversationStart} />
 		</Suspense>
 	);
 }
