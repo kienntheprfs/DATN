@@ -49,3 +49,21 @@ class ChatRepository:
         )
         await self.db.execute(query)
         await self.db.commit()
+
+    async def delete_all_threads_by_user(self, user_id: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.user_id == user_id)
+            .values(is_archived=True)
+        )
+        await self.db.execute(query)
+        await self.db.commit()
+
+    async def delete_thread(self, thread_id: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.id == thread_id)
+            .values(is_archived=True)
+        )
+        await self.db.execute(query)
+        await self.db.commit()
