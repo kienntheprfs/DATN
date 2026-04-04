@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
     Sidebar,
     SidebarContent,
@@ -23,19 +23,23 @@ import {
     Settings,
     MoreHorizontal,
     LogIn,
-    Loader2,
     GraduationCap,
     User,
     LogOut,
     ChevronDown,
+    Pencil,
+    Trash2,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAppStore } from "@/stores/app.store";
-import { authService } from "@/services/auth-api";
+import { toast } from "sonner";
 
 const data = {
     navMain: [
@@ -71,7 +75,10 @@ const data = {
 export function AppSidebar() {
     const router = useRouter();
     const pathname = usePathname();
-    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory, refreshHistory } = useAppStore();
+    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle, logout } = useAppStore();
+    const [renamingItem, setRenamingItem] = useState<{ id: string; title: string } | null>(null);
+    const [newTitle, setNewTitle] = useState("");
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         if (user) {
@@ -90,8 +97,36 @@ export function AppSidebar() {
     }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory]);
 
     const handleLogout = async () => {
-        await authService.logout();
+        await logout();
         router.push("/auth");
+    };
+
+    const handleRename = (item: { id: string; title: string }) => {
+        setRenamingItem(item);
+        setNewTitle(item.title);
+    };
+
+    const handleSaveRename = async () => {
+        if (!renamingItem || !newTitle.trim()) return;
+        try {
+            await updateHistoryItemTitle(renamingItem.id, newTitle.trim());
+            toast.success("Đã cập nhật tiêu đề");
+            setRenamingItem(null);
+        } catch {
+            toast.error("Không thể cập nhật tiêu đề");
+        }
+    };
+
+    const handleDelete = async (itemId: string) => {
+        setDeletingId(itemId);
+        try {
+            await deleteHistoryItem(itemId);
+            toast.success("Đã xóa hội thoại");
+        } catch {
+            toast.error("Không thể xóa hội thoại");
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     const getInitials = (name: string | undefined, email: string) => {
@@ -160,11 +195,35 @@ export function AppSidebar() {
                                                         <>
                                                             {history.map((historyItem, index) => (
                                                                 <SidebarMenuSubItem key={`${historyItem.id}-${index}`}>
-                                                                    <SidebarMenuSubButton asChild className="hover:bg-white/15 text-white/80 hover:text-white">
-                                                                        <Link href={historyItem.url}>
-                                                                            <span className="truncate">{historyItem.title}</span>
-                                                                        </Link>
-                                                                    </SidebarMenuSubButton>
+                                                                    <div className="flex items-center gap-1 group">
+                                                                        <SidebarMenuSubButton asChild className="hover:bg-white/15 text-white/80 hover:text-white flex-1 min-w-0">
+                                                                            <Link href={historyItem.url}>
+                                                                                <span className="truncate">{historyItem.title}</span>
+                                                                            </Link>
+                                                                        </SidebarMenuSubButton>
+                                                                        <DropdownMenu>
+                                                                            <DropdownMenuTrigger asChild>
+                                                                                <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/20 rounded transition-opacity">
+                                                                                    <MoreHorizontal className="size-4 text-white/60" />
+                                                                                </button>
+                                                                            </DropdownMenuTrigger>
+                                                                            <DropdownMenuContent align="end">
+                                                                                <DropdownMenuItem onClick={() => handleRename(historyItem)}>
+                                                                                    <Pencil className="size-4 mr-2" />
+                                                                                    Đổi tên
+                                                                                </DropdownMenuItem>
+                                                                                <DropdownMenuSeparator />
+                                                                                <DropdownMenuItem 
+                                                                                    onClick={() => handleDelete(historyItem.id)} 
+                                                                                    className="text-destructive focus:text-destructive"
+                                                                                    disabled={deletingId === historyItem.id}
+                                                                                >
+                                                                                    <Trash2 className="size-4 mr-2" />
+                                                                                    {deletingId === historyItem.id ? "Đang xóa..." : "Xóa"}
+                                                                                </DropdownMenuItem>
+                                                                            </DropdownMenuContent>
+                                                                        </DropdownMenu>
+                                                                    </div>
                                                                 </SidebarMenuSubItem>
                                                             ))}
                                                             {hasMoreHistory && !isLoadingHistory && (
@@ -293,6 +352,32 @@ export function AppSidebar() {
                     </Link>
                 )}
             </SidebarFooter>
+
+            <Dialog open={!!renamingItem} onOpenChange={(open) => !open && setRenamingItem(null)}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Đổi tên hội thoại</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Input
+                            value={newTitle}
+                            onChange={(e) => setNewTitle(e.target.value)}
+                            placeholder="Nhập tiêu đề mới"
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveRename();
+                            }}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenamingItem(null)}>
+                            Hủy
+                        </Button>
+                        <Button onClick={handleSaveRename}>
+                            Lưu
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Sidebar>
     );
 }

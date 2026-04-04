@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { AppState} from '@/types/state'
 import type { HistoryItem, User } from '@/types'
 import { authService } from '@/services/auth-api'
@@ -12,8 +11,7 @@ const MOCK_USERS = [
 ]
 
 export const useAppStore = create<AppState>()(
-    persist(
-        (set, get) => ({ // Dùng thêm hàm get() để lấy state hiện tại lúc đang ở trong action
+    (set, get) => ({ // Dùng thêm hàm get() để lấy state hiện tại lúc đang ở trong action
       user: null, 
       
       // Khởi tạo Lịch sử trống
@@ -25,7 +23,7 @@ export const useAppStore = create<AppState>()(
       login: async (userData?: { email: string; password: string }) => {
         if (userData) {
           try {
-            const result = await authService.login(userData.email, userData.password);
+            await authService.login(userData.email, userData.password);
             const user = await authService.me();
             set({ user });
           } catch (error) {
@@ -95,10 +93,8 @@ export const useAppStore = create<AppState>()(
       fetchMoreHistory: async () => {
         const state = get();
         
-        // Nếu đang tải rồi, hoặc đã hết data thì không gọi API nữa để chống spam click
         if (state.isLoadingHistory || !state.hasMoreHistory) return;
 
-        // Bật trạng thái loading lên để UI hiện icon xoay tròn
         set({ isLoadingHistory: true });
 
         try {
@@ -112,7 +108,6 @@ export const useAppStore = create<AppState>()(
               preview: thread.title || "",
             }));
 
-            // Cập nhật state sau khi API trả về thành công
             set((prevState) => ({
                 history: [...prevState.history, ...newFetchedItems],
                 currentPage: prevState.currentPage + 1,
@@ -122,13 +117,34 @@ export const useAppStore = create<AppState>()(
 
         } catch (error) {
             console.error("Lỗi khi tải lịch sử:", error);
-            // Lỗi mạng thì cũng phải tắt loading
             set({ isLoadingHistory: false });
         }
       },
-    }),
-    {
-      name: "app-storage",
-    }
-  )
+
+      deleteHistoryItem: async (threadId: string) => {
+        try {
+          await agentClient.deleteThread(threadId);
+          set((state) => ({
+            history: state.history.filter((item) => item.id !== threadId),
+          }));
+        } catch (error) {
+          console.error("Lỗi khi xóa lịch sử:", error);
+          throw error;
+        }
+      },
+
+      updateHistoryItemTitle: async (threadId: string, newTitle: string) => {
+        try {
+          await agentClient.updateThreadTitle(threadId, newTitle);
+          set((state) => ({
+            history: state.history.map((item) =>
+              item.id === threadId ? { ...item, title: newTitle } : item
+            ),
+          }));
+        } catch (error) {
+          console.error("Lỗi khi cập nhật tiêu đề:", error);
+          throw error;
+        }
+      },
+    })
 )

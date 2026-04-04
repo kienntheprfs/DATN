@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, SortDesc, ExternalLink } from "lucide-react";
+import { Search, SortDesc, Pencil, Trash2, MoreVertical, Check, X, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/stores/app.store";
 import { authService } from "@/services/auth-api";
 import type { HistoryItem } from "@/types/history";
@@ -20,7 +20,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -34,13 +33,16 @@ type SortOption = "newest" | "oldest" | "az";
 export default function HistoryPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, clearAllHistory, refreshHistory } = useAppStore();
+  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, clearAllHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filteredHistory, setFilteredHistory] = useState<Array<HistoryItem & { displayTimestamp?: string }>>([]);
   const [tick, setTick] = useState(0);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -97,6 +99,42 @@ export default function HistoryPage() {
 
   const handleReopen = (item: HistoryItem) => {
     router.push(`/chat?thread_id=${item.id}`);
+  };
+
+  const handleStartEdit = (item: HistoryItem) => {
+    setEditingId(item.id);
+    setEditingTitle(item.title);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingTitle("");
+  };
+
+  const handleSaveEdit = async (item: HistoryItem) => {
+    if (!editingTitle.trim()) {
+      toast.error("Tiêu đề không được để trống");
+      return;
+    }
+    try {
+      await updateHistoryItemTitle(item.id, editingTitle.trim());
+      toast.success("Đã cập nhật tiêu đề");
+      setEditingId(null);
+    } catch {
+      toast.error("Không thể cập nhật tiêu đề. Vui lòng thử lại.");
+    }
+  };
+
+  const handleDelete = async (item: HistoryItem) => {
+    setDeletingId(item.id);
+    try {
+      await deleteHistoryItem(item.id);
+      toast.success("Đã xóa hội thoại");
+    } catch {
+      toast.error("Không thể xóa hội thoại. Vui lòng thử lại.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -216,24 +254,63 @@ export default function HistoryPage() {
             filteredHistory.map((item, index) => (
               <div
                 key={`${item.id}-${index}`}
-                className="flex flex-col bg-slate-50 border border-border rounded-lg p-5 hover:border-primary/40 transition-colors"
+                className="flex items-center gap-4 bg-slate-50 border border-border rounded-lg px-4 py-3 group"
               >
-                <div className="flex justify-between items-start gap-4 mb-3">
-                  <h3 className="font-heading font-semibold text-lg text-foreground">
-                    {item.title}
-                  </h3>
-                  <span className="text-xs font-mono text-muted-foreground whitespace-nowrap bg-background px-2 py-1 border border-border rounded">
-                    {item.displayTimestamp}
-                  </span>
+                <div className="flex-1 min-w-0">
+                  {editingId === item.id ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        className="h-8 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveEdit(item);
+                          if (e.key === "Escape") handleCancelEdit();
+                        }}
+                      />
+                      <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(item)} className="h-8 w-8 p-0">
+                        <Check className="h-4 w-4 text-green-600" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={handleCancelEdit} className="h-8 w-8 p-0">
+                        <X className="h-4 w-4 text-red-600" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <h3 className="font-heading font-medium text-foreground truncate">
+                      {item.title}
+                    </h3>
+                  )}
                 </div>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4 leading-relaxed">
-                  {item.preview}
-                </p>
-                <div className="flex justify-end">
-                  <Button onClick={() => handleReopen(item)} size="sm">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {item.displayTimestamp}
+                </span>
+                <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <Button onClick={() => handleReopen(item)} size="sm" className="h-8 bg-primary text-primary-foreground hover:bg-primary/90">
                     Re-open
-                    <ExternalLink className="h-4 w-4 ml-2" />
+                    <ExternalLink className="h-4 w-4 ml-1" />
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleStartEdit(item)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Đổi tên
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleDelete(item)} 
+                        className="text-destructive focus:text-destructive"
+                        disabled={deletingId === item.id}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        {deletingId === item.id ? "Đang xóa..." : "Xóa"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             ))

@@ -144,7 +144,7 @@ function NodeSelector({
       <div className="relative mt-1">
         {selectedLocation ? (
           <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50">
-            <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="flex-1 text-sm truncate">{getDisplayName(selectedLocation)}</span>
             <Button type="button" variant="ghost" size="icon" onClick={handleClear} className="h-7 w-7">
               <X className="w-4 h-4" />
@@ -186,7 +186,7 @@ function NodeSelector({
                 className="w-full justify-start h-auto py-2 px-3"
                 onClick={() => handleSelect(location)}
               >
-                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0 mr-2" />
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0 mr-2" />
                 <div className="flex-1 min-w-0 text-left">
                   <div className="font-medium truncate">{location.name}</div>
                   <div className="text-xs text-muted-foreground truncate">
@@ -397,7 +397,7 @@ export default function EventsPage() {
             />
           </InputGroup>
           <Select value={selectedCategory || "all"} onValueChange={(v) => setSelectedCategory(v === "all" ? "" : v)}>
-            <SelectTrigger className="h-8 w-auto min-w-[140px] text-xs">
+            <SelectTrigger className="h-8 w-auto min-w-35 text-xs">
               <SelectValue placeholder="Tất cả" />
             </SelectTrigger>
             <SelectContent>
@@ -481,7 +481,7 @@ export default function EventsPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
             <DialogTitle>{editingEvent ? 'Sửa sự kiện' : 'Tạo sự kiện mới'}</DialogTitle>
             <DialogDescription>

@@ -18,4 +18,6 @@ export interface AppState {
   fetchMoreHistory: () => Promise<void>; 
   clearAllHistory: () => Promise<void>;
   refreshHistory: () => Promise<void>;
+  deleteHistoryItem: (threadId: string) => Promise<void>;
+  updateHistoryItemTitle: (threadId: string, newTitle: string) => Promise<void>;
 }

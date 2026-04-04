@@ -33,10 +33,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authService } from "@/services/auth-api";
+import { useAppStore } from "@/stores/app.store";
 import type { User } from "@/types";
 
 export default function ProfilePage() {
 	const router = useRouter();
+	const logout = useAppStore((state) => state.logout);
 	const [user, setUser] = useState<User | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [notifications, setNotifications] = useState({
@@ -60,7 +62,7 @@ export default function ProfilePage() {
 	}, [router]);
 
 	const handleLogout = async () => {
-		await authService.logout();
+		await logout();
 		router.push("/auth");
 	};
 

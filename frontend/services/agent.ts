@@ -101,6 +101,14 @@ export const agentClient = {
 		await apiClient.delete('/agent/threads');
 	},
 
+	async deleteThread(threadId: string): Promise<void> {
+		await apiClient.delete(`/agent/threads/${threadId}`);
+	},
+
+	async updateThreadTitle(threadId: string, newTitle: string): Promise<void> {
+		await apiClient.patch(`/agent/threads/${threadId}/title`, { new_title: newTitle });
+	},
+
 	async *stream(
 		message: string,
 		options: {
