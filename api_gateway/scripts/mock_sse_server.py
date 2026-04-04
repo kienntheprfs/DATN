@@ -37,7 +37,7 @@ async def health() -> JSONResponse:
     return JSONResponse({"status": "ok", "service": "mock-sse"})
 
 
-@app.post("/agent/stream")
+@app.post("/stream")
 async def stream_agent_response(
     request: Request,
     x_internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
@@ -76,19 +76,19 @@ async def stream_agent_response(
         done = {"done": True, "token_count": len(tokens)}
         yield f"event: done\ndata: {json.dumps(done, ensure_ascii=True)}\n\n"
 
-    headers = {
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no",
-    }
+    # headers = {
+    #     "Cache-Control": "no-cache",
+    #     "Connection": "keep-alive",
+    #     "X-Accel-Buffering": "no",
+    # }
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers=headers,
+        # headers=headers,
     )
 
 
 if __name__ == "__main__":
     host = os.getenv("MOCK_SSE_HOST", "127.0.0.1")
     port = int(os.getenv("MOCK_SSE_PORT", "8080"))
-    uvicorn.run("mock_sse_server:app", host=host, port=port, reload=False)
+    uvicorn.run("mock_sse_server:app", host=host, port=port, reload=True)
