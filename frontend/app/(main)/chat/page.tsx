@@ -58,7 +58,6 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router]);
 
 	const voice = useVoice({
-		apiGatewayUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002",
 		agentId: agent || "chatbot",
 		model,
 		threadId: threadId,
@@ -142,7 +141,6 @@ function ChatContent({ onVoiceToggle }: { onVoiceToggle: () => void }) {
 					<ChatInput
 						isLoading={isLoading}
 						onSubmitMessage={handleSendMessage}
-						apiGatewayUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002"}
 						voiceAgentId={agent || "chatbot"}
 						voiceModel={model}
 						voiceState={voice.state}

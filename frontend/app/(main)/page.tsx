@@ -41,7 +41,6 @@ export default function Home() {
 				</div>
 
 				<ChatInput
-					apiGatewayUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002"}
 					voiceAgentId="chatbot"
 					onVoiceToggle={handleVoiceToggle}
 					onSubmitAndRedirect={handleSubmitAndRedirect}

@@ -8,7 +8,6 @@ import { useVoice, VoiceConnectionState } from "@/hooks/use-voice";
 
 interface VoiceButtonProps {
   className?: string;
-  apiGatewayUrl: string;
   agentId?: string;
   userId?: string;
   model?: string;
@@ -22,7 +21,6 @@ interface VoiceButtonProps {
 
 export function VoiceButton({
   className,
-  apiGatewayUrl,
   agentId = "chatbot",
   userId,
   model,
@@ -36,7 +34,6 @@ export function VoiceButton({
   const [showTooltip, setShowTooltip] = useState(false);
 
   const internalVoice = useVoice({
-    apiGatewayUrl,
     agentId,
     userId,
     model,

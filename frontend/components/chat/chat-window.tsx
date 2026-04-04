@@ -62,22 +62,6 @@ interface ChatWindowProps {
 	voiceState?: string;
 }
 
-function TypingIndicator() {
-	return (
-		<div className="flex items-center gap-1 p-2">
-			<span className="size-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-			<span className="size-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-			<span className="size-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
-		</div>
-	);
-}
-
-function StreamingCursor() {
-	return (
-		<span className="inline-block size-0.5 bg-primary ml-0.5 align-middle animate-pulse" />
-	);
-}
-
 function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {
 	return (
 		<div className="flex items-center gap-3 px-4 py-3 bg-primary/10 rounded-lg border border-primary/20">
@@ -98,15 +82,6 @@ function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {
 	);
 }
 
-function ThinkingText() {
-	return (
-		<span className="inline-flex items-center ml-1">
-			<span className="animate-pulse">.</span>
-			<span className="animate-pulse" style={{ animationDelay: "150ms" }}>.</span>
-			<span className="animate-pulse" style={{ animationDelay: "300ms" }}>.</span>
-		</span>
-	);
-}
 
 function ThinkingIndicator() {
 	return (
@@ -403,10 +378,10 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 										</div>
 									</div>
 								)}
-								{combinedContent && lastBotMessage?.run_id && threadId && (
+								{combinedContent && (lastBotMessage?.run_id || lastRunId) && threadId && (
 									<div className="flex items-center gap-1 pl-2">
 										<RatingButtons
-											runId={lastBotMessage.run_id}
+											runId={lastBotMessage?.run_id || lastRunId || ""}
 											threadId={threadId}
 											agentId={agentId}
 										/>
@@ -441,7 +416,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					</div>
 				)}
 
-				{(voiceState === "connecting" || (voiceState === "connected" && !hasVoiceMessage)) && (
+				{voiceState === "connecting" && (
 					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 							<Loader2 className="size-5 animate-spin" />
@@ -452,7 +427,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					</div>
 				)}
 
-				{voiceState === "connected" && hasVoiceMessage && (
+				{voiceState === "connected" && isListening && (
 					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 							<div className="relative">
@@ -461,20 +436,12 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 							</div>
 						</div>
 						<div className="flex-1 max-w-[85%]">
-							<VoiceLoadingIndicator isListening={isListening || false} />
+							<VoiceLoadingIndicator isListening={true} />
 						</div>
 					</div>
 				)}
 
-				{voiceState === "connected" && hasVoiceMessage && lastRunId && (voiceThreadId || threadId) && (
-					<div className="flex items-center gap-1 pl-2">
-						<RatingButtons
-							runId={lastRunId}
-							threadId={voiceThreadId || threadId || ""}
-							agentId={agentId}
-						/>
-					</div>
-				)}
+
 			</div>
 		</div>
 	);

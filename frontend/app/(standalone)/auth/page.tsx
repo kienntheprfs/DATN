@@ -7,9 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, AlertCircle } from "lucide-react";
 import { authService } from "@/services/auth-api";
 import { toast } from "sonner";
+
+interface FormErrors {
+	email?: string;
+	password?: string;
+	confirmPassword?: string;
+	fullname?: string;
+	general?: string;
+}
 
 export default function AuthPage() {
 	const [isLogin, setIsLogin] = useState(true);
@@ -20,40 +28,95 @@ export default function AuthPage() {
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [fullname, setFullname] = useState("");
+	const [errors, setErrors] = useState<FormErrors>({});
 
 	const router = useRouter();
 
+	const clearErrors = () => setErrors({});
+
+	const parseError = (err: any): string => {
+		const detail = err.response?.data?.detail;
+		if (typeof detail === 'string') return detail;
+		if (Array.isArray(detail)) {
+			return detail.map((d: any) => d.msg || d).join(', ');
+		}
+		if (err.response?.status === 401) return "Email hoặc mật khẩu không đúng";
+		if (err.response?.status === 400) return "Yêu cầu không hợp lệ";
+		if (err.response?.status === 409) return "Tài khoản đã tồn tại";
+		if (err.response?.status === 404) return "Không tìm thấy tài khoản";
+		return "Đã xảy ra lỗi. Vui lòng thử lại.";
+	};
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		clearErrors();
 		setIsLoading(true);
+
+		const newErrors: FormErrors = {};
+
+		if (!email) newErrors.email = "Vui lòng nhập email";
+		if (!password) newErrors.password = "Vui lòng nhập mật khẩu";
+		
+		if (!isLogin) {
+			if (!fullname) newErrors.fullname = "Vui lòng nhập họ tên";
+			if (password !== confirmPassword) newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
+		}
+
+		if (Object.keys(newErrors).length > 0) {
+			setErrors(newErrors);
+			setIsLoading(false);
+			return;
+		}
 
 		try {
 			if (isLogin) {
 				await authService.login(email, password);
 				toast.success("Đăng nhập thành công!");
+				await new Promise(resolve => setTimeout(resolve, 500));
 				router.push("/");
 			} else {
-				if (password !== confirmPassword) {
-					toast.error("Mật khẩu xác nhận không khớp");
-					setIsLoading(false);
-					return;
-				}
 				await authService.register({ email, password });
 				await authService.login(email, password);
 				toast.success("Đăng ký thành công!");
+				await new Promise(resolve => setTimeout(resolve, 500));
 				router.push("/");
 			}
 		} catch (err: any) {
-			toast.error(err.response?.data?.detail || "Đã xảy ra lỗi. Vui lòng thử lại.");
+			const errorMsg = parseError(err);
+			if (err.response?.status === 401) {
+				newErrors.password = errorMsg;
+				toast.error(errorMsg);
+			} else if (err.response?.status === 400) {
+				const detail = err.response?.data?.detail;
+				if (Array.isArray(detail)) {
+					detail.forEach((d: any) => {
+						if (d.loc?.includes('email')) newErrors.email = d.msg;
+						if (d.loc?.includes('password')) newErrors.password = d.msg;
+					});
+				} else {
+					newErrors.general = errorMsg;
+				}
+			} else if (err.response?.status === 409) {
+				newErrors.email = errorMsg;
+			} else {
+				newErrors.general = errorMsg;
+			}
+			setErrors(newErrors);
+			if (newErrors.general) {
+				toast.error(newErrors.general);
+			}
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	const handleGoogleLogin = async () => {
+		clearErrors();
+
 		if ((window as any).google?.accounts?.oauth2) {
 			const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 			if (!clientId) {
+				setErrors({ general: "Google OAuth chưa được cấu hình" });
 				toast.error("Google OAuth chưa được cấu hình");
 				return;
 			}
@@ -62,14 +125,28 @@ export default function AuthPage() {
 				client_id: clientId,
 				scope: 'openid email profile',
 				callback: async (response: any) => {
-					if (response.access_token) {
-						try {
-							await authService.googleLogin(response.access_token);
-							toast.success("Đăng nhập Google thành công!");
-							router.push("/");
-						} catch (err: any) {
-							toast.error(err.response?.data?.detail || "Đăng nhập Google thất bại");
-						}
+					if (response.error) {
+						const errorMsg = response.error === 'popup_closed_by_user' 
+							? "Đã hủy đăng nhập Google" 
+							: `Lỗi Google: ${response.error}`;
+						setErrors({ general: errorMsg });
+						return;
+					}
+
+					if (!response.credential) {
+						setErrors({ general: "Không nhận được token từ Google" });
+						return;
+					}
+
+					try {
+						await authService.googleLogin(response.credential);
+						toast.success("Đăng nhập Google thành công!");
+						await new Promise(resolve => setTimeout(resolve, 500));
+						router.push("/");
+					} catch (err: any) {
+						const errorMsg = parseError(err);
+						setErrors({ general: errorMsg });
+						toast.error(errorMsg);
 					}
 				},
 			});
@@ -77,6 +154,11 @@ export default function AuthPage() {
 		} else {
 			toast.error("Google SDK chưa được tải. Vui lòng thử lại sau.");
 		}
+	};
+
+	const handleTabChange = (tab: boolean) => {
+		clearErrors();
+		setIsLogin(tab);
 	};
 
 	return (
@@ -111,7 +193,7 @@ export default function AuthPage() {
 						<div className="flex border-b border-gray-200 mb-8">
 							<button
 								type="button"
-								onClick={() => setIsLogin(true)}
+								onClick={() => handleTabChange(true)}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -120,7 +202,7 @@ export default function AuthPage() {
 							</button>
 							<button
 								type="button"
-								onClick={() => setIsLogin(false)}
+								onClick={() => handleTabChange(false)}
 								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
 									!isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
 								}`}
@@ -130,9 +212,16 @@ export default function AuthPage() {
 						</div>
 
 						{/* Form */}
-						<form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+						<form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+							{errors.general && (
+								<div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm">
+									<AlertCircle className="size-4 flex-shrink-0" />
+									<span>{errors.general}</span>
+								</div>
+							)}
+
 							{!isLogin && (
-								<div className="space-y-3">
+								<div className="space-y-2">
 									<Label className="block font-bold uppercase text-text-secondary tracking-widest text-[14px]" htmlFor="fullname">
 										Họ và tên
 									</Label>
@@ -145,14 +234,23 @@ export default function AuthPage() {
 											name="fullname"
 											placeholder="Nguyễn Văn A"
 											value={fullname}
-											onChange={(e) => setFullname(e.target.value)}
-											className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
+											onChange={(e) => {
+												setFullname(e.target.value);
+												if (errors.fullname) setErrors(prev => ({ ...prev, fullname: undefined }));
+											}}
+											className={`pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary ${errors.fullname ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
 										/>
 									</div>
+									{errors.fullname && (
+										<p className="text-red-600 text-sm flex items-center gap-1">
+											<AlertCircle className="size-3" />
+											{errors.fullname}
+										</p>
+									)}
 								</div>
 							)}
 
-							<div className="space-y-3">
+							<div className="space-y-2">
 								<Label className="block font-bold uppercase text-text-secondary tracking-widest text-[14px]" htmlFor="email">
 									Email sinh viên / Cán bộ
 								</Label>
@@ -166,14 +264,23 @@ export default function AuthPage() {
 										type="email"
 										placeholder="ten.ho@hcmut.edu.vn"
 										value={email}
-										onChange={(e) => setEmail(e.target.value)}
+										onChange={(e) => {
+											setEmail(e.target.value);
+											if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
+										}}
 										required
-										className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
+										className={`pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
 									/>
 								</div>
+								{errors.email && (
+									<p className="text-red-600 text-sm flex items-center gap-1">
+										<AlertCircle className="size-3" />
+										{errors.email}
+									</p>
+								)}
 							</div>
 
-							<div className="space-y-3">
+							<div className="space-y-2">
 								<div className="flex justify-between items-center">
 									<Label className="block font-bold uppercase text-text-secondary tracking-widest text-[14px]" htmlFor="password">
 										Mật khẩu
@@ -194,10 +301,13 @@ export default function AuthPage() {
 										type={showPassword ? "text" : "password"}
 										placeholder="••••••••"
 										value={password}
-										onChange={(e) => setPassword(e.target.value)}
+										onChange={(e) => {
+											setPassword(e.target.value);
+											if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
+										}}
 										required
 										minLength={8}
-										className="pl-12 pr-12 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
+										className={`pl-12 pr-12 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary ${errors.password ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
 									/>
 									<button
 										type="button"
@@ -209,10 +319,16 @@ export default function AuthPage() {
 										</span>
 									</button>
 								</div>
+								{errors.password && (
+									<p className="text-red-600 text-sm flex items-center gap-1">
+										<AlertCircle className="size-3" />
+										{errors.password}
+									</p>
+								)}
 							</div>
 
 							{!isLogin && (
-								<div className="space-y-3">
+								<div className="space-y-2">
 									<Label className="block font-bold uppercase text-text-secondary tracking-widest text-[14px]" htmlFor="confirmPassword">
 										Xác nhận mật khẩu
 									</Label>
@@ -226,12 +342,21 @@ export default function AuthPage() {
 											type={showPassword ? "text" : "password"}
 											placeholder="••••••••"
 											value={confirmPassword}
-											onChange={(e) => setConfirmPassword(e.target.value)}
+											onChange={(e) => {
+												setConfirmPassword(e.target.value);
+												if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: undefined }));
+											}}
 											required
 											minLength={8}
-											className="pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary"
+											className={`pl-12 pr-4 py-3.5 border-slate-300 rounded-sm text-lg font-medium focus:ring-primary focus:border-primary ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
 										/>
 									</div>
+									{errors.confirmPassword && (
+										<p className="text-red-600 text-sm flex items-center gap-1">
+											<AlertCircle className="size-3" />
+											{errors.confirmPassword}
+										</p>
+									)}
 								</div>
 							)}
 

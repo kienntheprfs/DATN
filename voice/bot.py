@@ -88,6 +88,7 @@ def create_llm(
             session=session,
             on_tool_calls=on_tool_calls,
             on_tool_result=on_tool_result,
+            transport=transport,
         )
     else:
         model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -195,7 +196,11 @@ async def run_bot(
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
             context,
             user_params=LLMUserAggregatorParams(
-                user_turn_strategies=UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]),
+                user_turn_strategies=UserTurnStrategies(
+                    stop=[
+                        TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
+                    ]
+                ),
             ),
         )
 
