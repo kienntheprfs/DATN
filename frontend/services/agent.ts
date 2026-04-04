@@ -97,6 +97,10 @@ export const agentClient = {
 		return response.data;
 	},
 
+	async deleteAllThreads(): Promise<void> {
+		await apiClient.delete('/agent/threads');
+	},
+
 	async *stream(
 		message: string,
 		options: {

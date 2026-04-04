@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Search, SortDesc, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/stores/app.store";
 import { authService } from "@/services/auth-api";
@@ -9,6 +9,18 @@ import type { HistoryItem } from "@/types/history";
 import { formatTimeAgo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -21,12 +33,14 @@ type SortOption = "newest" | "oldest" | "az";
 
 export default function HistoryPage() {
   const router = useRouter();
-  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, login } = useAppStore();
+  const pathname = usePathname();
+  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, clearAllHistory, refreshHistory } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filteredHistory, setFilteredHistory] = useState<Array<HistoryItem & { displayTimestamp?: string }>>([]);
   const [tick, setTick] = useState(0);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -40,6 +54,12 @@ export default function HistoryPage() {
     };
     checkAuth();
   }, [router]);
+
+  useEffect(() => {
+    if (!isCheckingAuth) {
+      refreshHistory();
+    }
+  }, [isCheckingAuth]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -77,6 +97,18 @@ export default function HistoryPage() {
 
   const handleReopen = (item: HistoryItem) => {
     router.push(`/chat?thread_id=${item.id}`);
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      await clearAllHistory();
+      toast.success("Đã xóa toàn bộ lịch sử hội thoại");
+    } catch {
+      toast.error("Không thể xóa lịch sử. Vui lòng thử lại.");
+    } finally {
+      setIsDeletingAll(false);
+    }
   };
 
   if (isCheckingAuth) {
@@ -140,6 +172,38 @@ export default function HistoryPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={history.length === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Xóa tất cả
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Xóa toàn bộ lịch sử?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Hành động này sẽ xóa vĩnh viễn tất cả {history.length} cuộc hội thoại của bạn. 
+                    Bạn không thể hoàn tác điều này.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Hủy</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDeleteAll}
+                    disabled={isDeletingAll}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeletingAll ? "Đang xóa..." : "Xóa tất cả"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 

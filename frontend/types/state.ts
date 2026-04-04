@@ -16,4 +16,6 @@ export interface AppState {
   
   // Action gọi API (Async)
   fetchMoreHistory: () => Promise<void>; 
+  clearAllHistory: () => Promise<void>;
+  refreshHistory: () => Promise<void>;
 }

@@ -33,7 +33,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAppStore } from "@/stores/app.store";
 import { authService } from "@/services/auth-api";
 
@@ -70,7 +70,14 @@ const data = {
 
 export function AppSidebar() {
     const router = useRouter();
-    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory } = useAppStore();
+    const pathname = usePathname();
+    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory, refreshHistory } = useAppStore();
+
+    useEffect(() => {
+        if (user) {
+            refreshHistory();
+        }
+    }, [pathname]);
 
     useEffect(() => {
         login();
