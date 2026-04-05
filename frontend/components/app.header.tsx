@@ -22,6 +22,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const routeDictionary: Record<string, string> = {
 	dashboard: "Bảng điều khiển",
@@ -115,6 +116,7 @@ function SettingsPanel() {
 
 export function AppHeader() {
 	const pathname = usePathname();
+	usePageTitle();
 	const pathSegments = pathname === "/" ? [] : pathname.split("/").filter((segment) => segment);
 
 	return (

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { GraduationCap, AlertCircle } from "lucide-react";
 import { authService } from "@/services/auth-api";
 import { toast } from "sonner";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 interface FormErrors {
 	email?: string;
@@ -477,6 +478,7 @@ function AuthForm() {
 }
 
 export default function AuthPage() {
+	usePageTitle();
 	return (
 		<Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
 			<AuthForm />

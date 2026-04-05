@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function AuthCallbackContent() {
   const searchParams = useSearchParams();
@@ -51,6 +52,7 @@ function AuthCallbackContent() {
 }
 
 export default function AuthCallbackPage() {
+  usePageTitle();
   return (
     <div className="min-h-screen flex items-center justify-center bg-background-light">
       <Suspense fallback={

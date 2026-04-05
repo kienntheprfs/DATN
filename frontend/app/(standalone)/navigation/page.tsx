@@ -1,5 +1,5 @@
-import NavigationPage from '@/components/features/navigation/NavigationPage';
+import NavigationContent from "./navigation-content";
 
 export default function Navigation() {
-  return <NavigationPage />;
+  return <NavigationContent />;
 }

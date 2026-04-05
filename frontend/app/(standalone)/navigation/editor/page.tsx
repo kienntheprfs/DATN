@@ -1,5 +1,5 @@
-import EditorPage from '@/components/features/editor/EditorPage';
+import EditorContent from "./editor-content";
 
 export default function Editor() {
-  return <EditorPage />;
+  return <EditorContent />;
 }
