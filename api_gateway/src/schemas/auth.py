@@ -1,5 +1,5 @@
 """Authentication schemas."""
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional
 from datetime import datetime
 
@@ -13,14 +13,26 @@ class LoginRequest(BaseModel):
 class GoogleLoginRequest(BaseModel):
     """Google OAuth2 login request.
     
-    Frontend sends the Google ID token (credential) received
-    from Google Sign-In SDK.
+    Frontend may send either:
+    - credential: Google ID token from Google Identity Services (GIS) ID flow.
+    - access_token: OAuth2 access token from GIS token flow.
     """
-    credential: str = Field(
-        ..., 
-        min_length=1, 
+    credential: Optional[str] = Field(
+        None,
+        min_length=1,
         description="Google ID token from frontend Google Sign-In SDK",
     )
+    access_token: Optional[str] = Field(
+        None,
+        min_length=1,
+        description="Google OAuth access token from frontend GIS token flow",
+    )
+
+    @model_validator(mode="after")
+    def validate_google_token(self) -> "GoogleLoginRequest":
+        if not self.credential and not self.access_token:
+            raise ValueError("Either credential or access_token must be provided")
+        return self
 
 
 class GoogleUserInfo(BaseModel):

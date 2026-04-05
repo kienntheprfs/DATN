@@ -124,7 +124,7 @@ test.describe('Components - Auth Page', () => {
 		await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
 		await helpers.waitForPageLoad(page);
 
-		await expect(page.getByRole('heading', { name: 'Academic Nexus' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'BK-TBOT' })).toBeVisible();
 	});
 
 	test('should have email and password inputs on auth page', async ({ page }) => {

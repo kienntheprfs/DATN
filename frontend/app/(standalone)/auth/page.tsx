@@ -141,17 +141,23 @@ function AuthForm() {
 						return;
 					}
 
-					if (!response.credential) {
+					const credential = response.credential;
+					const accessToken = response.access_token;
+
+					if (!credential && !accessToken) {
 						setErrors({ general: "Không nhận được token từ Google" });
 						return;
 					}
 
 					try {
-						await authService.googleLogin(response.credential);
+						await authService.googleLogin({
+							credential,
+							access_token: accessToken,
+						});
 						toast.success("Đăng nhập Google thành công!");
 						await new Promise(resolve => setTimeout(resolve, 500));
 						router.push("/");
-					} catch (err: any) {
+					} catch (err: unknown) {
 						const errorMsg = parseError(err);
 						setErrors({ general: errorMsg });
 						toast.error(errorMsg);
@@ -193,7 +199,7 @@ function AuthForm() {
 							<div className="inline-flex items-center justify-center w-20 h-20 bg-primary text-white rounded-sm mb-6 shadow-md">
 								<GraduationCap className="size-10 fill-current" />
 							</div>
-							<h1 className="font-heading text-text-main tracking-tight mb-3 text-4xl font-bold">Academic Nexus</h1>
+							<h1 className="font-heading text-text-main tracking-tight mb-3 text-4xl font-bold">BK-TBOT</h1>
 							<p className="text-text-secondary text-lg">Hệ thống Tra cứu Quy chế & Văn bản</p>
 						</div>
 
@@ -446,7 +452,7 @@ function AuthForm() {
 				<footer className="px-8 py-8 border-t border-border bg-slate-50 mt-auto">
 					<div className="text-center text-text-secondary space-y-3 text-[15px]">
 						<p className="font-extrabold text-slate-800 uppercase tracking-tighter text-lg">Trường Đại học Bách Khoa - ĐHQG-HCM</p>
-						<p className="font-medium">© 2026 Academic Nexus. Phiên bản 2.0.1</p>
+						<p className="font-medium">© 2026 BK-TBOT. Phiên bản 2.0.1</p>
 						<div className="flex justify-center gap-5 mt-4 font-semibold text-sm">
 							<a className="hover:text-primary transition-colors" href="#">
 								Điều khoản

@@ -15,6 +15,7 @@ Flow:
 import logging
 from typing import Optional
 
+import httpx
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from fastapi import HTTPException, status
@@ -104,13 +105,68 @@ class GoogleAuthService:
                 detail=f"Invalid Google token: {exc}",
             ) from exc
 
+    @staticmethod
+    async def verify_google_access_token(access_token: str) -> GoogleUserInfo:
+        """Verify a Google OAuth access token via Google userinfo endpoint.
+
+        This supports frontend flows that use ``google.accounts.oauth2.initTokenClient``
+        and receive ``access_token`` instead of an ID token credential.
+        """
+        if not settings.google_client_id:
+            logger.error("Google OAuth is not configured: GOOGLE_CLIENT_ID is empty")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google login is not configured on this server",
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+
+            if response.status_code != status.HTTP_200_OK:
+                logger.warning(
+                    "Google access token verification failed: status=%s body=%s",
+                    response.status_code,
+                    response.text,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Google access token",
+                )
+
+            userinfo = response.json()
+            if not userinfo.get("sub") or not userinfo.get("email"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google access token did not return required user fields",
+                )
+
+            return GoogleUserInfo(
+                google_id=userinfo["sub"],
+                email=userinfo["email"],
+                name=userinfo.get("name"),
+                picture=userinfo.get("picture"),
+                email_verified=userinfo.get("email_verified", False),
+            )
+
+        except httpx.HTTPError as exc:
+            logger.warning("Google userinfo request failed: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to reach Google verification service",
+            ) from exc
+
     # ------------------------------------------------------------------ #
     # Full login flow
     # ------------------------------------------------------------------ #
 
     @staticmethod
     async def google_login(
-        credential: str,
+        credential: Optional[str],
+        access_token: Optional[str],
         db: AsyncSession,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
@@ -133,6 +189,7 @@ class GoogleAuthService:
 
         Args:
             credential: Google ID token string.
+            access_token: Google OAuth access token string.
             db: Async database session.
             user_agent: Optional client User-Agent header.
             ip_address: Optional client IP address.
@@ -147,9 +204,19 @@ class GoogleAuthService:
             HTTPException(503): If Google OAuth is not configured.
         """
         # Step 1: Verify token -------------------------------------------
-        google_user: GoogleUserInfo = await GoogleAuthService.verify_google_token(
-            credential,
-        )
+        if credential:
+            google_user: GoogleUserInfo = await GoogleAuthService.verify_google_token(
+                credential,
+            )
+        elif access_token:
+            google_user = await GoogleAuthService.verify_google_access_token(
+                access_token,
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Either credential or access_token must be provided",
+            )
 
         if not google_user.email_verified:
             raise HTTPException(

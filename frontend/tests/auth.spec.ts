@@ -12,7 +12,7 @@ test.describe('Authentication - Login Tab', () => {
 		await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
 		await helpers.waitForPageLoad(page);
 
-		await expect(page.getByRole('heading', { name: 'Academic Nexus' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'BK-TBOT' })).toBeVisible();
 		await expect(page.getByText('Hệ thống Tra cứu Quy chế & Văn bản')).toBeVisible();
 	});
 
@@ -305,6 +305,6 @@ test.describe('Authentication - UI/UX', () => {
 		await helpers.waitForPageLoad(page);
 
 		await expect(page.getByText('Trường Đại học Bách Khoa - ĐHQG-HCM')).toBeVisible();
-		await expect(page.getByText('© 2026 Academic Nexus')).toBeVisible();
+		await expect(page.getByText('© 2026 BK-TBOT')).toBeVisible();
 	});
 });

@@ -79,13 +79,14 @@ async def google_login(
 ):
     """Login with Google OAuth2.
 
-    Frontend sends the Google ID token (credential) received
-    from Google Sign-In SDK. Backend verifies it and returns
+    Frontend may send either Google ID token (credential) or
+    OAuth access token (access_token). Backend verifies it and returns
     JWT access/refresh tokens.
     """
     user_agent, ip_address = get_client_info(request)
     tokens: TokenResponse = await google_auth_service.google_login(
         credential=google_data.credential,
+        access_token=google_data.access_token,
         db=db,
         user_agent=user_agent,
         ip_address=ip_address,

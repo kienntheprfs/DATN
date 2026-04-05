@@ -190,8 +190,8 @@ export const authService = {
     return response.data;
   },
 
-  googleLogin: async (credential: string): Promise<TokenResponse> => {
-    const response = await apiClient.post<TokenResponse>('/auth/google', { credential }, {
+  googleLogin: async (data: { credential?: string; access_token?: string }): Promise<TokenResponse> => {
+    const response = await apiClient.post<TokenResponse>('/auth/google', data, {
       _skipAuthRefresh: true,
     } as any);
     if (response.data.access_token) {
