@@ -190,7 +190,13 @@ async def _handle_input(
         input = Command(resume=user_input.message)
     else:
         current_time = datetime.now(timezone.utc).isoformat()
-        input = {"messages": [HumanMessage(content=user_input.message, additional_kwargs={"timestamp": current_time})]}
+        input = {"messages": [HumanMessage(
+            content=user_input.message, 
+            additional_kwargs={
+                "timestamp": current_time,
+                "run_id": str(run_id)
+                })]
+            }
 
     kwargs = {
         "input": input,
@@ -652,7 +658,26 @@ async def history(
             config=RunnableConfig(configurable={"thread_id": input.thread_id})
         )
         messages: list[AnyMessage] = state_snapshot.values.get("messages", [])
-        chat_messages: list[ChatMessage] = [langchain_to_chat_message(m) for m in messages]
+
+        chat_messages: list[ChatMessage] = []
+        current_run_id = None 
+
+        for m in messages:
+            # 1. Nếu là tin nhắn của user, rút run_id từ additional_kwargs ra
+            if isinstance(m, HumanMessage) and "run_id" in m.additional_kwargs:
+                current_run_id = m.additional_kwargs["run_id"]
+                
+            chat_msg = langchain_to_chat_message(m)
+            
+            # 2. Gán run_id cho tin nhắn. 
+            # Dùng current_run_id gốc của bạn, nếu không có thì fallback sang m.id (phòng hờ cho các đoạn chat cũ trong DB)
+            if current_run_id:
+                chat_msg.run_id = current_run_id
+            elif hasattr(m, 'id') and m.id:
+                chat_msg.run_id = str(m.id)
+                
+            chat_messages.append(chat_msg)
+
         return ChatHistory(messages=chat_messages)
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
