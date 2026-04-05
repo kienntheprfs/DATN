@@ -427,7 +427,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 	};
 
 	return (
-		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-20">
+		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-28">
 			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
@@ -451,7 +451,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								</div>
 								<div className="group relative max-w-[85%] space-y-2">
 									{group.messages.map((m) => (
-										<div key={m.id} className="p-4 text-sm rounded-none shadow-sm bg-muted text-foreground">
+										<div key={m.id} className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide">
 											<p className="whitespace-pre-wrap">{String(m.content)}</p>
 										</div>
 									))}
@@ -497,8 +497,8 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 									<ToolCollapsible key={tool.id} tool={tool} />
 								))}
 								{combinedContent && (
-									<div className="p-4 text-sm rounded-none shadow-sm transition-all duration-200 border bg-background border-border">
-										<div className="prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/50 [&_a]:hover:decoration-primary">
+									<div className="p-5 text-base rounded-none shadow-sm transition-all duration-200 border bg-background border-border leading-relaxed tracking-wide">
+										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
 											<Markdown remarkPlugins={[remarkGfm]}>
 												{combinedContent}
 											</Markdown>

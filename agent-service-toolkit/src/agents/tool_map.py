@@ -151,7 +151,6 @@ def find_route_func(
                 floor_level=None,
                 description=f"Người dùng tìm đường từ '{from_location}' đến '{to_location}' nhưng không tìm thấy địa điểm xuất phát",
             )
-            return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
 
         if not end_results:
             _report_missing_location_internal(
@@ -160,6 +159,10 @@ def find_route_func(
                 floor_level=None,
                 description=f"Người dùng tìm đường từ '{from_location}' đến '{to_location}' nhưng không tìm thấy địa điểm đến",
             )
+            
+        if not start_results:
+            return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
+        if not end_results:
             return f"Không tìm thấy địa điểm đến '{to_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 2' thay vì 'Phòng 2 - Tòa B4')."
 
         # Helper to format location string

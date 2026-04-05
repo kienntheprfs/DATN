@@ -75,17 +75,23 @@ export function ChatInput({
   };
 
   const handleSend = () => {
-    if (!message.trim() || isLoading) return;
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || isLoading) return;
+
+    if (trimmedMessage.length > 5000) {
+      toast.error("Tin nhắn quá dài. Vui lòng nhập tối đa 5000 ký tự.");
+      return;
+    }
 
     if (onSubmitMessage) {
-      onSubmitMessage(message, queryMode);
+      onSubmitMessage(trimmedMessage, queryMode);
       setMessage(""); 
     } else if (onSubmitAndRedirect) {
-      onSubmitAndRedirect(message, queryMode);
+      onSubmitAndRedirect(trimmedMessage, queryMode);
       setMessage("");
     } else {
       const threadId = crypto.randomUUID();
-      const params = new URLSearchParams({ thread_id: threadId, message: message });
+      const params = new URLSearchParams({ thread_id: threadId, message: trimmedMessage });
       router.push(`/chat?${params.toString()}`);
     }
   };

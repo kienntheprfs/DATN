@@ -154,12 +154,10 @@ export function RatingButtons({ runId, threadId, agentId }: RatingButtonsProps) 
 	const [showDislikeDialog, setShowDislikeDialog] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
-	if (!isValidUUID(runId)) {
-		return null;
-	}
+	const isValid = isValidUUID(runId);
 
 	useEffect(() => {
-		if (!isAuthenticated()) return;
+		if (!isValid || !isAuthenticated()) return;
 
 		apiClient.get<Array<{ id: string; run_id: string; rating: RatingValue }>>(`/dashboard/ratings/thread/${threadId}`)
 			.then((res) => {
@@ -171,7 +169,11 @@ export function RatingButtons({ runId, threadId, agentId }: RatingButtonsProps) 
 				}
 			})
 			.catch(() => {});
-	}, [runId, threadId]);
+	}, [runId, threadId, isValid]);
+
+	if (!isValid) {
+		return null;
+	}
 
 	const handleUnlike = async () => {
 		if (!ratingId) return;
