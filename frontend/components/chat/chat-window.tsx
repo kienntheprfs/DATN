@@ -427,7 +427,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 	};
 
 	return (
-		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-28">
+		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-28" role="log" aria-live="polite" aria-label="Chat messages">
 			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;

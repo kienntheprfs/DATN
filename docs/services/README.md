@@ -69,10 +69,11 @@ graph TB
 ## Services Summary
 
 ### 1. API Gateway Service 🚪
-**Port**: 8002 | **Technology**: Apache APISIX
+**Port**: 8002 | **Technology**: FastAPI, JWT Authentication
 
-- **Chức năng**: Cổng vào chính, routing và load balancing
-- **Key Features**: JWT authentication, rate limiting, request transformation
+- **Chức năng**: Cổng vào chính, routing và authentication
+- **Key Features**: JWT authentication, rate limiting, request transformation, Google OAuth
+- **Dependencies**: FastAPI, PyJWT, SQLAlchemy, AsyncPG, Google Auth
 - **Integration**: Tất cả backend services
 - **Documentation**: [api-gateway.md](./api-gateway.md)
 
@@ -85,10 +86,11 @@ graph TB
 - **Documentation**: [agent-service-toolkit.md](./agent-service-toolkit.md)
 
 ### 3. Knowledge Base Service 📚
-**Port**: 8000 | **Technology**: FastAPI, PostgreSQL, Vector DB
+**Port**: 8000 | **Technology**: FastAPI, PostgreSQL, Qdrant
 
 - **Chức năng**: Document management và RAG (Retrieval-Augmented Generation)
-- **Key Features**: Document upload, vector search, Q&A system
+- **Key Features**: Document upload, vector search, Q&A system, Celery background processing
+- **Dependencies**: FastAPI, SQLAlchemy, AsyncPG, Qdrant-client, LangChain, Celery, Redis
 - **Integration**: Agent service, file storage, embedding models
 - **Documentation**: [knowledge-base.md](./knowledge-base.md)
 
@@ -101,26 +103,29 @@ graph TB
 - **Documentation**: [dashboard.md](./dashboard.md)
 
 ### 5. Wayfinder Service 🗺️
-**Port**: 8001 | **Technology**: FastAPI, PostGIS, NetworkX
+**Port**: 8001 | **Technology**: FastAPI, PostgreSQL, NetworkX
 
 - **Chức năng**: Indoor navigation và location services
-- **Key Features**: Map management, route calculation, location search
+- **Key Features**: Map management, route calculation, location search, spatial queries
+- **Dependencies**: FastAPI, SQLModel, SQLAlchemy, NetworkX, RapidFuzz, Pillow
 - **Integration**: Agent service cho location-based queries
 - **Documentation**: [wayfinder.md](./wayfinder.md)
 
 ### 6. Voice Service 🎤
-**Port**: 7860/7861 | **Technology**: Sherpa-ONNX, Gradio, Piper
+**Port**: 7860 | **Technology**: FastAPI, Sherpa-ONNX, Piper
 
 - **Chức năng**: Speech-to-Text và Text-to-Speech
-- **Key Features**: Multi-language STT, neural TTS, voice bot
+- **Key Features**: Multi-language STT, neural TTS, voice bot, real-time audio processing
+- **Dependencies**: FastAPI, Sherpa-ONNX, Pipecat-AI, PyTorch, NumPy, Loguru
 - **Integration**: Agent service cho voice interactions
 - **Documentation**: [voice.md](./voice.md)
 
 ### 7. Frontend Application 🖥️
-**Port**: 3000 | **Technology**: Next.js, TypeScript, TailwindCSS
+**Port**: 3000 | **Technology**: Next.js 16, TypeScript, TailwindCSS
 
 - **Chức năng**: Web interface cho end users
-- **Key Features**: Real-time chat, admin dashboard, voice input
+- **Key Features**: Real-time chat, admin dashboard, voice input, modern UI
+- **Dependencies**: Next.js, React, TypeScript, TailwindCSS, Shadcn/ui, Zustand
 - **Integration**: API Gateway cho tất cả backend services
 - **Documentation**: [frontend.md](./frontend.md)
 
@@ -129,17 +134,17 @@ graph TB
 | Service | Internal Port | External Port | Protocol |
 |----------|---------------|---------------|----------|
 | Frontend | 3000 | 3000 | HTTP |
-| API Gateway | 9080 | 8002 | HTTP |
+| API Gateway | 8002 | 8002 | HTTP |
 | Agent Service | 8080 | 8080 | HTTP |
 | Knowledge Base | 8000 | 8000 | HTTP |
 | Wayfinder | 8001 | 8001 | HTTP |
 | Dashboard | 8010 | 8010 | HTTP |
-| Voice STT | 7860 | 7860 | HTTP |
-| Voice TTS | 7861 | 7861 | HTTP |
+| Voice Service | 7860 | 7860 | HTTP |
 | PostgreSQL (Agent) | 5432 | 5432 | TCP |
 | PostgreSQL (Knowledge) | 5433 | 5433 | TCP |
 | PostgreSQL (Wayfinder) | 5434 | 5434 | TCP |
 | PostgreSQL (Dashboard) | 5435 | 5435 | TCP |
+| Qdrant (Vector DB) | 6333 | 6333 | HTTP |
 | Redis | 6379 | 6379 | TCP |
 
 ## Data Flow
@@ -212,23 +217,24 @@ sequenceDiagram
 ## Technology Stack
 
 ### Backend Technologies
-- **API Frameworks**: FastAPI, Apache APISIX, Gradio
-- **Databases**: PostgreSQL, PostGIS, ChromaDB, Redis
-- **AI/ML**: LangGraph, PyTorch, Sherpa-ONNX, Sentence Transformers
+- **API Frameworks**: FastAPI, Streamlit
+- **Databases**: PostgreSQL, Qdrant, Redis
+- **AI/ML**: LangGraph, PyTorch, Sherpa-ONNX, LangChain
 - **Task Processing**: Celery, Redis Queue
-- **Containerization**: Docker, Docker Compose
+- **Package Management**: UV, pip
+- **Authentication**: JWT, Google OAuth
 
 ### Frontend Technologies
-- **Framework**: Next.js 14 với App Router
+- **Framework**: Next.js 16 với App Router
 - **Language**: TypeScript
 - **Styling**: TailwindCSS, Shadcn/ui
 - **State Management**: Zustand
-- **Data Fetching**: React Query
+- **Data Fetching**: Axios, React Query
 
 ### DevOps & Infrastructure
 - **Package Management**: UV, npm
 - **Database Migrations**: Alembic
-- **Testing**: Pytest, Jest
+- **Testing**: Pytest, Playwright
 - **Documentation**: Markdown, Mermaid diagrams
 
 ## Security Architecture

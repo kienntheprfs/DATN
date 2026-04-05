@@ -95,7 +95,8 @@ export function VoiceButton({
         <Button
           variant={isConnected ? "destructive" : "ghost"}
           size="icon"
-          className={`size-9 rounded-none transition-all ${
+          aria-label={getTooltipContent()}
+          className={`size-11 rounded-none min-w-11 transition-all ${
             isConnected
               ? "bg-red-500 hover:bg-red-600 text-white"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"

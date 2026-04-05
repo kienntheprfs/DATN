@@ -192,7 +192,7 @@ export function EditorInspector({
           <img
             src={currentMap.image_url}
             className="w-full h-full object-cover opacity-50"
-            alt="Map"
+            alt={`Bản đồ ${currentMap.name}`}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
           <div className="absolute bottom-4 left-4">

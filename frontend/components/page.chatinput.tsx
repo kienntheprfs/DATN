@@ -112,6 +112,7 @@ export function ChatInput({
         
         <InputGroupTextarea 
           id="chat-textarea" 
+          aria-label="Nhập câu hỏi hoặc yêu cầu tra cứu"
           placeholder="Nhập câu hỏi hoặc yêu cầu tra cứu..." 
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -125,10 +126,11 @@ export function ChatInput({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`size-9 rounded-none ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"}`}
+                  aria-label={isDeepMode ? "Tắt chế độ tìm kiếm sâu" : "Bật chế độ tìm kiếm sâu"}
+                  className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"}`}
                   onClick={toggleQueryMode}
                 >
-                  <Sparkles className="size-4" />
+                  <Sparkles className="size-4" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -141,10 +143,11 @@ export function ChatInput({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-9 rounded-none text-muted-foreground hover:bg-muted"
+                    aria-label="Hiển thị tài liệu"
+                    className="size-11 rounded-none min-w-11 text-muted-foreground hover:bg-muted"
                     onClick={onDocumentToggle}
                   >
-                    <FileText className="size-4" />
+                    <FileText className="size-4" aria-hidden="true" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -185,18 +188,19 @@ export function ChatInput({
 
             <Button
               variant={isLoading ? "destructive" : "default"}
-              className="rounded-none font-bold"
+              aria-label={isLoading ? "Đang xử lý" : "Gửi tin nhắn"}
+              className="rounded-none font-bold min-h-11 px-6"
               onClick={handleSend}
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
                   Đang xử lý...
                 </>
               ) : (
                 <>
-                  <Send className="mr-2 size-4" />
+                  <Send className="mr-2 size-4" aria-hidden="true" />
                   Tra cứu
                 </>
               )}
