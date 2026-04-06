@@ -22,7 +22,15 @@ if getattr(settings, "POSTGRES_SSL_MODE", "disable") == "require":
     ssl_context.verify_mode = ssl.CERT_NONE  # Bỏ qua check chứng chỉ
     connect_args["ssl"] = ssl_context
 
-engine = create_async_engine(DATABASE_URL, connect_args=connect_args, echo=False)
+# Azure/gateway often closes idle TCP sessions; without pre-ping/recycle the pool
+# hands out dead asyncpg connections → InterfaceError: connection is closed.
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=280,
+)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )
