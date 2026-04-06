@@ -10,7 +10,14 @@ if getattr(settings, "POSTGRES_SSL_MODE", "disable") == "require":
     ssl_context.verify_mode = ssl.CERT_NONE  # Bỏ qua check chứng chỉ
     connect_args["ssl"] = ssl_context
 
-engine = create_async_engine(settings.DATABASE_URL, connect_args=connect_args, echo=False)
+# Azure/gateway often closes idle connections; recycle + pre-ping avoids stale pool conns.
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    connect_args=connect_args,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=280,
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 # Dependency Injection cho FastAPI
