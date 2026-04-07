@@ -272,13 +272,15 @@ export default function NavigationPage() {
           
           // Only switch floor if it's actually a different floor
           if (newFloorIdx !== -1 && newFloorIdx !== currentFloorIdx) {
-            // Save current segment before switching floor
+            // Save current segment before switching floor (include transition node in current segment)
             if (!floorPathMap.has(currentFloorIdx)) {
               floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
             }
+            // Start new segment with transition node as starting point
             currentFloorIdx = newFloorIdx;
-            currentCoords = [];
-            currentNodes = [];
+            currentCoords = [coord];  // Start new segment with transition node
+            currentNodes = [nodeId];
+            continue;  // Skip adding coord again below
           }
         }
         
@@ -807,7 +809,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
                         : -1;
                       
-                      if (startFloorIdx === currentFloorIndex || startFloorIdx === -1) {
+                      // Only show if this floor has the start point
+                      if (startFloorIdx !== -1 && startFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={startCoord[0]} cy={startCoord[1]} r="14" fill="#2563eb" />
@@ -831,7 +834,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
                         : -1;
                       
-                      if (endFloorIdx === currentFloorIndex || endFloorIdx === -1) {
+                      // Only show if this floor has the end point
+                      if (endFloorIdx !== -1 && endFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={endCoord[0]} cy={endCoord[1]} r="14" fill="#dc2626" />

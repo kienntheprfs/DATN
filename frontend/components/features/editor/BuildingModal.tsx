@@ -5,6 +5,7 @@ import Image from "next/image";
 import { buildingApi } from "@/services/building-api";
 import { editorApi } from "@/services/editor-api";
 import { mapApi } from "@/services/maps-api";
+import { getFullImageUrl } from "@/services/wayfinding-client";
 import { useBuildingStore } from "@/stores/building.store";
 import { MapData } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -245,7 +246,7 @@ export const BuildingModal = ({ nodeId, initialBuildingId, onClose, onSuccess }:
                                                 
                                                 <div className="w-24 h-16 rounded-lg overflow-hidden border border-border bg-muted relative shrink-0">
                                                     <Image 
-                                                        src={map.image_url} 
+                                                        src={getFullImageUrl(map.image_url)} 
                                                         alt="Map" 
                                                         fill
                                                         className="object-contain"
