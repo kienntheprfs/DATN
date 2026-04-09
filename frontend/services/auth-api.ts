@@ -5,9 +5,6 @@ const API_URL = '/api';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 const decodeJWT = (token: string): { exp: number; iat: number } | null => {
@@ -72,9 +69,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
 };
 
 const getCommonHeaders = (): Record<string, string> => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
   
   if (typeof window !== "undefined") {
     const token = localStorage.getItem('access_token');

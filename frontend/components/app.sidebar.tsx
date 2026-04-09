@@ -29,6 +29,7 @@ import {
     ChevronDown,
     Pencil,
     Trash2,
+    Shield,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -68,6 +69,14 @@ const data = {
             icon: Bookmark,
             isActive: true,
             requiresAuth: true,
+        },
+        {
+            title: "Lịch sử Admin",
+            url: "/admin/audit",
+            icon: Shield,
+            isActive: true,
+            requiresAuth: true,
+            requiresAdmin: true,
         },
     ],
 };
@@ -271,6 +280,11 @@ export function AppSidebar() {
 
                             if (item.requiresAuth && !user) {
                                 return null;
+                            }
+
+                            if (item.requiresAdmin && user) {
+                                const isAdmin = user.roles?.some((r) => r.name === "admin") || user.is_superuser;
+                                if (!isAdmin) return null;
                             }
 
                             return (

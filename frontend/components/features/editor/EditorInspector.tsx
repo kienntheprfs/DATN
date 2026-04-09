@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { getFullImageUrl } from '@/services/wayfinding-client';
 import { MapData, MapNode, NodeFormData, EdgeFormData, Building } from '@/types';
 import { editorApi } from '@/services/editor-api';
 import { mapApi } from '@/services/maps-api';
@@ -190,7 +191,7 @@ export function EditorInspector({
       <aside className="w-80 bg-background border-l border-border flex flex-col">
         <div className="h-40 bg-muted relative overflow-hidden">
           <img
-            src={currentMap.image_url}
+            src={getFullImageUrl(currentMap.image_url)}
             className="w-full h-full object-cover opacity-50"
             alt={`Bản đồ ${currentMap.name}`}
           />

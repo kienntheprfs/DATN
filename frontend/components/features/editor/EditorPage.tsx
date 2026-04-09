@@ -831,7 +831,7 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
     return (
       <aside className="w-80 h-full border-l border-border bg-card flex flex-col p-0 shadow-xl z-20">
         <div className="h-40 bg-muted relative overflow-hidden">
-          <img src={currentMap.image_url} className="w-full h-full object-cover opacity-50" alt={`Bản đồ ${currentMap.name}`} />
+          <img src={getFullImageUrl(currentMap.image_url)} className="w-full h-full object-cover opacity-50" alt={`Bản đồ ${currentMap.name}`} />
           <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent"></div>
           <div className="absolute bottom-4 left-6">
             <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Current Map</span>

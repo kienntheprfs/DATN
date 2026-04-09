@@ -10,7 +10,7 @@ export const wayfindingMapApi = {
       apiClient.get<MapEdge[]>("/wayfinder/api/edges", { params: { map_id: mapId } }),
     ]);
     return {
-      map: mapRes.data,
+      map: { ...mapRes.data, image_url: getFullImageUrl(mapRes.data.image_url) },
       nodes: nodesRes.data,
       edges: edgesRes.data,
     };
@@ -25,6 +25,6 @@ export const wayfindingMapApi = {
 
   getAllMaps: async (): Promise<MapData[]> => {
     const res = await apiClient.get<MapData[]>("/wayfinder/api/maps");
-    return res.data;
+    return res.data.map(m => ({ ...m, image_url: getFullImageUrl(m.image_url) }));
   },
 };

@@ -100,67 +100,43 @@ export default function NavigationPage() {
     const loadMaps = async () => {
       setMapLoading(true);
       try {
-        if (!selectedBuildingId) {
-          const campusData = await wayfindingMapApi.getMapWithData(1);
-          const campusFloor: FloorMap = {
-            map: campusData.map,
-            nodes: campusData.nodes,
-            edges: campusData.edges,
-            isCampus: true,
-          };
-          setFloorMaps([campusFloor]);
-          setCurrentFloorIndex(0);
-          setCurrentMap(campusFloor.map);
-          setNodes(campusFloor.nodes);
-          setEdges(campusFloor.edges);
-          setAllNodes(campusFloor.nodes);
-          setAllEdges(campusFloor.edges);
-          return;
-        }
-
-        console.log('[Nav] Loading maps for building:', selectedBuildingId);
-
-        const campusData = await wayfindingMapApi.getMapWithData(1);
-        console.log('[Nav] Campus map loaded:', campusData.map.name, 'nodes:', campusData.nodes.length);
+        // Load all maps (campus + all buildings)
+        const allMaps = await wayfindingMapApi.getAllMaps();
+        console.log('[Nav] All maps:', allMaps.map(m => ({ id: m.id, name: m.name, floor: m.floor_level, building: m.building_id })));
         
-        const campusFloor: FloorMap = {
-          map: campusData.map,
-          nodes: campusData.nodes,
-          edges: campusData.edges,
-          isCampus: true,
-        };
-
-        const maps = await wayfindingMapApi.getMapsByBuilding(selectedBuildingId);
-        console.log('[Nav] Building maps:', maps.length);
-        
-        const floorData: FloorMap[] = await Promise.all(
-          maps.map(async (m) => {
+        // Load nodes/edges for all maps
+        const allFloorData: FloorMap[] = await Promise.all(
+          allMaps.map(async (m) => {
             const data = await wayfindingMapApi.getMapWithData(m.id);
             return {
               map: data.map,
               nodes: data.nodes,
               edges: data.edges,
+              isCampus: m.floor_level === null,
             };
           })
         );
 
-        floorData.sort((a, b) => (a.map.floor_level || 0) - (b.map.floor_level || 0));
+        // Sort: campus first, then by floor level
+        allFloorData.sort((a, b) => {
+          if (a.isCampus) return -1;
+          if (b.isCampus) return 1;
+          return (a.map.floor_level || 0) - (b.map.floor_level || 0);
+        });
 
-        const allFloors = [campusFloor, ...floorData];
-        console.log('[Nav] Total floors:', allFloors.length);
-        setFloorMaps(allFloors);
-        
+        setFloorMaps(allFloorData);
         setCurrentFloorIndex(0);
-        setCurrentMap(allFloors[0].map);
-        setNodes(allFloors[0].nodes);
-        setEdges(allFloors[0].edges);
+        setCurrentMap(allFloorData[0].map);
+        setNodes(allFloorData[0].nodes);
+        setEdges(allFloorData[0].edges);
 
-        const allNodesCombined = allFloors.flatMap(f => f.nodes);
-        const allEdgesCombined = allFloors.flatMap(f => f.edges);
+        const allNodesCombined = allFloorData.flatMap(f => f.nodes);
+        const allEdgesCombined = allFloorData.flatMap(f => f.edges);
         setAllNodes(allNodesCombined);
         setAllEdges(allEdgesCombined);
         
-        console.log('[Nav] Maps loaded successfully, mapLoading set to false');
+        console.log('[Nav] Total floors:', allFloorData.length);
+        console.log('[Nav] Maps loaded successfully');
       } catch (err) {
         console.error('Failed to load maps:', err);
       } finally {
@@ -168,7 +144,7 @@ export default function NavigationPage() {
       }
     };
     loadMaps();
-  }, [selectedBuildingId]);
+  }, []);
 
   useEffect(() => {
     if (floorMaps.length > 0 && currentFloorIndex < floorMaps.length) {
@@ -254,19 +230,40 @@ export default function NavigationPage() {
         // Check if this is a transition node (entrance/stairs/elevator)
         const isTransitionNode = node.type === 'entrance' || node.type === 'stairs' || node.type === 'elevator';
         
+        // Check if map changed - split segment when moving to different map
+        const currentNodeMapId = node.map_id || node.map?.id;
+        const currentMapId = floorMaps[currentFloorIdx]?.map.id;
+        
+        if (currentNodeMapId !== currentMapId && currentNodes.length > 0) {
+          // Map changed! Save current segment and start new one
+          if (!floorPathMap.has(currentFloorIdx)) {
+            floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
+          }
+          // Find the new floor index
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === currentNodeMapId);
+          if (newFloorIdx !== -1) {
+            currentFloorIdx = newFloorIdx;
+            currentCoords = [coord];
+            currentNodes = [nodeId];
+            continue;
+          }
+        }
+        
         if (isTransitionNode && currentNodes.length > 0) {
           // Find new floor
           const newFloorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
           
           // Only switch floor if it's actually a different floor
           if (newFloorIdx !== -1 && newFloorIdx !== currentFloorIdx) {
-            // Save current segment before switching floor
+            // Save current segment before switching floor (include transition node)
             if (!floorPathMap.has(currentFloorIdx)) {
               floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
             }
+            // Start new segment with transition node as starting point
             currentFloorIdx = newFloorIdx;
-            currentCoords = [];
-            currentNodes = [];
+            currentCoords = [coord];  // Start new segment with transition node
+            currentNodes = [nodeId];
+            continue;  // Skip adding coord again below
           }
         }
         
@@ -284,6 +281,7 @@ export default function NavigationPage() {
       
       // Convert to segments
       const segments: FloorSegment[] = [];
+      console.log('[Nav] floorPathMap:', Array.from(floorPathMap.entries()).map(([k, v]) => ({ floorIdx: k, coordsCount: v.coords.length, coords: v.coords })));
       floorPathMap.forEach((data, floorIdx) => {
         // Find floor change node for this floor (first stairs/elevator in path)
         let floorChangeNode: { x: number; y: number; type: string } | undefined;
@@ -385,10 +383,13 @@ export default function NavigationPage() {
     const targetFloor = floorMaps[floorIndex];
     const targetFloorLevel = targetFloor?.map.floor_level;
     const currentFloorLevel = currentFloor?.map.floor_level;
+    const targetBuildingName = targetFloor?.map.building?.name;
     
     let noticeText = '';
     if (targetFloor?.isCampus) {
       noticeText = 'Chuyển qua Campus';
+    } else if (targetBuildingName) {
+      noticeText = `Chuyển sang ${targetBuildingName} tầng ${targetFloorLevel}`;
     } else if (targetFloorLevel !== undefined && currentFloorLevel !== undefined) {
       if (targetFloorLevel > currentFloorLevel) {
         noticeText = `Chuyển lên tầng ${targetFloorLevel}`;
@@ -646,9 +647,7 @@ export default function NavigationPage() {
                 const isActive = idx === currentFloorIndex;
                 const floorLabel = fm.isCampus 
                   ? 'Campus' 
-                  : fm.map.floor_level !== undefined
-                    ? (fm.map.floor_level >= 0 ? `Tầng ${fm.map.floor_level}` : `B${Math.abs(fm.map.floor_level)}`)
-                    : fm.map.name;
+                  : fm.map.name;
                 return (
                   <Button
                     key={fm.map.id}
@@ -793,7 +792,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
                         : -1;
                       
-                      if (startFloorIdx === currentFloorIndex || startFloorIdx === -1) {
+                      // Only show if this floor has the start point
+                      if (startFloorIdx !== -1 && startFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={startCoord[0]} cy={startCoord[1]} r="14" fill="#2563eb" />
@@ -817,7 +817,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
                         : -1;
                       
-                      if (endFloorIdx === currentFloorIndex || endFloorIdx === -1) {
+                      // Only show if this floor has the end point
+                      if (endFloorIdx !== -1 && endFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={endCoord[0]} cy={endCoord[1]} r="14" fill="#dc2626" />
