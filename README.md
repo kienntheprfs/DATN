@@ -276,6 +276,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Contact development team
 
 ---
+# Eject .env từ Infisical
+CHẠY LẦN ĐẦU:
+mở pwshell
+
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+irm get.scoop.sh | iex
+
+scoop --version
+
+scoop bucket add org https://github.com/Infisical/scoop-infisical.git
+
+scoop install infisical
+
+infisical login
+
+(trong folder gốc của đồ án)
+infisical init
+
+
+
+
+CHẠY CÁC LẦN SAU:
+thêm "infisical run --path=/api_gateway -- " vào trước lệnh chạy uv,vd: 
+infisical run --path=/api_gateway -- uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008
 
 **Last Updated**: 2025-01-03  
 **Version**: 1.0.0  
