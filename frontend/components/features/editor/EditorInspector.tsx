@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 interface EditorInspectorProps {
   currentMap: MapData | null;
   nodes: MapNode[];
+  edges: EdgeFormData[];
   selectedId: number | null;
   selectedType: 'node' | 'edge' | null;
   isEditing: boolean;
@@ -34,6 +35,7 @@ interface EditorInspectorProps {
 export function EditorInspector({
   currentMap,
   nodes,
+  edges,
   selectedId,
   selectedType,
   isEditing,
@@ -56,8 +58,11 @@ export function EditorInspector({
     if (selectedType === 'node') {
       return nodes.find((n) => n.id === selectedId) ?? null;
     }
+    if (selectedType === 'edge') {
+      return edges.find((e) => e.id === selectedId) ?? null;
+    }
     return null;
-  }, [selectedType, selectedId, nodes]);
+  }, [selectedType, selectedId, nodes, edges]);
 
   const formData = useMemo(() => {
     if (editedData) {
@@ -70,6 +75,9 @@ export function EditorInspector({
         aliases: nodeData.aliases || [],
         linked_node_ids: nodeData.linked_node_ids || [],
       };
+    }
+    if (selectedType === 'edge' && rawData) {
+      return rawData as EdgeFormData;
     }
     return null;
   }, [rawData, selectedType, editedData]);
@@ -115,6 +123,13 @@ export function EditorInspector({
           building_id: nodeData.building_id,
         });
         onNodeUpdate(selectedId, { ...nodeData, aliases });
+      } else if (selectedType === 'edge') {
+        const edgeData = formData as EdgeFormData;
+        await editorApi.updateEdge(selectedId, {
+          weight: edgeData.weight,
+          type: edgeData.type,
+          bidirectional: edgeData.bidirectional,
+        });
       }
       setEditedData(null);
       onSetEditing(false);

@@ -510,6 +510,7 @@ export default function EditorPage() {
         <EditorInspector 
           buildings={buildings} 
           nodes={nodes}
+          edges={edges}
           selectedId={selectedId}
           selectedType={selectedType}
           isEditing={isEditing}

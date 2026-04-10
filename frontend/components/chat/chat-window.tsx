@@ -8,9 +8,7 @@ import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/services/agent";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MapToolResult } from "./MapPreview";
 import { MapData, MapNode, Instruction } from "@/types";
-import { MiniNavigation } from "./MapPreview";
 import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
 import { RatingButtons } from "./RatingButtons";
@@ -292,51 +290,35 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 }
 
 function RouteMessage({ routeData }: { routeData: RouteData }) {
-	const router = useRouter();
-
 	if (!routeData) {
-		return (
-			<div className="p-4 text-sm text-muted-foreground">
-				Đang tải lộ trình...
-			</div>
-		);
+		return null;
 	}
 
-	if (routeData.is_multi_floor) {
-		const navUrl = new URL("/navigation", window.location.origin);
-		navUrl.searchParams.set("start", routeData.start_name);
-		navUrl.searchParams.set("end", routeData.end_name);
-		navUrl.searchParams.set("start_node", routeData.path_node_ids[0]?.toString() || "");
-		navUrl.searchParams.set("end_node", routeData.path_node_ids[routeData.path_node_ids.length - 1]?.toString() || "");
+	const estimatedMinutes = Math.ceil(routeData.total_distance_m / 80);
+	const isMultiFloor = routeData.is_multi_floor || routeData.floor_count;
 
-		return (
-			<div className="p-4 bg-blue-600 text-white rounded-lg shadow-md">
-				<div className="flex items-start gap-3">
-					<Navigation className="w-6 h-6 mt-0.5" />
-					<div className="flex-1">
-						<h4 className="font-bold text-lg mb-1">
-							Đường đi qua {routeData.floor_count} tầng
-						</h4>
-						<p className="text-sm text-blue-100 mb-3">
-							Từ <strong>{routeData.start_name}</strong> đến{" "}
-							<strong>{routeData.end_name}</strong>
-							<br />
-							Khoảng cách: {Math.round(routeData.total_distance_m)}m
-						</p>
-						<button
-							onClick={() => router.push(navUrl.toString())}
-							className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-colors shadow-sm"
-						>
-							<Navigation className="w-4 h-4" />
-							Mở bản đồ dẫn đường
-						</button>
+	return (
+		<div className="p-3 bg-muted/50 border border-border rounded-lg">
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-2">
+					<Navigation className="w-4 h-4 text-primary" />
+					<div>
+						<span className="text-sm font-medium">
+							{routeData.start_name} → {routeData.end_name}
+						</span>
+						<span className="text-xs text-muted-foreground ml-2">
+							~{estimatedMinutes} phút • {Math.round(routeData.total_distance_m)}m
+						</span>
 					</div>
 				</div>
+				{isMultiFloor && (
+					<span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">
+						{routeData.floor_count} tầng
+					</span>
+				)}
 			</div>
-		);
-	}
-
-	return <MiniNavigation routeData={routeData} />;
+		</div>
+	);
 }
 
 interface GroupedMessages {
