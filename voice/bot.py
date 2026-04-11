@@ -71,6 +71,7 @@ def create_llm(
     agent_id: str = "chatbot",
     user_id: str = "web-user-123",
     thread_id: str | None = None,
+    query_mode: str = "normal",
 ):
     async def on_tool_calls(tool_calls):
         await send_tool_message(transport, tool_calls, "tool-started")
@@ -85,6 +86,7 @@ def create_llm(
             agent_name=agent_id,
             user_id=user_id,
             thread_id=thread_id,
+            query_mode=query_mode,
             session=session,
             on_tool_calls=on_tool_calls,
             on_tool_result=on_tool_result,
@@ -146,6 +148,7 @@ async def run_bot(
     agent_id: str = "chatbot",
     user_id: str = "web-user-123",
     thread_id: str | None = None,
+    query_mode: str = "normal",
 ):
     logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}")
     pipecat_transport = SmallWebRTCTransport(
@@ -178,7 +181,7 @@ async def run_bot(
             voice_id="vi_VN-vais1000-medium",
             text_transforms=[("*", tts_preprocessing)],
         )
-        llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id)
+        llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id, query_mode)
 
         if USE_AGENT_API:
             system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Hãy trả lời ngắn gọn, tự nhiên như đang nói chuyện. Không dùng markdown hay bullet points."

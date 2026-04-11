@@ -59,6 +59,8 @@ export default function NavigationPage() {
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [floorMaps, setFloorMaps] = useState<FloorMap[]>([]);
   const [currentFloorIndex, setCurrentFloorIndex] = useState(0);
+  const floorIndexRef = useRef(0);
+  const routeRef = useRef<any>(null);
   const [currentMap, setCurrentMap] = useState<MapData | null>(null);
   const [nodes, setNodes] = useState<MapNode[]>([]);
   const [edges, setEdges] = useState<MapEdge[]>([]);
@@ -146,13 +148,19 @@ export default function NavigationPage() {
     loadMaps();
   }, []);
 
+  // Use separate effect for floor change
   useEffect(() => {
-    if (floorMaps.length > 0 && currentFloorIndex < floorMaps.length) {
-      setCurrentMap(floorMaps[currentFloorIndex].map);
-      setNodes(floorMaps[currentFloorIndex].nodes);
-      setEdges(floorMaps[currentFloorIndex].edges);
+    console.log('[Nav] Effect triggered, index:', currentFloorIndex, 'map id:', floorMaps[currentFloorIndex]?.map?.id, 'len:', floorMaps.length);
+    if (floorMaps.length > 0) {
+      const newMap = floorMaps[currentFloorIndex];
+      if (newMap) {
+        setCurrentMap(newMap.map);
+        setNodes(newMap.nodes);
+        setEdges(newMap.edges);
+        console.log('[Nav] Switched to floor:', currentFloorIndex, 'map id:', newMap.map.id);
+      }
     }
-  }, [currentFloorIndex, floorMaps]);
+  }, [currentFloorIndex]);
 
   useEffect(() => {
     if (currentMap && svgRef.current) {
@@ -200,14 +208,31 @@ export default function NavigationPage() {
       // Determine initial floor from first node ID
       let currentFloorIdx = 0;
       if (result.path_node_ids.length > 0) {
-        const firstNodeId = result.path_node_ids[0];
+        const firstNodeId = Number(result.path_node_ids[0]); // Ensure number
         const firstNode = allNodes.find(n => n.id === firstNodeId);
+        console.log('[Nav] First node:', firstNodeId, 'type:', typeof firstNodeId, 'found:', !!firstNode, 'map_id:', firstNode?.map_id);
         if (firstNode) {
           const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
+          console.log('[Nav] Initial floor idx:', initialFloorIdx, 'target map id:', firstNode.map_id);
           if (initialFloorIdx !== -1) {
             currentFloorIdx = initialFloorIdx;
           }
         }
+      }
+      
+      // NOTE: Don't init - let it be created naturally when adding first node
+      
+      // Set initial floor to start node's floor
+      console.log('[Nav] Setting floor index to:', currentFloorIdx, 'floorMaps length:', floorMaps.length);
+      setCurrentFloorIndex(currentFloorIdx);
+      
+      // Also directly set state
+      if (currentFloorIdx < floorMaps.length) {
+        const targetFloor = floorMaps[currentFloorIdx];
+        setCurrentMap(targetFloor.map);
+        setNodes(targetFloor.nodes);
+        setEdges(targetFloor.edges);
+        console.log('[Nav] Direct set map id:', targetFloor.map.id);
       }
       
       // Build map from node ID to node
@@ -216,6 +241,7 @@ export default function NavigationPage() {
       // Process each node in path to determine floor
       let currentCoords: number[][] = [];
       let currentNodes: number[] = [];
+      let currentMapId = floorMaps[currentFloorIdx]?.map.id;
       
       for (let i = 0; i < result.path_node_ids.length; i++) {
         const nodeId = result.path_node_ids[i];
@@ -223,26 +249,30 @@ export default function NavigationPage() {
         const node = nodeMap.get(nodeId);
         
         if (!node) {
+          console.log(`[Nav] node ${i}: NOT FOUND in nodeMap`);
           currentCoords.push(coord);
           continue;
         }
+        
+        console.log(`[Nav] node ${i}: found, adding to currentFloorIdx=${currentFloorIdx}`);
         
         // Check if this is a transition node (entrance/stairs/elevator)
         const isTransitionNode = node.type === 'entrance' || node.type === 'stairs' || node.type === 'elevator';
         
         // Check if map changed - split segment when moving to different map
-        const currentNodeMapId = node.map_id || node.map?.id;
-        const currentMapId = floorMaps[currentFloorIdx]?.map.id;
+        const nodeMapId = node.map_id || node.map?.id;
+        console.log(`[Nav] node ${i}: nodeMapId=${nodeMapId}, currentMapId=${currentMapId}, currentFloorIdx=${currentFloorIdx}`);
         
-        if (currentNodeMapId !== currentMapId && currentNodes.length > 0) {
+        if (nodeMapId !== currentMapId && currentNodes.length > 0) {
           // Map changed! Save current segment and start new one
           if (!floorPathMap.has(currentFloorIdx)) {
             floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
           }
           // Find the new floor index
-          const newFloorIdx = floorMaps.findIndex(f => f.map.id === currentNodeMapId);
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === nodeMapId);
           if (newFloorIdx !== -1) {
             currentFloorIdx = newFloorIdx;
+            currentMapId = nodeMapId;
             currentCoords = [coord];
             currentNodes = [nodeId];
             continue;
@@ -251,7 +281,7 @@ export default function NavigationPage() {
         
         if (isTransitionNode && currentNodes.length > 0) {
           // Find new floor
-          const newFloorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === nodeMapId);
           
           // Only switch floor if it's actually a different floor
           if (newFloorIdx !== -1 && newFloorIdx !== currentFloorIdx) {
@@ -261,6 +291,7 @@ export default function NavigationPage() {
             }
             // Start new segment with transition node as starting point
             currentFloorIdx = newFloorIdx;
+            currentMapId = nodeMapId;
             currentCoords = [coord];  // Start new segment with transition node
             currentNodes = [nodeId];
             continue;  // Skip adding coord again below
@@ -281,7 +312,9 @@ export default function NavigationPage() {
       
       // Convert to segments
       const segments: FloorSegment[] = [];
-      console.log('[Nav] floorPathMap:', Array.from(floorPathMap.entries()).map(([k, v]) => ({ floorIdx: k, coordsCount: v.coords.length, coords: v.coords })));
+      for (const [floorIdx, data] of floorPathMap.entries()) {
+        console.log(`[Nav] floor ${floorIdx} path coords:`, data.coords);
+      }
       floorPathMap.forEach((data, floorIdx) => {
         // Find floor change node for this floor (first stairs/elevator in path)
         let floorChangeNode: { x: number; y: number; type: string } | undefined;
@@ -330,10 +363,8 @@ export default function NavigationPage() {
       }
 
       setFloorSegments(segments);
-
-      if (segments.length > 0) {
-        setCurrentFloorIndex(segments[0].floorIndex);
-      }
+      console.log('[Nav] Segments:', segments.map(s => ({ floorIndex: s.floorIndex, pathCoordsCount: s.pathCoords.length })));
+      console.log('[Nav] floorMaps ids:', floorMaps.map(f => f.map.id));
     } catch (err) {
       const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Could not find route. Please try different locations.';
       setError(errorMsg);
@@ -737,7 +768,11 @@ export default function NavigationPage() {
                 })}
 
                 {/* 1. Chỉ vẽ Route Path của tầng/map hiện tại */}
-                {route && floorSegments.filter(seg => seg.floorIndex === currentFloorIndex).map((segment, idx) => {
+                {route && (() => {
+                  const currentSegs = floorSegments.filter(seg => seg.floorIndex === currentFloorIndex);
+                  console.log('[Nav] Rendering route. currentFloorIndex:', currentFloorIndex, 'matching segments:', currentSegs.length, 'total segments:', floorSegments.length);
+                  return currentSegs;
+                })().map((segment, idx) => {
                   const pathData = `M ${segment.pathCoords.map(c => `${c[0]} ${c[1]}`).join(' L ')}`;
                   return (
                     <path

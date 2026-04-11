@@ -61,6 +61,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         agent_name: str,
         user_id: str = "web-user-123",
         thread_id: str | None = None,
+        query_mode: str = "normal",
         session: Optional[aiohttp.ClientSession] = None,
         on_tool_calls: Optional[ToolCallCallback] = None,
         on_tool_result: Optional[ToolResultCallback] = None,
@@ -74,6 +75,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self.agent_name = agent_name
         self.user_id = user_id
         self.thread_id = thread_id
+        self.query_mode = query_mode
         self._session = session
         self._client_session_owned = False
         self._on_tool_calls = on_tool_calls
@@ -104,6 +106,7 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
             "message": user_text,
             "thread_id": thread_id,
             "stream_tokens": True,
+            "query_mode": self.query_mode,
         }
 
         async def _generate():

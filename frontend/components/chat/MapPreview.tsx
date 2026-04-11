@@ -175,13 +175,44 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
       return routeData.floors;
     }
     if (routeData.route_maps && routeData.route_maps.length > 0) {
-      return routeData.route_maps.map((rm, idx) => ({
-        map_id: rm.map?.id || idx + 1,
-        name: rm.map?.name || `Tầng ${idx + 1}`,
-        floor_level: rm.map?.floor_level ?? idx,
-        path_coords: routeData.path_coords,
-        instructions: routeData.instructions,
-      }));
+      // Dùng path_node_ids để xác định floor
+      const pathNodeIds = routeData.path_node_ids || [];
+      const fullPath = routeData.path_coords || [];
+      
+      return routeData.route_maps.map((rm, idx) => {
+        const mapId = rm.map?.id;
+        const mapFloor = rm.map?.floor_level;
+        
+        // Lấy nodes thuộc floor này
+        const floorNodes = rm.nodes || [];
+        const floorNodeIds = new Set(floorNodes.map(n => n.id));
+        
+        // Lọc path_node_ids thuộc floor này
+        const floorPathNodeIds = pathNodeIds.filter(id => floorNodeIds.has(id));
+        
+        // Map node_id -> index trong path
+        const nodeIdToIdx = new Map(pathNodeIds.map((id, i) => [id, i]));
+        
+        // Lấy path_coords theo thứ tự của floorPathNodeIds
+        const floorPathCoords: number[][] = [];
+        const usedIndices = new Set<number>();
+        
+        for (const nodeId of floorPathNodeIds) {
+          const idx = nodeIdToIdx.get(nodeId);
+          if (idx !== undefined && fullPath[idx] && !usedIndices.has(idx)) {
+            floorPathCoords.push(fullPath[idx]);
+            usedIndices.add(idx);
+          }
+        }
+        
+        return {
+          map_id: mapId || idx + 1,
+          name: rm.map?.name || (mapFloor === null ? 'Campus' : `Tầng ${mapFloor}`),
+          floor_level: mapFloor ?? idx,
+          path_coords: floorPathCoords,
+          instructions: routeData.instructions,
+        };
+      });
     }
     return [{
       map_id: routeData.map?.id || 1,
@@ -192,26 +223,38 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
     }];
   }, [routeData]);
 
-  const startCoord = routeData.path_coords?.[0];
+  const pathNodeIds = routeData.path_node_ids || [];
+  const startNodeId = pathNodeIds[0];
+  
+  // Tìm floor đầu tiên có chứa start node (từ route_maps)
   const startFloor = useMemo(() => {
-    if (startCoord) {
-      const idx = floors.findIndex(f => 
-        f.path_coords?.some(c => Math.abs(c[0] - startCoord[0]) < 2 && Math.abs(c[1] - startCoord[1]) < 2)
-      );
-      return idx !== -1 ? idx : 0;
+    if (routeData.route_maps && routeData.route_maps.length > 0 && startNodeId) {
+      for (let idx = 0; idx < routeData.route_maps.length; idx++) {
+        const rm = routeData.route_maps[idx];
+        const floorNodeIds = (rm.nodes || []).map(n => Number(n.id));
+        if (floorNodeIds.includes(Number(startNodeId))) {
+          return idx;
+        }
+      }
     }
-    return 0;
-  }, [startCoord, floors]);
+    // Fallback: floor đầu tiên có path_coords
+    return floors.findIndex(f => f.path_coords && f.path_coords.length > 0) || 0;
+  }, [routeData.route_maps, startNodeId]);
+  
   const [activeFloor, setActiveFloor] = useState(startFloor);
 
   useEffect(() => {
-    if (startCoord && floors.length > 0) {
-      const idx = floors.findIndex(f => 
-        f.path_coords?.some(c => Math.abs(c[0] - startCoord[0]) < 2 && Math.abs(c[1] - startCoord[1]) < 2)
-      );
-      if (idx !== -1) setActiveFloor(idx);
+    if (routeData.route_maps && routeData.route_maps.length > 0 && startNodeId) {
+      for (let idx = 0; idx < routeData.route_maps.length; idx++) {
+        const rm = routeData.route_maps[idx];
+        const floorNodeIds = (rm.nodes || []).map(n => Number(n.id));
+        if (floorNodeIds.includes(Number(startNodeId))) {
+          setActiveFloor(idx);
+          return;
+        }
+      }
     }
-  }, [startCoord, floors]);
+  }, [routeData.route_maps, startNodeId]);
   
   const currentFloor = floors[activeFloor];
   const estimatedMinutes = Math.ceil(routeData.total_distance_m / 80);
