@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -46,10 +47,58 @@
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
-	--color-background-light: #f8f9fa;
-	--color-surface: #ffffff;
-	--color-text-main: #1a1d1f;
-	--color-text-secondary: #64748b;
+
+	/* Design System - Semantic Colors */
+	--ds-primary: var(--ds-semantic-primary);
+	--ds-primary-dark: var(--ds-semantic-primary-dark);
+	--ds-bg-light: var(--ds-semantic-bg-light);
+	--ds-bg-surface: var(--ds-semantic-bg-surface);
+	--ds-text-main: var(--ds-semantic-text-main);
+	--ds-text-secondary: var(--ds-semantic-text-secondary);
+	--ds-border: var(--ds-semantic-border);
+	--ds-highlight: var(--ds-semantic-highlight);
+
+	/* Design System - Typography */
+	--ds-font-display: var(--ds-font-family-display);
+	--ds-font-heading: var(--ds-font-family-heading);
+	--ds-font-mono: var(--ds-font-family-mono);
+
+	/* Design System - Shadows */
+	--ds-shadow-subtle: var(--ds-shadow-subtle);
+	--ds-shadow-lifted: var(--ds-shadow-lifted);
+
+	/* Design System - Spacing */
+	--ds-spacing-xs: var(--ds-spacing-xs);
+	--ds-spacing-sm: var(--ds-spacing-sm);
+	--ds-spacing-md: var(--ds-spacing-md);
+	--ds-spacing-lg: var(--ds-spacing-lg);
+	--ds-spacing-xl: var(--ds-spacing-xl);
+	--ds-spacing-2xl: var(--ds-spacing-2xl);
+	--ds-spacing-3xl: var(--ds-spacing-3xl);
+
+	/* Design System - Border Radius */
+	--ds-radius-none: var(--ds-radius-none);
+	--ds-radius-sm: var(--ds-radius-sm);
+	--ds-radius-md: var(--ds-radius-md);
+	--ds-radius-lg: var(--ds-radius-lg);
+	--ds-radius-xl: var(--ds-radius-xl);
+	--ds-radius-2xl: var(--ds-radius-2xl);
+	
+	--color-primary: #030391;
+	--color-primary-dark: #020260;
+	--color-background-light: #F8F9FA;
+	--color-surface: #FFFFFF;
+	--color-text-main: #1A1D1F;
+	--color-text-secondary: #64748B;
+	--color-border-color: #E2E8F0;
+	--color-highlight: #FFF9C4;
+	
+	--font-display: "Public Sans", sans-serif;
+	--font-heading: "IBM Plex Sans", sans-serif;
+	--font-mono: "JetBrains Mono", monospace;
+
+	--shadow-subtle: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-lifted: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
 
 :root {
@@ -127,6 +176,46 @@
 	p, span, div {
 		@apply text-[15px];
 	}
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: #CBD5E1;
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #94A3B8;
+}
+
+.dense-table-row td {
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: #CBD5E1;
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #94A3B8;
+}
+
+.dense-table-row td {
+	padding-top: 0.75rem;
+	padding-bottom: 0.75rem;
 }
 
 .material-symbols-outlined {
