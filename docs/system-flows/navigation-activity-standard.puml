@@ -1,0 +1,124 @@
+@startuml NavigationActivityStandard
+!theme plain
+skinparam ParticipantPadding 20
+skinparam BoxPadding 20
+
+title Indoor Navigation Activity
+
+start
+:User is in application interface;
+:User asks for location or directions;
+note right: User asks "Where is library?" or "How to get to A101?"
+
+:Frontend parses natural language query;
+:Send POST /api/maps/search to Wayfinder Service;
+
+if (User authenticated?) then (yes)
+  :Wayfinder Service receives request;
+  :Parse natural language query;
+  note right: Parse entities, classify intent, normalize locations
+  
+  if (Exact location match found?) then (yes)
+    :Query buildings table in PostgreSQL;
+    
+    if (Building exists?) then (yes)
+      :Search nodes table for specific room;
+      
+      if (Room/Location found?) then (yes)
+        :Return exact match with coordinates;
+        
+        if (User requested navigation?) then (yes)
+          :Get user current location;
+note right: Get location from profile, WiFi, or default entrance
+          
+          :Query edges table for connections;
+          :Apply NetworkX pathfinding algorithm;
+note right: Use NetworkX Dijkstra with accessibility weights
+          
+          :Generate turn-by-turn directions;
+          
+          if (Accessibility required?) then (yes)
+            :Modify route for wheelchair access;
+            :Exclude stairs from path;
+            :Prioritize elevators and ramps;
+note right: Modify route for wheelchair access via elevators
+          else (no)
+            :Calculate shortest path;
+            :Include all connection types;
+          endif
+          
+          :Return route with instructions;
+        else (no)
+          :Return location information only;
+        endif
+        
+      else (no)
+        :Return "Location not found in building";
+      endif
+      
+    else (no)
+      :Return "Building not found";
+    endif
+    
+  else (no)
+    :Perform fuzzy search across database;
+    :Full-text search buildings and nodes;
+    :Rank results by relevance;
+    :Return search suggestions;
+note right: Return fuzzy search results with confidence scores
+  endif
+  
+  :Log navigation request to database;
+  :Cache frequent routes in Redis;
+  
+  :Display interactive map;
+  :Show turn-by-step directions;
+  :Display estimated time and distance;
+  
+else (no)
+  :Return 401 Unauthorized;
+  :Redirect to login page;
+endif
+
+if (User wants to report issue?) then (yes)
+  :Send POST /api/missing-locations or /api/missing-routes;
+  :Store user report in PostgreSQL;
+note right: Store user report about missing/incorrect locations
+  
+  :Flag for admin review;
+  :Show "Thank you for feedback" message;
+endif
+
+if (Navigation error occurred?) then (yes)
+  if (Location not found?) then (yes)
+    :Return 404 with suggestions;
+  elseif (Route calculation failed?) then (yes)
+    :Return 500 with error message;
+  elseif (No accessible path?) then (yes)
+    :Return alternative with warning;
+  endif
+endif
+
+if (User wants real-time navigation?) then (yes)
+  :Start navigation mode;
+  :Track user position;
+  
+  while (Navigation active?)
+    :Check route deviation;
+    
+    if (Deviation detected?) then (yes)
+      :Recalculate route from current position;
+      :Update directions dynamically;
+    else (no)
+      :Continue with current route;
+    endif
+    
+    :Provide real-time guidance;
+  endwhile
+  
+  :Stop navigation mode;
+endif
+note right: FastAPI service on port 8004 with PostgreSQL and NetworkX pathfinding
+stop
+
+@enduml

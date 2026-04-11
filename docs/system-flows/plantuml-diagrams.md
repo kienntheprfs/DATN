@@ -1,25 +1,193 @@
-# PlantUML Activity Diagrams for Testing
+# PlantUML Activity Diagrams for DATN Chatbot System
 
 ## Tổng quan
 
-Documentation này chứa các PlantUML activity diagrams chi tiết để phục vụ việc testing các luồng xử lý trong hệ thống DATN Chatbot. PlantUML hỗ trợ tốt hơn cho complex activity diagrams so với Mermaid.
+Documentation này chứa các PlantUML activity diagrams chi tiết để mô tả các luồng xử lý trong hệ thống DATN Chatbot. PlantUML hỗ trợ visualization tốt hơn cho complex system flows so với Mermaid.
 
 ## Table of Contents
 
-1. [User Registration & Login Activity](#1-user-registration--login-activity)
-2. [Chat Interaction Activity](#2-chat-interaction-activity)
-3. [Voice Chat Activity](#3-voice-chat-activity)
-4. [Document Upload Activity](#4-document-upload-activity)
-5. [Knowledge Search Activity](#5-knowledge-search-activity)
-6. [Rating & Feedback Activity](#6-rating--feedback-activity)
-7. [Indoor Navigation Activity](#7-indoor-navigation-activity)
-8. [Admin Dashboard Activity](#8-admin-dashboard-activity)
-9. [Error Handling Activity](#9-error-handling-activity)
-10. [Service Health Check Activity](#10-service-health-check-activity)
+1. [Complete System Architecture](#1-complete-system-architecture)
+2. [User Registration & Login Activity](#2-user-registration--login-activity)
+3. [Chat Interaction Activity](#3-chat-interaction-activity)
+4. [Voice Chat Activity](#4-voice-chat-activity)
+5. [Document Upload Activity](#5-document-upload-activity)
+6. [Knowledge Search Activity](#6-knowledge-search-activity)
+7. [Rating & Feedback Activity](#7-rating--feedback-activity)
+8. [Indoor Navigation Activity](#8-indoor-navigation-activity)
+9. [Admin Dashboard Activity](#9-admin-dashboard-activity)
+10. [Error Handling Activity](#10-error-handling-activity)
+11. [Service Health Check Activity](#11-service-health-check-activity)
+12. [Microservices Communication Flow](#12-microservices-communication-flow)
 
 ---
 
-## 1. User Registration & Login Activity
+## 1. Complete System Architecture
+
+### PlantUML Architecture Diagram
+
+```plantuml
+@startuml CompleteSystemArchitecture
+!theme plain
+skinparam ParticipantPadding 20
+skinparam BoxPadding 20
+skinparam shadowing false
+
+title DATN Chatbot Complete System Architecture
+
+actor User as "👤 User"
+participant "🌐 Frontend\n(Next.js)\nPort: 3000" as FE
+participant "🚪 API Gateway\n(FastAPI)\nPort: 8008" as GW
+participant "🤖 Agent Service\n(LangGraph)\nPort: 8080" as AS
+participant "📚 Knowledge Base\n(FastAPI)\nPort: 8000" as KB
+participant "🗺️ Wayfinder\n(FastAPI)\nPort: 8004" as WF
+participant "📊 Dashboard\n(FastAPI)\nPort: 8007" as DB
+participant "🎤 Voice Service\n(FastAPI)\nPort: 7860" as VS
+participant "🔊 Piper TTS\n(Uvicorn)\nPort: 5000" as TTS
+
+database "🗄️ PostgreSQL\n(5432-5435)" as PG
+database "🔍 Vector DB\n(Qdrant)\nPort: 6333" as VDB
+database "⚡ Redis\nCache/Queue\nPort: 6379" as REDIS
+participant "🧠 LLM APIs\n(OpenAI/Anthropic)" as LLM
+
+== User Authentication Flow ==
+User -> FE: Access application
+FE -> GW: POST /auth/login
+GW -> PG: Validate credentials
+PG --> GW: User data + JWT
+GW --> FE: JWT token
+FE -> FE: Store in localStorage
+
+== Main Chat Flow ==
+User -> FE: Send message
+FE -> GW: POST /agent/{agent_id}/invoke
+GW -> GW: Validate JWT
+GW -> AS: Forward request
+
+AS -> KB: Search knowledge
+KB -> VDB: Vector search
+VDB --> KB: Relevant docs
+KB --> AS: Context
+
+AS -> LLM: Generate response
+LLM --> AS: AI response
+AS -> DB: Log interaction
+AS --> GW: Response
+
+GW --> FE: AI response
+FE -> FE: Update UI
+FE --> User: Display answer
+
+== Voice Interaction Flow ==
+User -> FE: Click microphone
+FE -> VS: WebRTC audio stream
+VS -> VS: STT processing
+VS --> FE: Text transcript
+
+FE -> GW: Send as chat message
+GW -> AS: Process normally
+AS -> GW: Text response
+GW -> VS: TTS request
+
+VS -> TTS: Synthesize speech
+TTS --> VS: Audio response
+VS --> FE: Audio stream
+FE --> User: Play voice
+
+== Document Processing Flow ==
+User -> FE: Upload document
+FE -> GW: POST /documents/upload
+GW -> KB: Store file
+
+KB -> KB: Extract text
+KB -> KB: Chunk content
+KB -> KB: Generate embeddings
+KB -> VDB: Store vectors
+KB -> PG: Document metadata
+
+KB --> GW: Processing complete
+GW --> FE: Success message
+FE --> User: Update status
+
+== Navigation Flow ==
+User -> FE: Location query
+FE -> GW: POST /maps/search
+GW -> WF: Navigation request
+
+WF -> PG: Search locations
+PG --> WF: Location data
+WF -> WF: Calculate route
+WF --> GW: Directions
+GW --> FE: Navigation data
+FE --> User: Map + directions
+
+== Rating & Analytics Flow ==
+User -> FE: Rate response
+FE -> GW: POST /ratings
+GW -> DB: Store feedback
+DB -> DB: Update metrics
+DB --> GW: Analytics data
+GW --> FE: Performance stats
+
+@enduml
+```
+
+### Architecture Overview
+
+Hệ thống DATN Chatbot được xây dựng với kiến trúc microservices:
+
+#### **Frontend Layer**
+- **Next.js 16** với TypeScript và TailwindCSS
+- Port **3000**
+- Real-time chat interface với voice input support
+
+#### **API Gateway**
+- **FastAPI** với JWT authentication
+- Port **8008** 
+- Request routing, rate limiting, load balancing
+- Centralized error handling và logging
+
+#### **Core Services**
+
+**Agent Service Toolkit** 🤖
+- **LangGraph** framework với FastAPI
+- Port **8080**
+- AI agents, reasoning, tool usage
+- Support cho multiple agents với different capabilities
+
+**Knowledge Base Service** 📚
+- **FastAPI** với PostgreSQL + Qdrant
+- Port **8000**
+- Document management, RAG, vector search
+- Background processing với Redis queue
+
+**Wayfinder Service** 🗺️
+- **FastAPI** với PostgreSQL + NetworkX
+- Port **8004**
+- Indoor navigation, location services
+- Route calculation với accessibility support
+
+**Dashboard Service** 📊
+- **FastAPI** với PostgreSQL
+- Port **8007**
+- Analytics, user feedback management
+- Performance metrics và reporting
+
+**Voice Service** 🎤
+- **FastAPI** với WebRTC
+- Port **7860**
+- Speech-to-Text với Sherpa-ONNX
+- Text-to-Speech với Piper TTS (Port **5000**)
+
+#### **Data Layer**
+- **PostgreSQL** (Ports 5432-5435): Service databases
+- **Qdrant** (Port 6333): Vector database cho semantic search
+- **Redis** (Port 6379): Cache và message queue
+
+#### **External Services**
+- **LLM APIs**: OpenAI, Anthropic, Ollama
+- **AI Models**: Various LLMs cho different agents
+
+---
 
 ### PlantUML Activity Diagram
 
@@ -194,7 +362,7 @@ Feature: Chat Interaction
 
 ---
 
-## 3. Voice Chat Activity
+## 4. Voice Chat Activity
 
 ### PlantUML Activity Diagram
 
@@ -209,11 +377,11 @@ start
 :User clicks microphone button;
 
 if (Microphone access granted?) then (yes)
-  :Start audio recording;
+  :Start WebRTC audio recording;
   :Show recording indicator;
   
   while (User is speaking?) is (speaking)
-    :Capture audio chunks;
+    :Capture audio chunks via WebRTC;
   endwhile (stopped)
   
   :Stop recording;
@@ -225,14 +393,14 @@ if (Microphone access granted?) then (yes)
     :Display transcript for confirmation;
     
     if (User confirms transcript?) then (yes)
-      :Send transcript as chat message;
+      :Send transcript to API Gateway;
       :Process as regular chat flow;
-      :Receive AI text response;
-      :Send response to TTS service;
+      :Receive AI text response from Agent Service;
+      :Send response to Voice Service for TTS;
       
       if (TTS synthesis successful?) then (yes)
-        :Receive audio response;
-        :Play audio for user;
+        :Receive audio response from Piper TTS;
+        :Play audio for user via WebRTC;
         :Show "Playing audio" indicator;
       else (no)
         :Show text response instead;
@@ -256,15 +424,37 @@ endif
 stop
 
 note right
-  Test Scenarios:
-  - Complete voice interaction
-  - Microphone access denied
-  - STT processing failure
-  - TTS synthesis failure
-  - Transcript editing
+  Updated Flow:
+  - WebRTC for real-time audio streaming
+  - Separate Piper TTS service on port 5000
+  - Voice Service orchestrates STT/TTS
+  - Fallback to text chat on errors
 end note
 @enduml
 ```
+
+### Updated Voice Architecture
+
+Voice interaction trong DATN Chatbot được thiết kế với kiến trúc phân tách:
+
+#### **Components:**
+1. **Frontend WebRTC Client**: Xử lý audio streaming real-time
+2. **Voice Service (Port 7860)**: Orchestrator chính cho STT/TTS
+3. **Piper TTS Service (Port 5000)**: Dedicated TTS server
+4. **Sherpa-ONNX STT**: Local speech recognition engine
+
+#### **Flow Steps:**
+1. **Audio Capture**: WebRTC captures audio chunks từ browser
+2. **Speech-to-Text**: Voice Service chuyển audio → text
+3. **Chat Processing**: Gửi text qua API Gateway → Agent Service
+4. **Text-to-Speech**: Response text → Piper TTS service
+5. **Audio Playback**: WebRTC plays synthesized speech
+
+#### **Technical Details:**
+- **WebRTC**: Real-time audio communication
+- **TURN Server**: Required cho Docker/NAT traversal
+- **Audio Formats**: WAV processing cho compatibility
+- **Fallback**: Text chat khi voice fails
 
 ---
 
@@ -921,6 +1111,184 @@ class DocumentFactory(Factory):
 
 ---
 
+## 12. Microservices Communication Flow
+
+### PlantUML Communication Diagram
+
+```plantuml
+@startuml MicroservicesCommunication
+!theme plain
+skinparam ParticipantPadding 20
+skinparam BoxPadding 20
+
+title Microservices Communication Patterns
+
+participant "Frontend" as FE
+participant "API Gateway" as GW
+participant "Agent Service" as AS
+participant "Knowledge Base" as KB
+participant "Wayfinder" as WF
+participant "Dashboard" as DB
+participant "Voice Service" as VS
+participant "Piper TTS" as TTS
+
+database "PostgreSQL" as PG
+database "Qdrant" as QD
+database "Redis" as RD
+
+== Startup Sequence ==
+note over FE,PG: System initialization
+GW -> GW: Initialize JWT middleware
+AS -> PG: Connect agent database
+KB -> PG: Connect knowledge database
+KB -> QD: Connect vector database
+WF -> PG: Connect navigation database
+DB -> PG: Connect analytics database
+VS -> VS: Initialize WebRTC
+TTS -> TTS: Load voice models
+
+== Request Routing Patterns ==
+note over FE,TTS: HTTP request flow
+
+FE -> GW: POST /agent/{id}/invoke
+GW -> GW: Validate JWT
+GW -> GW: Rate limiting check
+
+alt Chat request
+    GW -> AS: Forward with user context
+    AS -> KB: Search knowledge base
+    KB -> QD: Vector similarity search
+    QD --> KB: Document chunks
+    KB --> AS: Context documents
+    
+    AS -> AS: Generate response
+    AS -> DB: Log interaction
+    AS --> GW: AI response
+    
+else Navigation request
+    GW -> WF: Forward location query
+    WF -> PG: Query location data
+    PG --> WF: Location results
+    WF --> GW: Navigation data
+    
+else Document request
+    GW -> KB: Forward document operation
+    KB -> PG: Document CRUD operations
+    KB --> GW: Document response
+    
+else Voice request
+    GW -> VS: Forward audio data
+    VS -> TTS: Request synthesis
+    TTS --> VS: Audio response
+    VS --> GW: Audio data
+end
+
+GW --> FE: Formatted response
+
+== Async Processing ==
+note over KB,RD: Background tasks
+
+KB -> RD: Queue document processing
+KB -> KB: Process in background
+
+fork
+    KB -> KB: Extract text
+fork again
+    KB -> KB: Generate embeddings
+fork again
+    KB -> QD: Store vectors
+end fork
+
+KB -> PG: Update status
+KB -> RD: Publish completion
+
+== Caching Strategy ==
+note over GW,RD: Redis caching patterns
+
+GW -> RD: Check response cache
+RD --> GW: Cached response (if hit)
+
+AS -> RD: Cache LLM responses
+KB -> RD: Cache search results
+WF -> RD: Cache route calculations
+
+== Error Handling & Recovery ==
+note over GW,DB: Circuit breaker pattern
+
+alt Service timeout
+    GW -> GW: Trigger circuit breaker
+    GW -> GW: Return cached response
+else Service error
+    GW -> DB: Log error details
+    GW -> GW: Return graceful error
+end
+
+== Health Monitoring ==
+note over GW,VS: Health check propagation
+
+loop Every 30 seconds
+    GW -> AS: GET /health
+    GW -> KB: GET /health
+    GW -> WF: GET /health
+    GW -> DB: GET /health
+    GW -> VS: GET /health
+    GW -> TTS: GET /health
+    
+    alt Service unhealthy
+        GW -> DB: Log service status
+        GW -> GW: Update routing table
+    end
+end
+
+@enduml
+```
+
+### Communication Patterns
+
+#### **1. Synchronous Request-Response**
+- **Frontend API Gateway**: HTTP/REST calls
+- **API Gateway Services**: FastAPI routing with validation
+- **Service-to-Service**: Direct HTTP calls with timeouts
+
+#### **2. Asynchronous Processing**
+- **Document Processing**: Redis queue for background tasks
+- **Analytics**: Event-driven logging
+- **Notifications**: Pub/sub patterns via Redis
+
+#### **3. Caching Strategy**
+- **Response Caching**: Redis cho frequent queries
+- **Session Caching**: User context and JWT validation
+- **Data Caching**: Search results và computed routes
+
+#### **4. Error Handling**
+- **Circuit Breaker**: Prevent cascade failures
+- **Retry Logic**: Exponential backoff for external APIs
+- **Graceful Degradation**: Fallback responses
+
+#### **5. Service Discovery**
+- **Static Configuration**: Known service endpoints
+- **Health Checks**: Active monitoring
+- **Load Balancing**: Round-robin distribution
+
+### Technology Stack
+
+#### **Communication Protocols**
+- **HTTP/REST**: Primary API communication
+- **WebRTC**: Real-time audio streaming
+- **WebSocket**: Future real-time features
+
+#### **Message Formats**
+- **JSON**: Standard API responses
+- **Binary**: Audio/video data
+- **Protocol Buffers**: Future optimization
+
+#### **Monitoring & Observability**
+- **Health Endpoints**: `/health`, `/info`, `/metrics`
+- **Structured Logging**: JSON format with correlation IDs
+- **Performance Metrics**: Response times, error rates
+
+---
+
 ## PlantUML Installation & Usage
 
 ### Installation
@@ -968,19 +1336,19 @@ stop
 
 ## Conclusion
 
-PlantUML activity diagrams provide superior support for complex testing scenarios compared to Mermaid. Key advantages:
+PlantUML diagrams provide superior visualization cho DATN Chatbot system so với Mermaid. Key advantages:
 
-### 🎯 Enhanced Diagram Capabilities
+### 🎯 Enhanced System Architecture Visualization
+- **Complete System Overview**: Total architecture với all services
+- **Microservices Communication**: Detailed interaction patterns
 - **Complex decision trees** với multiple branches
-- **Parallel processing** visualization
-- **Detailed error handling** paths
-- **Comprehensive test scenarios** integration
+- **Parallel processing** visualization cho background tasks
 
-### 🔄 Better Testing Integration
-- **Structured test case mapping** to diagram elements
-- **Automated test generation** from diagrams
-- **Coverage tracking** với visual validation
-- **Test documentation** maintenance
+### 🔄 Better Development Understanding
+- **Service Dependencies**: Clear relationships between components
+- **Data Flow Visualization**: End-to-end request/response paths
+- **Error Handling Patterns**: Comprehensive failure scenarios
+- **Performance Monitoring**: Health check và alerting flows
 
 ### 📊 Improved Documentation Quality
 - **Professional diagram rendering** với PlantUML
@@ -988,10 +1356,21 @@ PlantUML activity diagrams provide superior support for complex testing scenario
 - **Version control friendly** text-based diagrams
 - **IDE integration** cho real-time preview
 
-### 🚀 Development Workflow Benefits
-- **Collaborative diagram editing** với team
-- **Live preview** trong development environment
-- **Automated documentation generation**
-- **Consistent diagram styling** across project
+### 🚀 System-Specific Benefits
+- **Voice Architecture**: WebRTC + Piper TTS integration
+- **Knowledge Processing**: RAG pipeline visualization
+- **Navigation System**: Indoor routing với accessibility
+- **Multi-Agent Support**: LangGraph agent interactions
+- **Real-time Features**: WebRTC audio streaming patterns
 
-Documentation này serves as comprehensive testing blueprint với PlantUML diagrams, ensuring system reliability và quality delivery.
+### 🛠️ Implementation Guidance
+- **Port Mapping**: Clear service endpoints (3000, 5000, 7860, 8000, 8004, 8007, 8008, 8080)
+- **Database Layout**: PostgreSQL + Qdrant + Redis architecture
+- **API Gateway**: Centralized routing và authentication
+- **Microservices Patterns**: Communication best practices
+
+Documentation này serves as comprehensive system blueprint với PlantUML diagrams, ensuring:
+- **Clear architecture understanding** cho developers
+- **Efficient troubleshooting** với detailed flow analysis
+- **Scalable design patterns** cho future enhancements
+- **Production deployment guidance** với complete system view

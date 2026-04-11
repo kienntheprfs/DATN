@@ -202,3 +202,5 @@ privatecredentials/*
 !privatecredentials/.gitkeep
 .next/
 !frontend/lib/
+
+out/
