@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from ..repositories.document_repository import DocumentRepository
 from ..repositories.formal_document_repository import FormalDocumentRepository
 from ..schemas.document import DocumentUpdate
 from ..schemas.formal_document import FormalDocumentUpdate, FormalDocumentResponse
+from .semantic_cache_notifier import semantic_cache_notifier
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,43 @@ class DocumentService:
 
         try:
             checksum = await self.compute_checksum(file)
-            
+
+            existing_by_title = await self.doc_repo.get_by_title_and_storage(
+                title=filename,
+                storage_id=storage_id,
+            )
+            if existing_by_title:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "duplicate_name",
+                        "message": f"A document with the name '{filename}' already exists in this storage.",
+                        "existing_document_id": existing_by_title.id,
+                        "existing_title": existing_by_title.title,
+                        "existing_created_at": existing_by_title.created_at.isoformat()
+                        if existing_by_title.created_at
+                        else None,
+                    },
+                )
+
+            existing_by_checksum = await self.doc_repo.get_by_checksum_and_storage(
+                checksum=checksum,
+                storage_id=storage_id,
+            )
+            if existing_by_checksum:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "duplicate_content",
+                        "message": "A document with identical content already exists in this storage.",
+                        "existing_document_id": existing_by_checksum.id,
+                        "existing_title": existing_by_checksum.title,
+                        "existing_created_at": existing_by_checksum.created_at.isoformat()
+                        if existing_by_checksum.created_at
+                        else None,
+                    },
+                )
+
             file_size = file.size
             await file.seek(0)
 
@@ -105,14 +142,18 @@ class DocumentService:
                 detail="Failed to upload document processing",
             )
 
-    async def upload_formal_document(self, file: UploadFile, storage_id: int):
+    async def upload_formal_document(
+        self, file: UploadFile, storage_id: int
+    ) -> Tuple[object, Optional[str]]:
         doc_type = validate_upload_file(file)
         filename = Path(file.filename).name
         file_path = None
 
         try:
             if not self.lightrag.enabled:
-                raise HTTPException(status_code=500, detail="LightRAG is not configured")
+                raise HTTPException(
+                    status_code=500, detail="LightRAG is not configured"
+                )
 
             await file.seek(0)
             upload_result = await self.lightrag.upload_document(
@@ -123,13 +164,15 @@ class DocumentService:
             track_id = upload_result.get("track_id")
 
             if not track_id:
-                raise HTTPException(status_code=502, detail="LightRAG response missing track_id")
+                raise HTTPException(
+                    status_code=502, detail="LightRAG response missing track_id"
+                )
 
             track_id = str(track_id)
 
             existing = await self.formal_doc_repo.get_by_track_id(track_id)
             if existing:
-                return existing
+                return existing, None
 
             s3_key = f"raw/formal/{track_id}/{filename}"
             file.file.seek(0)
@@ -139,17 +182,39 @@ class DocumentService:
                 content_type=doc_type,
             )
 
+            initial_doc_id = upload_result.get("doc_id")
             formal_doc = await self.formal_doc_repo.create(
                 storage_id=storage_id,
                 file_path=file_path,
                 lightrag_track_id=track_id,
-                lightrag_doc_id=str(upload_result.get("doc_id"))
-                if upload_result.get("doc_id")
-                else None,
+                lightrag_doc_id=str(initial_doc_id) if initial_doc_id else None,
             )
             await self.db.commit()
             await self.db.refresh(formal_doc)
-            return formal_doc
+
+            sync_task_id = None
+            if not initial_doc_id:
+                from ..workers.celery_tasks import trigger_formal_doc_sync
+
+                sync_result = trigger_formal_doc_sync(formal_doc.id)
+                sync_task_id = sync_result.id
+                logger.info(
+                    f"Triggered formal doc sync task for doc {formal_doc.id}, task_id={sync_task_id}"
+                )
+            else:
+                logger.info(
+                    f"Formal doc {formal_doc.id} received doc_id={initial_doc_id} immediately"
+                )
+
+            try:
+                await semantic_cache_notifier.notify_kb_changed(
+                    namespace=f"kb_{storage_id}"
+                )
+            except Exception as e:
+                logger.warning("Failed to notify semantic cache invalidation: %s", e)
+
+            return formal_doc, sync_task_id
+
         except HTTPException:
             await self.db.rollback()
             raise
@@ -158,7 +223,9 @@ class DocumentService:
             if file_path:
                 await self.storage.delete(file_path)
             logger.error(f"Error uploading formal document: {str(e)}")
-            raise HTTPException(status_code=500, detail="Failed to upload formal document")
+            raise HTTPException(
+                status_code=500, detail="Failed to upload formal document"
+            )
 
     async def get_document(self, document_id: int):
         doc = await self.doc_repo.get_by_id(document_id)
@@ -209,6 +276,15 @@ class DocumentService:
         await self.doc_repo.delete_chunks_for_document(document_id)
         await self.doc_repo.soft_delete(document_id)
         await self.db.commit()
+
+        # Invalidate semantic cache for this KB namespace based on the changed doc_id.
+        try:
+            await semantic_cache_notifier.notify_kb_changed(
+                namespace=collection_name,
+                doc_ids=[str(document_id)],
+            )
+        except Exception as e:
+            logger.warning("Failed to notify semantic cache invalidation: %s", e)
         return {"message": "Document deleted successfully"}
 
     async def get_formal_document(self, document_id: int):
@@ -240,7 +316,10 @@ class DocumentService:
                 result_docs.append(item)
 
         responses = await asyncio.gather(
-            *[self._build_formal_response(d, include_documents=False) for d in result_docs],
+            *[
+                self._build_formal_response(d, include_documents=False)
+                for d in result_docs
+            ],
             return_exceptions=True,
         )
         final: list[FormalDocumentResponse] = []
@@ -277,6 +356,7 @@ class DocumentService:
             raise HTTPException(status_code=404, detail="Formal document not found")
 
         current_doc = await self._sync_formal_doc_from_lightrag(current_doc)
+        namespace = f"kb_{current_doc.storage_id}"
 
         if current_doc.lightrag_doc_id and self.lightrag.enabled:
             try:
@@ -296,6 +376,11 @@ class DocumentService:
 
         await self.formal_doc_repo.delete(document_id)
         await self.db.commit()
+        # Formal document removal changes KB: bump namespace version.
+        try:
+            await semantic_cache_notifier.notify_kb_changed(namespace=namespace)
+        except Exception as e:
+            logger.warning("Failed to notify semantic cache invalidation: %s", e)
         return {"message": "Formal document deleted successfully"}
 
     async def sync_formal_document_by_track(self, document_id: int):
@@ -303,6 +388,13 @@ class DocumentService:
         if not doc:
             raise HTTPException(status_code=404, detail="Formal document not found")
         doc = await self._sync_formal_doc_from_lightrag(doc)
+        # Sync may surface newly ingested/updated formal docs; keep semantic cache fresh.
+        try:
+            await semantic_cache_notifier.notify_kb_changed(
+                namespace=f"kb_{doc.storage_id}"
+            )
+        except Exception as e:
+            logger.warning("Failed to notify semantic cache invalidation: %s", e)
         return await self._build_formal_response(doc)
 
     async def _build_formal_response(

@@ -9,10 +9,12 @@ from src.core.sql_db_setup import AsyncSessionLocal
 from src.core.vector_db_setup import QdrantManager
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.faq_repository import FAQRepository
+from src.repositories.formal_document_repository import FormalDocumentRepository
 from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 from src.services.file_storage import get_storage
 from src.services.faq_gen import FAQGeneration
+from src.services.lightrag_service import LightRAGService
 from src.models.models import ProcessingStatus, FAQ, FAQQuestionVariant, FAQSource
 from src.core.config import settings
 
@@ -46,7 +48,9 @@ def handle_doc_ingestion_error(
 
             if collection_name:
                 try:
-                    vec_svc = VectorDBService(QdrantManager.get_client(), collection_name)
+                    vec_svc = VectorDBService(
+                        QdrantManager.get_client(), collection_name
+                    )
                     await vec_svc.delete_vectors_by_document(document_id)
                 except Exception as e:
                     logger.error(f"Failed to cleanup Qdrant chunks: {e}")
@@ -72,7 +76,9 @@ def handle_faq_ingestion_error(
         )
         async with AsyncSessionLocal() as db:
             try:
-                vec_svc = VectorDBService(QdrantManager.get_client(), FAQ_COLLECTION_NAME)
+                vec_svc = VectorDBService(
+                    QdrantManager.get_client(), FAQ_COLLECTION_NAME
+                )
                 await vec_svc.delete_vectors_by_document(document_id)
             except Exception as e:
                 logger.error(f"Failed to cleanup FAQ vectors: {e}")
@@ -207,9 +213,7 @@ def finalize_ingestion(self, results: list, metadata: dict):
                 ]
             )
 
-            await repo.update_processing_status(
-                document_id, ProcessingStatus.COMPLETED
-            )
+            await repo.update_processing_status(document_id, ProcessingStatus.COMPLETED)
             await db.commit()
             logger.info(f"✅ Doc Ingestion COMPLETED document_id={document_id}")
 
@@ -397,6 +401,117 @@ def trigger_ingestion_pipeline(document_id: int, auto_generate_faq: bool = False
     parallel_flows = group(tasks_in_parallel)
     pipeline = chain(extract_task, parallel_flows)
 
-    return pipeline.apply_async(
-        link_error=handle_doc_ingestion_error.s(document_id)
-    )
+    return pipeline.apply_async(link_error=handle_doc_ingestion_error.s(document_id))
+
+
+FORMAL_DOC_SYNC_MAX_RETRIES = 20
+FORMAL_DOC_SYNC_INITIAL_DELAY = 60
+FORMAL_DOC_SYNC_MAX_DELAY = 1800
+
+
+@celery_app.task(
+    bind=True,
+    name="formal_doc.sync_lightrag_doc_id",
+    autoretry_for=(Exception,),
+    retry_kwargs={
+        "max_retries": FORMAL_DOC_SYNC_MAX_RETRIES,
+        "countdown": FORMAL_DOC_SYNC_INITIAL_DELAY,
+    },
+    soft_time_limit=60,
+    acks_late=True,
+)
+def sync_formal_document_task(self, formal_doc_id: int):
+    async def _logic():
+        async with AsyncSessionLocal() as db:
+            repo = FormalDocumentRepository(db)
+            lightrag = LightRAGService()
+
+            doc = await repo.get_by_id(formal_doc_id)
+            if not doc:
+                logger.warning(
+                    f"Formal document {formal_doc_id} not found, skipping sync"
+                )
+                return {"status": "skipped", "reason": "not_found"}
+
+            if doc.lightrag_doc_id:
+                logger.info(
+                    f"Formal doc {formal_doc_id} already has lightrag_doc_id, skipping"
+                )
+                return {"status": "skipped", "reason": "already_synced"}
+
+            if not doc.lightrag_track_id:
+                logger.warning(f"Formal doc {formal_doc_id} has no track_id, skipping")
+                return {"status": "skipped", "reason": "no_track_id"}
+
+            try:
+                track_result = await lightrag.get_track_result(doc.lightrag_track_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get track result for formal doc {formal_doc_id}: {e}"
+                )
+                raise
+
+            documents = (
+                track_result.get("documents", [])
+                if isinstance(track_result, dict)
+                else []
+            )
+
+            if not documents:
+                remaining_retries = self.request.retries
+                if remaining_retries > 0:
+                    delay = min(
+                        FORMAL_DOC_SYNC_INITIAL_DELAY
+                        * (2 ** (FORMAL_DOC_SYNC_MAX_RETRIES - remaining_retries)),
+                        FORMAL_DOC_SYNC_MAX_DELAY,
+                    )
+                    raise self.retry(
+                        exc=Exception("LightRAG doc_id not ready yet"),
+                        countdown=int(delay),
+                    )
+                else:
+                    logger.warning(
+                        f"Formal doc {formal_doc_id}: max retries reached, doc_id still not available"
+                    )
+                    return {
+                        "status": "pending",
+                        "reason": "max_retries_reached",
+                        "track_id": doc.lightrag_track_id,
+                    }
+
+            inferred_doc_id = documents[0].get("id")
+            if not inferred_doc_id:
+                remaining_retries = self.request.retries
+                if remaining_retries > 0:
+                    delay = min(
+                        FORMAL_DOC_SYNC_INITIAL_DELAY
+                        * (2 ** (FORMAL_DOC_SYNC_MAX_RETRIES - remaining_retries)),
+                        FORMAL_DOC_SYNC_MAX_DELAY,
+                    )
+                    raise self.retry(
+                        exc=Exception("LightRAG doc_id is null"),
+                        countdown=int(delay),
+                    )
+                else:
+                    return {
+                        "status": "pending",
+                        "reason": "null_doc_id_in_response",
+                        "track_id": doc.lightrag_track_id,
+                    }
+
+            await repo.update(formal_doc_id, {"lightrag_doc_id": str(inferred_doc_id)})
+            await db.commit()
+
+            logger.info(
+                f"✅ Formal doc {formal_doc_id} synced with lightrag_doc_id={inferred_doc_id}"
+            )
+            return {
+                "status": "success",
+                "lightrag_doc_id": str(inferred_doc_id),
+            }
+
+    return run_async(_logic())
+
+
+def trigger_formal_doc_sync(formal_doc_id: int):
+    return sync_formal_document_task.apply_async(args=[formal_doc_id])

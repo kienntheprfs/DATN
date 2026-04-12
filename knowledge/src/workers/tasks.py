@@ -12,6 +12,7 @@ from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 from src.repositories.document_repository import DocumentRepository
 from src.services.file_storage import get_storage
+from src.services.semantic_cache_notifier import semantic_cache_notifier
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,14 @@ async def background_index_document(document_id: int):
                 await db_session.commit()
 
         logger.info(f"[Document {document_id}] DONE. Indexed {len(all_pg_rows)} chunks.")
+        # Cache invalidation AFTER the KB is actually updated (vectors/chunks written).
+        try:
+            await semantic_cache_notifier.notify_kb_changed(
+                namespace=collection_name,
+                doc_ids=[str(document_id)],
+            )
+        except Exception as e:
+            logger.warning("Failed to notify semantic cache invalidation: %s", e)
 
     except Exception as e:
         logger.exception(f"[Document {document_id}] FAILED")
