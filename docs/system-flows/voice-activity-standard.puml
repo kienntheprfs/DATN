@@ -1,130 +1,99 @@
-@startuml VoiceActivityStandard
+@startuml VoiceActivitySimplified
 !theme plain
-skinparam ParticipantPadding 20
-skinparam BoxPadding 20
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
 
-title Voice Chat Interaction Activity
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
 
+title Luồng Tương tác bằng Giọng nói (Voice Mode)
+
+|Người dùng|
 start
-:User is in chat interface;
-:User clicks microphone button;
-
-if (Microphone permission granted?) then (yes)
-  :Request microphone access via navigator.mediaDevices.getUserMedia();
-  :Start WebRTC audio stream;
-  :Show recording indicator;
+repeat
+  :Nhấn biểu tượng Micro;
   
-  while (User is speaking?)
-    :Capture audio chunks in real-time;
-  endwhile
+  |Giao diện (Frontend)|
+  :Kiểm tra quyền truy cập Micro;
   
-  :Stop recording;
-  :Send WebRTC offer to Voice Service;
-  
-  if (WebRTC connection established?) then (yes)
-    :Voice Service receives POST /api/offer;
-    :Extract agent_id, user_id, thread_id from request;
-    :Initialize SmallWebRTCRequestHandler;
-    :Set up WebRTC connection callback;
+  if (Được cấp quyền?) then (Từ chối)
+    :Hiển thị thông báo từ chối;
+    :Gợi ý chuyển sang nhập văn bản;
+    kill
+  else (Đồng ý)
+    |Người dùng|
+    :Nói câu hỏi hoặc yêu cầu;
     
-    fork
-      :Process audio through SherpaSTTService;
-      
-      if (Speech recognition successful?) then (yes)
-        :Generate text transcript;
-        
-        if (Confidence score > 0.8?) then (yes)
-          :Call run_bot() function with connection;
-          
-          fork
-            :Initialize LLM service (DirectAPIAgentLLMService or OLLamaLLMService);
-            :Setup audio transport for TTS;
-            :Process transcript as chat message;
-            :Send to Agent Service at AGENT_API_URL;
-          fork again
-            :Handle tool calls via RTVI protocol;
-            :Send tool messages to frontend;
-            :Receive tool results;
-          end fork
-          
-          :Agent Service processes message;
-          :Agent Service returns AI response;
-          
-          if (USE_AGENT_API is true?) then (yes)
-            :Send text to external Piper TTS service;
-            :Piper TTS server receives POST /;
-            :Execute Piper CLI with vi_VN-vais1000-medium.onnx model;
-            :Generate raw PCM audio bytes;
-            :Return audio with media_type audio/l16;
-          else (no)
-            :Use built-in PiperTTSService;
-            :Generate audio internally;
-          endif
-          
-          :Stream audio back via WebRTC;
-          :Frontend plays audio for user;
-          
-        else (no)
-          :Show transcript with low confidence;
-          :Allow user to edit transcript;
-          
-          if (User corrects transcript?) then (yes)
-            :Resend corrected transcript;
-          else (no)
-            :Use original transcript;
-          endif
-        endif
-        
-      else (no)
-        :Speech recognition failed;
-        :Offer text input fallback;
-      endif
-      
-    fork again
-      :Maintain WebRTC connection;
-      :Handle ICE candidates;
-      :Manage audio transport quality;
-    end fork
+    |Giao diện (Frontend)|
+    :Thu âm và truyền dữ liệu âm thanh;
     
-  else (no)
-    :WebRTC connection failed;
-    :Suggest TURN server configuration;
+    |Hệ thống BK-TBOT|
+    :Chuyển giọng nói thành văn bản (STT);
+    note right: Sử dụng mô hình SherpaSTT
+    
+    if (Độ chính xác cao?) then (Không)
+      |Giao diện (Frontend)|
+      :Hiển thị văn bản thô chưa hoàn chỉnh;
+      
+      |Người dùng|
+      :Chỉnh sửa lại bằng tay và nhấn Gửi;
+      
+      |Hệ thống BK-TBOT|
+    else (Có)
+    endif
+    
+    :Phân tích ngữ nghĩa và sinh câu trả lời;
+    :Chuyển văn bản thành giọng nói (TTS);
+    note right: Sử dụng mô hình Piper TTS
+    :Trả về dữ liệu âm thanh và văn bản;
+    
+    |Giao diện (Frontend)|
+    :Phát âm thanh phản hồi;
+    :Hiển thị văn bản tương ứng trên màn hình;
+    
+    |Người dùng|
+    :Nghe và xem câu trả lời;
   endif
   
-else (no)
-  :Microphone access denied;
-  :Show permission denied message;
-  :Offer text input alternative;
-endif
-
-if (TURN server required?) then (yes)
-  :Configure TURN server settings;
-  :Retry WebRTC connection with TURN;
-  
-  if (TURN connection successful?) then (yes)
-    :Continue voice communication;
-  else (no)
-    :Show TURN configuration error;
-  endif
-endif
-
-if (User wants to continue?) then (yes)
-  :User clicks microphone again;
-  :Process repeats with same thread_id;
-else (no)
-  :Close WebRTC connection;
-  :Clean up audio resources;
-endif
+repeat while (Tiếp tục trò chuyện?) is (Có)
+-> Không;
+:Đóng kết nối và kết thúc phiên;
 
 stop
-
-note right
-  **Voice Service Architecture:**
-  - WebRTC audio streaming via SmallWebRTCRequestHandler
-  - Sherpa-ONNX STT with Vietnamese support
-  - Piper TTS service on port 5000 (separate process)
-  - RTVI protocol for tool communication
-  - Support for both external Agent API and local LLM
-end note
 
 @enduml

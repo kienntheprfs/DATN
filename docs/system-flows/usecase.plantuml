@@ -1,0 +1,79 @@
+@startuml usecase-user
+!theme plain
+left to right direction
+scale 3
+
+<style>
+usecaseDiagram {
+  usecase {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    BorderThickness 2
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 12
+  }
+
+  actor {
+    BackgroundColor #E8F5E9
+    BorderColor #388E3C
+    BorderThickness 2
+    FontColor #1B5E20
+    FontSize 16
+    FontStyle bold
+  }
+
+  arrow {
+    LineColor #424242
+    LineThickness 2
+  }
+
+  rectangle {
+    BackgroundColor #FAFAFA
+    BorderColor #B0BEC5
+    BorderThickness 1
+  }
+}
+</style>
+
+actor "Người dùng" as User
+actor "Người dùng\nđã đăng nhập" as AuthUser
+
+rectangle "Hệ thống BK-TBOT" {
+    usecase "Đăng ký tài khoản" as Register
+    usecase "Đăng nhập" as Login
+    
+    usecase "Hỏi đáp\nthông tin" as Chat
+    usecase "Hỏi đáp\nchuyên sâu\n(Deepmode)" as Deepmode
+    usecase "Tương tác\ngiọng nói" as Voice
+    usecase "Tra cứu\nsự kiện" as EventLookup
+    usecase "Yêu cầu\nchỉ đường" as NavMini
+    usecase "Tìm đường\ntrực tiếp" as DirectMap
+    usecase "Đánh giá\ncâu trả lời" as Rate
+    usecase "Quản lý\nlịch sử hội thoại" as HistoryMgmt
+    usecase "Sửa tên\nphiên hội thoại" as EditSession
+    usecase "Xóa phiên\nhội thoại" as DeleteSession
+}
+
+User --> Login
+User --> Register
+User --> Chat
+User --> EventLookup
+User --> NavMini
+User --> Rate
+
+Deepmode .up.> Chat : <<extend>>
+Voice .up.> Chat : <<extend>>
+NavMini .right.> Chat : <<extend>>
+Rate .left.> Chat : <<extend>>
+EditSession .up.> HistoryMgmt : <<extend>>
+DeleteSession .up.> HistoryMgmt : <<extend>>
+
+AuthUser --> Deepmode
+AuthUser --> Voice
+AuthUser --> DirectMap
+AuthUser --> HistoryMgmt
+
+AuthUser -up-|> User
+
+@enduml

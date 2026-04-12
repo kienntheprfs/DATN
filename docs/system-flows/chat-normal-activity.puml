@@ -1,0 +1,90 @@
+@startuml ChatNormalActivitySimplified
+!theme plain
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
+
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
+
+title Luồng hoạt động Hỏi đáp thông thường (Normal Mode)
+
+|Người dùng|
+start
+repeat
+  :Nhập câu hỏi bằng văn bản;
+  
+  |Giao diện (Frontend)|
+  :Tiếp nhận và gửi yêu cầu;
+  
+  |Hệ thống BK-TBOT|
+  :Kiểm tra giới hạn truy cập (Rate Limit);
+  
+  if (Hợp lệ?) then (Có)
+    :Truy xuất tài liệu liên quan (Vector Search);
+    note right: Tích hợp RAG để\ntìm kiếm ngữ cảnh
+    :Tổng hợp câu trả lời;
+    :Lưu lịch sử và trả về kết quả;
+    
+    |Giao diện (Frontend)|
+    :Hiển thị câu trả lời;
+    :Hiển thị danh sách minh chứng (Citations);
+    
+    |Người dùng|
+    :Đọc câu trả lời;
+    
+    if (Muốn xem chi tiết nguồn?) then (Có)
+      :Nhấn vào thẻ trích dẫn;
+      |Giao diện (Frontend)|
+      :Hiển thị nội dung tài liệu gốc;
+    else (Không)
+    endif
+    
+  else (Không)
+    |Hệ thống BK-TBOT|
+    :Báo lỗi (Quá tải hoặc Hết hạn phiên);
+    |Giao diện (Frontend)|
+    :Hiển thị thông báo lỗi;
+    kill
+  endif
+
+|Người dùng|
+repeat while (Tiếp tục trò chuyện?) is (Có)
+-> Không;
+stop
+
+@enduml
