@@ -1,0 +1,92 @@
+@startuml ViewAndContinueChatActivity
+!theme plain
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
+
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
+
+title Luồng Xem Lịch sử và Tiếp tục trò chuyện
+
+|Người dùng|
+start
+:Truy cập mục "Lịch sử hội thoại";
+
+|Giao diện (Frontend)|
+:Gửi yêu cầu tải danh sách;
+
+|Hệ thống BK-TBOT|
+:Truy xuất danh sách từ Database;
+
+|Giao diện (Frontend)|
+:Hiển thị danh sách hội thoại;
+
+|Người dùng|
+:Bấm chọn một phiên trò chuyện cũ;
+
+|Giao diện (Frontend)|
+:Yêu cầu tải nội dung chi tiết;
+
+|Hệ thống BK-TBOT|
+:Truy xuất toàn bộ tin nhắn;
+
+|Giao diện (Frontend)|
+:Hiển thị nội dung cuộc trò chuyện;
+
+|Người dùng|
+if (Tiếp tục chat?) then (Có)
+  :Nhập và gửi tin nhắn mới;
+  
+  |Giao diện (Frontend)|
+  :Tiếp nhận và gửi yêu cầu;
+  
+  |Hệ thống BK-TBOT|
+  :Kế thừa ngữ cảnh (Context) hiện tại;
+  note right: Sử dụng lại thread_id cũ
+  :Xử lý câu hỏi và tạo phản hồi;
+  
+  |Giao diện (Frontend)|
+  :Hiển thị câu trả lời mới;
+else (Không)
+  |Người dùng|
+  :Chỉ xem lại thông tin;
+endif
+
+stop
+
+@enduml

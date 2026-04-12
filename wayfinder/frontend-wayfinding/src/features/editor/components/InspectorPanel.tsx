@@ -464,7 +464,7 @@ const NodeForm = ({
       })()}
 
       {/* 4. LINK TO FLOOR - Chỉ hiện khi có building và có nhiều hơn 1 tầng */}
-      {hasBuilding && buildingMaps.length > 1 && (
+      {hasBuilding && buildingMaps.length > 0 && (
         <div className="pt-4 border-t border-slate-100">
           <div className="flex justify-between items-center mb-3">
             <h4 className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Liên kết tầng (Node)</h4>

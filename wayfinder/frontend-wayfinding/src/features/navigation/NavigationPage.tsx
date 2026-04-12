@@ -75,6 +75,28 @@ export default function NavigationPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
+  // Handle URL parameters for navigation from chatbot
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const startNode = params.get('start_node');
+    const endNode = params.get('end_node');
+    const start = params.get('start');
+    const end = params.get('end');
+
+    if (startNode) {
+      setStartNodeId(parseInt(startNode));
+    }
+    if (endNode) {
+      setEndNodeId(parseInt(endNode));
+    }
+    if (start) {
+      setStartLocation(decodeURIComponent(start));
+    }
+    if (end) {
+      setEndLocation(decodeURIComponent(end));
+    }
+  }, []);
+
   useEffect(() => {
     const loadBuildings = async () => {
       try {
@@ -158,6 +180,37 @@ export default function NavigationPage() {
     }
   }, [currentMap]);
 
+  // Auto find route when start and end nodes are provided via URL
+  useEffect(() => {
+    if (startNodeId && endNodeId && allNodes.length > 0 && !route) {
+      const startNode = allNodes.find(n => n.id === startNodeId);
+      const endNode = allNodes.find(n => n.id === endNodeId);
+      
+      if (startNode) {
+        setStartLocation(startNode.name);
+      }
+      if (endNode) {
+        setEndLocation(endNode.name);
+      }
+      
+      // Small delay to ensure map is loaded
+      const timer = setTimeout(() => {
+        handleFindRoute();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [startNodeId, endNodeId, allNodes.length, route]);
+
+  const handleRefreshCache = async () => {
+    try {
+      const result = await wayfindingApi.refreshCache();
+      alert(`Đã cập nhật cache: ${result.node_count} nodes`);
+    } catch (err) {
+      alert('Lỗi khi refresh cache');
+    }
+  };
+
   const handleFindRoute = async () => {
     if (!startNodeId || !endNodeId) {
       setError('Please select both start and destination');
@@ -177,16 +230,14 @@ export default function NavigationPage() {
       });
       setRoute(result);
 
-      // Group path_coords by floor based on transition points (entrance/stairs/elevator)
-      const floorPathMap = new Map<number, number[][]>();
+      // Group path_coords by floor based on path_node_ids (more accurate than coords)
+      const floorPathMap = new Map<number, { coords: number[][], nodes: number[] }>();
       
-      // Determine initial floor from first coordinate
+      // Determine initial floor from first node ID
       let currentFloorIdx = 0;
-      if (result.path_coords.length > 0) {
-        const firstCoord = result.path_coords[0];
-        const firstNode = allNodes.find(n => 
-          Math.abs(n.x - firstCoord[0]) < 2 && Math.abs(n.y - firstCoord[1]) < 2
-        );
+      if (result.path_node_ids.length > 0) {
+        const firstNodeId = result.path_node_ids[0];
+        const firstNode = allNodes.find(n => n.id === firstNodeId);
         if (firstNode) {
           const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
           if (initialFloorIdx !== -1) {
@@ -194,55 +245,74 @@ export default function NavigationPage() {
           }
         }
       }
-      let lastTransitionFloorIdx = -1;
       
-      for (let i = 0; i < result.path_coords.length; i++) {
+      // Build map from node ID to node
+      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+      
+      // Process each node in path to determine floor
+      let currentCoords: number[][] = [];
+      let currentNodes: number[] = [];
+      
+      for (let i = 0; i < result.path_node_ids.length; i++) {
+        const nodeId = result.path_node_ids[i];
         const coord = result.path_coords[i];
+        const node = nodeMap.get(nodeId);
         
-        // Check if this coord is at a transition node (entrance/stairs/elevator)
-        const transitionNode = allNodes.find(n => 
-          (n.type === 'entrance' || n.type === 'stairs' || n.type === 'elevator') &&
-          Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2
-        );
+        if (!node) {
+          currentCoords.push(coord);
+          continue;
+        }
         
-        if (transitionNode) {
-          // Found a transition node - switch to its floor
-          const newFloorIdx = floorMaps.findIndex(f => f.map.id === transitionNode.map_id);
-          if (newFloorIdx !== -1) {
+        // Check if this is a transition node (entrance/stairs/elevator)
+        const isTransitionNode = node.type === 'entrance' || node.type === 'stairs' || node.type === 'elevator';
+        
+        if (isTransitionNode && currentNodes.length > 0) {
+          // Find new floor
+          const newFloorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+          
+          // Only switch floor if it's actually a different floor
+          if (newFloorIdx !== -1 && newFloorIdx !== currentFloorIdx) {
+            // Save current segment before switching floor (include transition node in current segment)
+            if (!floorPathMap.has(currentFloorIdx)) {
+              floorPathMap.set(currentFloorIdx, { coords: [...currentCoords], nodes: [...currentNodes] });
+            }
+            // Start new segment with transition node as starting point
             currentFloorIdx = newFloorIdx;
-            lastTransitionFloorIdx = newFloorIdx;
+            currentCoords = [coord];  // Start new segment with transition node
+            currentNodes = [nodeId];
+            continue;  // Skip adding coord again below
           }
         }
         
-        // If we've just transitioned, use the new floor
-        // Otherwise, stay on the current floor unless we find a new transition
-        if (lastTransitionFloorIdx !== -1 && lastTransitionFloorIdx !== currentFloorIdx) {
-          currentFloorIdx = lastTransitionFloorIdx;
-        }
-        
+        // Add to current segment
+        currentCoords.push(coord);
+        currentNodes.push(nodeId);
+      }
+      
+      // Save last segment
+      if (currentCoords.length > 0) {
         if (!floorPathMap.has(currentFloorIdx)) {
-          floorPathMap.set(currentFloorIdx, []);
+          floorPathMap.set(currentFloorIdx, { coords: currentCoords, nodes: currentNodes });
         }
-        floorPathMap.get(currentFloorIdx)!.push(coord);
       }
       
       // Convert to segments
       const segments: FloorSegment[] = [];
-      floorPathMap.forEach((pathCoords, floorIdx) => {
-        // Find floor change node for this floor
+      floorPathMap.forEach((data, floorIdx) => {
+        // Find floor change node for this floor (first stairs/elevator in path)
         let floorChangeNode: { x: number; y: number; type: string } | undefined;
-        const firstCoord = pathCoords[0];
-        const transitionNode = allNodes.find(n => 
-          Math.abs(n.x - firstCoord[0]) < 1 && Math.abs(n.y - firstCoord[1]) < 1 &&
-          (n.type === 'stairs' || n.type === 'elevator')
-        );
-        if (transitionNode) {
-          floorChangeNode = { x: transitionNode.x, y: transitionNode.y, type: transitionNode.type };
+        
+        for (const nodeId of data.nodes) {
+          const node = nodeMap.get(nodeId);
+          if (node && (node.type === 'stairs' || node.type === 'elevator')) {
+            floorChangeNode = { x: node.x, y: node.y, type: node.type };
+            break;
+          }
         }
         
         segments.push({
           floorIndex: floorIdx,
-          pathCoords,
+          pathCoords: data.coords,
           instructions: [],
           floorChangeNode,
         });
@@ -413,7 +483,7 @@ export default function NavigationPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 bg-white px-6 py-3 z-20 shadow-sm">
+      <header className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 bg-white px-6 py-3 z-[60] shadow-sm relative">
         <div className="flex items-center gap-4">
           <div className="size-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <span className="material-symbols-outlined text-white">map</span>
@@ -477,6 +547,15 @@ export default function NavigationPage() {
                   Find Route
                 </>
               )}
+            </button>
+
+            {/* Refresh Cache Button */}
+            <button
+              onClick={handleRefreshCache}
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <span className="material-symbols-outlined">refresh</span>
+              Refresh Map Cache
             </button>
 
             {error && (
@@ -730,7 +809,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
                         : -1;
                       
-                      if (startFloorIdx === currentFloorIndex || startFloorIdx === -1) {
+                      // Only show if this floor has the start point
+                      if (startFloorIdx !== -1 && startFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={startCoord[0]} cy={startCoord[1]} r="14" fill="#2563eb" />
@@ -754,7 +834,8 @@ export default function NavigationPage() {
                         ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
                         : -1;
                       
-                      if (endFloorIdx === currentFloorIndex || endFloorIdx === -1) {
+                      // Only show if this floor has the end point
+                      if (endFloorIdx !== -1 && endFloorIdx === currentFloorIndex) {
                         return (
                           <g>
                             <circle cx={endCoord[0]} cy={endCoord[1]} r="14" fill="#dc2626" />

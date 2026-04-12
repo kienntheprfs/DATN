@@ -1,0 +1,78 @@
+"""Repository methods for answer ratings."""
+
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy import case, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from src.models import AnswerRating, RatingValue
+
+
+class RatingRepository:
+    """Encapsulate persistence operations for answer ratings."""
+
+    @staticmethod
+    async def get_by_user_run(db: AsyncSession, user_id: str, run_id: str) -> Optional[AnswerRating]:
+        """Return one rating by composite key `(user_id, run_id)` if it exists."""
+        statement = select(AnswerRating).where(
+            AnswerRating.user_id == user_id,
+            AnswerRating.run_id == run_id,
+        )
+        result = await db.execute(statement)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, rating_id: UUID) -> Optional[AnswerRating]:
+        """Return one rating by primary key."""
+        statement = select(AnswerRating).where(AnswerRating.id == rating_id)
+        result = await db.execute(statement)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def create(db: AsyncSession, rating: AnswerRating) -> AnswerRating:
+        """Add a new rating to the active session."""
+        db.add(rating)
+        return rating
+
+    @staticmethod
+    async def update(db: AsyncSession, rating: AnswerRating) -> AnswerRating:
+        """Add updated rating entity to active session."""
+        db.add(rating)
+        return rating
+
+    @staticmethod
+    async def delete(db: AsyncSession, rating: AnswerRating) -> None:
+        """Delete rating entity from session."""
+        await db.delete(rating)
+
+    @staticmethod
+    async def get_thread_ratings(
+        db: AsyncSession,
+        thread_id: str,
+        user_id: Optional[str] = None,
+    ) -> list[AnswerRating]:
+        """Return ratings for a thread, optionally restricted to one user."""
+        statement = select(AnswerRating).where(AnswerRating.thread_id == thread_id)
+        if user_id is not None:
+            statement = statement.where(AnswerRating.user_id == user_id)
+        result = await db.execute(statement.order_by(AnswerRating.created_at.desc()))
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_agent_stats(db: AsyncSession, agent_id: str) -> tuple[int, int, int]:
+        """Return `(total, like_count, dislike_count)` for one agent."""
+        like_case = case((AnswerRating.rating == RatingValue.LIKE.value, 1), else_=0)
+        dislike_case = case((AnswerRating.rating == RatingValue.DISLIKE.value, 1), else_=0)
+        statement = select(
+            func.count(AnswerRating.id),
+            func.sum(like_case),
+            func.sum(dislike_case),
+        ).where(AnswerRating.agent_id == agent_id)
+        result = await db.execute(statement)
+        row = result.one()
+        total = int(row[0] or 0)
+        like_count = int(row[1] or 0)
+        dislike_count = int(row[2] or 0)
+        return total, like_count, dislike_count

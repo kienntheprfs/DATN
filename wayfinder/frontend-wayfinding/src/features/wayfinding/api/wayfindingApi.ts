@@ -46,4 +46,10 @@ export const wayfindingApi = {
       return null;
     }
   },
+
+  // Refresh graph cache
+  refreshCache: async (): Promise<{ message: string; node_count: number }> => {
+    const res = await apiClient.post("/api/refresh-cache");
+    return res.data;
+  },
 };

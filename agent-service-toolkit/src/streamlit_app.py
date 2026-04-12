@@ -149,12 +149,8 @@ async def main() -> None:
                 "Enable audio generation",
                 value=True,
                 disabled=not voice or not voice.tts,
-                help="Configure VOICE_TTS_PROVIDER in .env to enable"
-                if not voice or not voice.tts
-                else None,
-                on_change=lambda: st.session_state.pop("last_audio", None)
-                if not st.session_state.get("enable_audio", True)
-                else None,
+                help="Configure VOICE_TTS_PROVIDER in .env to enable" if not voice or not voice.tts else None,
+                on_change=lambda: st.session_state.pop("last_audio", None) if not st.session_state.get("enable_audio", True) else None,
                 key="enable_audio",
             )
 
@@ -163,48 +159,33 @@ async def main() -> None:
 
         @st.dialog("Architecture")
         def architecture_dialog() -> None:
-            st.image(
-                "https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true"
-            )
+            st.image("https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true")
             "[View full size on Github](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png)"
-            st.caption(
-                "App hosted on [Streamlit Cloud](https://share.streamlit.io/) with FastAPI service running in [Azure](https://learn.microsoft.com/en-us/azure/app-service/)"
-            )
+            st.caption("App hosted on [Streamlit Cloud](https://share.streamlit.io/) with FastAPI service running in [Azure](https://learn.microsoft.com/en-us/azure/app-service/)")
 
         if st.button(":material/schema: Architecture", use_container_width=True):
             architecture_dialog()
 
         with st.popover(":material/policy: Privacy", use_container_width=True):
-            st.write(
-                "Prompts, responses and feedback in this app are anonymously recorded and saved to LangSmith for product evaluation and improvement purposes only."
-            )
+            st.write("Prompts, responses and feedback in this app are anonymously recorded and saved to LangSmith for product evaluation and improvement purposes only.")
 
         @st.dialog("Share/resume chat")
         def share_chat_dialog() -> None:
             session = st.runtime.get_instance()._session_mgr.list_active_sessions()[0]
-            st_base_url = urllib.parse.urlunparse(
-                [session.client.request.protocol, session.client.request.host, "", "", "", ""]
-            )
+            st_base_url = urllib.parse.urlunparse([session.client.request.protocol, session.client.request.host, "", "", "", ""])
             # if it's not localhost, switch to https by default
             if not st_base_url.startswith("https") and "localhost" not in st_base_url:
                 st_base_url = st_base_url.replace("http", "https")
             # Include both thread_id and user_id in the URL for sharing to maintain user identity
-            chat_url = (
-                f"{st_base_url}?thread_id={st.session_state.thread_id}&{USER_ID_COOKIE}={user_id}"
-            )
+            chat_url = f"{st_base_url}?thread_id={st.session_state.thread_id}&{USER_ID_COOKIE}={user_id}"
             st.markdown(f"**Chat URL:**\n```text\n{chat_url}\n```")
             st.info("Copy the above URL to share or revisit this chat")
 
         if st.button(":material/upload: Share/resume chat", use_container_width=True):
             share_chat_dialog()
 
-        # Add map interface
-        render_map_interface()
-
         "[View the source code](https://github.com/JoshuaC215/agent-service-toolkit)"
-        st.caption(
-            "Made with :material/favorite: by [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) in Oakland"
-        )
+        st.caption("Made with :material/favorite: by [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) in Oakland")
 
     # Draw existing messages
     messages: list[ChatMessage] = st.session_state.messages
@@ -237,14 +218,7 @@ async def main() -> None:
 
     # Render saved audio for the last AI message (if it exists)
     # This ensures audio persists across st.rerun() calls
-    if (
-        voice
-        and enable_audio
-        and "last_audio" in st.session_state
-        and st.session_state.last_message
-        and len(messages) > 0
-        and messages[-1].type == "ai"
-    ):
+    if voice and enable_audio and "last_audio" in st.session_state and st.session_state.last_message and len(messages) > 0 and messages[-1].type == "ai":
         with st.session_state.last_message:
             audio_data = st.session_state.last_audio
             st.audio(audio_data["data"], format=audio_data["format"])
@@ -839,9 +813,7 @@ async def draw_messages(
 
                 if last_message_type != "task":
                     last_message_type = "task"
-                    st.session_state.last_message = st.chat_message(
-                        name="task", avatar=":material/manufacturing:"
-                    )
+                    st.session_state.last_message = st.chat_message(name="task", avatar=":material/manufacturing:")
                     with st.session_state.last_message:
                         status = TaskDataStatus()
 
@@ -923,11 +895,7 @@ async def handle_sub_agent_msgs(messages_agen, status, is_new):
             continue
 
         # Handle transfer_back_to tool calls - these indicate a sub-agent is returning control
-        if (
-            hasattr(sub_msg, "tool_calls")
-            and sub_msg.tool_calls
-            and any("transfer_back_to" in tc.get("name", "") for tc in sub_msg.tool_calls)
-        ):
+        if hasattr(sub_msg, "tool_calls") and sub_msg.tool_calls and any("transfer_back_to" in tc.get("name", "") for tc in sub_msg.tool_calls):
             # Process transfer_back_to tool calls
             for tc in sub_msg.tool_calls:
                 if "transfer_back_to" in tc.get("name", ""):

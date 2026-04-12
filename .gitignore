@@ -12,6 +12,9 @@ checkpoints.db-*
 # Langgraph
 .langgraph_api/
 
+.claude
+convention.md
+
 # VSCode
 .vscode
 .DS_Store
@@ -197,3 +200,7 @@ cython_debug/
 # Private Credentials, ignore everything in the folder but the .gitkeep file
 privatecredentials/*
 !privatecredentials/.gitkeep
+.next/
+!frontend/lib/
+
+out/

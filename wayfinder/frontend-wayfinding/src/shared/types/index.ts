@@ -62,6 +62,7 @@ export interface Instruction {
 export interface RouteResponse {
   map_id: number;
   path_coords: number[][];
+  path_node_ids: number[];
   total_distance_m: number;
   instructions: Instruction[];
 }

@@ -1,32 +1,52 @@
 from pathlib import Path
 import os
-from sqlmodel import create_engine, SQLModel
+from sqlmodel import create_engine, SQLModel, text
 from dotenv import load_dotenv
 
-# Resolve project root and load .env explicitly to avoid CWD issues
 BASE_PKG = Path(__file__).resolve().parents[2]
 load_dotenv(dotenv_path=BASE_PKG / ".env")
-# Also load a local .env next to this file if present (e.g., backend/core/.env)
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-# Cho phép override bằng biến môi trường (tuỳ chọn)
+DB_USER = os.getenv("WAYFINDER_DB_USER", "postgres")
+DB_PASSWORD = os.getenv("WAYFINDER_DB_PASSWORD", "postgres")
+DB_HOST = os.getenv("WAYFINDER_DB_HOST", "localhost")
+DB_PORT = os.getenv("WAYFINDER_DB_PORT", "5432")
+DB_NAME = os.getenv("WAYFINDER_DB_NAME", "knowledge_db")
+DB_SCHEMA = os.getenv("WAYFINDER_DB_SCHEMA", "wayfinder")
+
 ENV_URL = os.getenv("WAYFINDER_DB_URL") or os.getenv("DATABASE_URL")
 
 if ENV_URL:
     DB_URL = ENV_URL
-else:
-    # db.py nằm ở: indoor_wayfinder/backend/core/db.py
-    # => BASE_PKG là thư mục 'indoor_wayfinder/'
-    DB_DIR = BASE_PKG / "data" / "db"
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    DB_PATH = (DB_DIR / "wayfinder.db").resolve()
-    DB_URL = f"sqlite:///{DB_PATH.as_posix()}"
-
-if DB_URL.startswith("sqlite"):
-    engine = create_engine(DB_URL, echo=False, connect_args={"check_same_thread": False})
-else:
     engine = create_engine(DB_URL, echo=False)
+else:
+    DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    engine = create_engine(
+        DB_URL, echo=False, connect_args={"options": f"-c search_path={DB_SCHEMA}"}
+    )
+
+    with engine.connect() as conn:
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
+        conn.commit()
 
 
 def init_db():
+    from backend.models.entities import (
+        Building,
+        Map,
+        Node,
+        Alias,
+        Edge,
+        Event,
+        MissingLocation,
+        MissingRoute,
+    )
+
+    for table in SQLModel.metadata.tables.values():
+        table.schema = DB_SCHEMA
+
     SQLModel.metadata.create_all(engine)
+
+    print(
+        f"Created {len(SQLModel.metadata.tables)} tables in schema '{DB_SCHEMA}': {list(SQLModel.metadata.tables.keys())}"
+    )
