@@ -129,6 +129,9 @@ class DocumentService:
             document.file_path = file_path
             return document
 
+        except HTTPException:
+            await self.db.rollback()
+            raise
         except Exception as e:
             await self.db.rollback()
             if file_path:
