@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str | None = None
 
     # Embeddings
+    EMBEDDING_API_KEY: str | None = None
+    EMBEDDING_ENDPOINT: str | None = None
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DEPLOYMENT_NAME: str | None = None
     EMBEDDING_API_VERSION: str | None = None
@@ -115,6 +117,24 @@ class Settings(BaseSettings):
     LIGHTRAG_QUERY_PATH: str = "/query/data"
     # LIGHTRAG_TRACK_PATH: str = "/documents/track_status/{track_id}"
     # LIGHTRAG_DELETE_PATH: str = "/documents/delete_document"
+
+    # Semantic cache (Redis Stack)
+    SEM_CACHE_ENABLED: bool = True
+    SEM_CACHE_REDIS_URL: str | None = None
+    SEM_CACHE_REDIS_PASSWORD: str | None = None
+    SEM_CACHE_INDEX_NAME: str = "idx:kb_sem_cache"
+    SEM_CACHE_KEY_PREFIX: str = "kb_sem_cache"
+    SEM_CACHE_KB_VERSION_KEY: str = "kb_sem_cache:kb_version"
+    # Per-namespace KB version key: f"{SEM_CACHE_KB_VERSION_KEY_PREFIX}:{namespace}"
+    # Used to invalidate cache when a KB is updated (upload/delete/re-index).
+    SEM_CACHE_KB_VERSION_KEY_PREFIX: str = "kb_sem_cache:kb_version"
+    SEM_CACHE_NAMESPACE: str = "kb_2"
+    SEM_CACHE_MIN_SCORE: float = 0.88
+    SEM_CACHE_TOP_K: int = 3
+    SEM_CACHE_TTL_SECONDS: int = 86400
+    SEM_CACHE_VECTOR_DIM: int = 3072
+    # Reverse index sets for invalidation: f"{SEM_CACHE_DOC_SET_PREFIX}:{namespace}:{doc_id}"
+    SEM_CACHE_DOC_SET_PREFIX: str = "kb_sem_cache:doc"
 
     # If DEFAULT_MODEL is None, it will be set in model_post_init
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]

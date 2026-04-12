@@ -17,9 +17,9 @@ class AzureEmbeddingService(EmbeddingService):
         normalize_output: bool = True,
     ):
         self.client = AzureOpenAI(
-            api_key=settings.AZURE_OPENAI_API_KEY,
+            api_key=settings.EMBEDDING_API_KEY,
             api_version=settings.EMBEDDING_API_VERSION,
-            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_endpoint=settings.EMBEDDING_ENDPOINT,
         )
         self.deployment_name = deployment_name
         self.batch_size = batch_size
