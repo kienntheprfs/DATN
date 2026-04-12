@@ -38,7 +38,8 @@ class QdrantHybridRetriever:
         collection_name: str,  # VD: "kb_123"
         top_k: int = 5,
         score_threshold: float = 0.0,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        precomputed_query_vec: Optional[Dict[str, Any]] = None,
     ) -> List[RetrievedChunk]:
         """
         Hàm retrieve chính:
@@ -47,8 +48,8 @@ class QdrantHybridRetriever:
         3. Parse payload trả về format chuẩn
         """
         try:
-            # 1. Encode câu hỏi
-            query_vec = await self.encoder.encode_query(query)
+            # 1. Encode câu hỏi (hoặc tái sử dụng vector đã encode sẵn)
+            query_vec = precomputed_query_vec or await self.encoder.encode_query(query)
 
             # 2. Xây dựng Filter (nếu Chatbot muốn lọc theo metadata)
             qdrant_filter = None

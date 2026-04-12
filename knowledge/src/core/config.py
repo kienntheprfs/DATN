@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     FAQ_COLLECTION_NAME: str | None = "faqs"
 
     # Embeddings
+    EMBEDDING_API_KEY: str | None = None
+    EMBEDDING_ENDPOINT: str | None = None
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DEPLOYMENT_NAME: str | None = None
     EMBEDDING_API_VERSION: str | None = None
@@ -48,6 +50,15 @@ class Settings(BaseSettings):
 
     REDIS_BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_BACKEND_URL: str = "redis://localhost:6379/1"
+
+    # Semantic cache invalidation (shared with agent-service-toolkit)
+    # Defaults to Redis backend URL, but can be overridden independently.
+    # Default to the Celery Redis backend DB.
+    SEM_CACHE_REDIS_URL: str = "redis://localhost:6379/0"
+    SEM_CACHE_REDIS_PASSWORD: str | None = None
+    SEM_CACHE_KB_VERSION_KEY_PREFIX: str = "kb_sem_cache:kb_version"
+    SEM_CACHE_DOC_SET_PREFIX: str = "kb_sem_cache:doc"
+    SEM_CACHE_TTL_SECONDS: int = 86400
 
     LLAMA_CLOUD_API_KEY: str | None = None
     LIGHTRAG_BASE_URL: str | None = "http://localhost:9621"

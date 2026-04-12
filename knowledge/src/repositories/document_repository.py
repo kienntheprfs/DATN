@@ -99,9 +99,7 @@ class DocumentRepository:
             values["processing_completed_at"] = func.now()
         if error_msg:
             values["processing_error"] = error_msg
-        stmt = (
-            update(Document).where(Document.id == document_id).values(**values)
-        )
+        stmt = update(Document).where(Document.id == document_id).values(**values)
         await self.db.execute(stmt)
         await self.db.flush()
 
@@ -120,3 +118,31 @@ class DocumentRepository:
 
     async def cleanup_failed_document(self, document_id: int) -> None:
         await self.delete_chunks_for_document(document_id)
+
+    async def get_by_title_and_storage(
+        self,
+        title: str,
+        storage_id: int,
+    ) -> Optional[Document]:
+        query = (
+            select(Document)
+            .where(Document.title == title)
+            .where(Document.storage_id == storage_id)
+            .where(Document.status != DocumentStatus.DELETED)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_by_checksum_and_storage(
+        self,
+        checksum: str,
+        storage_id: int,
+    ) -> Optional[Document]:
+        query = (
+            select(Document)
+            .where(Document.checksum == checksum)
+            .where(Document.storage_id == storage_id)
+            .where(Document.status != DocumentStatus.DELETED)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
