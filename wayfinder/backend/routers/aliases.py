@@ -194,7 +194,11 @@ def search_alias(
                 map_data = map_info.get(node.map_id, {}) if node else {}
 
                 # Ưu tiên kết quả có nhiều từ khớp hơn
-                final_score = max(words_matched * 25, full_score)
+                # Nếu có đủ từ khớp (>=3), ưu tiên cao
+                if words_matched >= 3:
+                    final_score = max(words_matched * 25, full_score + 30)
+                else:
+                    final_score = full_score
 
                 out.append(
                     AliasSearchOut(

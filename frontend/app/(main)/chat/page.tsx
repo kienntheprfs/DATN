@@ -69,6 +69,25 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		return allCitations;
 	}, [messages]);
 
+	const routeData = useMemo(() => {
+		const routeTool = currentTools.find((tool) => {
+			const name = tool.name.toLowerCase();
+			return (name.includes("route") || name.includes("find") || name.includes("map")) && tool.status === "done";
+		});
+
+		if (routeTool?.content) {
+			try {
+				const parsed = JSON.parse(routeTool.content);
+				if (parsed.type === "route") {
+					return parsed;
+				}
+			} catch {
+				// Not JSON
+			}
+		}
+		return null;
+	}, [currentTools]);
+
 	useEffect(() => {
 		if (error) {
 			toast.error("Đã xảy ra lỗi", {
@@ -92,6 +111,12 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			}, 100);
 		}
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router]);
+
+	useEffect(() => {
+		if (routeData && !isDocumentPanelOpen) {
+			setIsDocumentPanelOpen(true);
+		}
+	}, [routeData]);
 
 	const voice = useVoice({
 		agentId: agent || "chatbot",
@@ -194,7 +219,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 						<>
 							<ResizableHandle withHandle />
 							<ResizablePanel defaultSize={50}>
-								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} citations={citations} />
+								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} citations={citations} routeData={routeData} />
 							</ResizablePanel>
 						</>
 					)}

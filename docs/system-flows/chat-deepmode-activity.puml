@@ -1,0 +1,85 @@
+@startuml ChatDeepmodeActivitySimplified
+!theme plain
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
+
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
+
+title Luồng hoạt động Hỏi đáp chuyên sâu (Deepmode)
+
+|Người dùng|
+start
+:Bật chế độ Deepmode;
+repeat
+  :Nhập câu hỏi/yêu cầu phức tạp;
+  
+  |Giao diện (Frontend)|
+  :Tiếp nhận và gắn cờ Deepmode;
+  :Gửi yêu cầu đến máy chủ;
+  
+  |Hệ thống BK-TBOT|
+  :Xác thực quyền truy cập;
+  
+  if (Hợp lệ?) then (Có)
+    :Kích hoạt Agent suy luận sâu;
+    note right: Sử dụng LLM phân tích\nvà quét dữ liệu diện rộng
+    :Tìm kiếm Vector & Trích xuất ngữ cảnh;
+    :Tổng hợp câu trả lời & Minh chứng;
+    :Trả về kết quả;
+    
+    |Giao diện (Frontend)|
+    :Hiển thị câu trả lời chi tiết;
+    :Hiển thị danh sách minh chứng (Citations);
+    
+    |Người dùng|
+    :Đọc câu trả lời & Kiểm tra minh chứng;
+  else (Không)
+    |Hệ thống BK-TBOT|
+    :Báo lỗi xác thực (401/403);
+    |Giao diện (Frontend)|
+    :Hiển thị yêu cầu đăng nhập;
+    kill
+  endif
+
+|Người dùng|
+repeat while (Hỏi tiếp câu khác?) is (Có)
+-> Không;
+stop
+
+@enduml

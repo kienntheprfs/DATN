@@ -1,0 +1,76 @@
+@startuml RenameConversationActivity
+!theme plain
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
+
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
+
+title Luồng Sửa tên phiên hội thoại
+
+|Người dùng|
+start
+:Tại màn hình Lịch sử hội thoại;
+:Nhấn biểu tượng "Sửa/Đổi tên" trên một phiên;
+:Nhập tên mới cho phiên hội thoại;
+:Nhấn "Lưu" hoặc Enter;
+
+|Giao diện (Frontend)|
+:Kiểm tra tính hợp lệ của tên mới;
+note right: Không được bỏ trống
+
+if (Hợp lệ?) then (Có)
+  :Gửi yêu cầu cập nhật tên;
+  
+  |Hệ thống BK-TBOT|
+  :Tìm bản ghi và cập nhật Database;
+  :Trả về kết quả thành công;
+  
+  |Giao diện (Frontend)|
+  :Cập nhật hiển thị tên mới trên danh sách;
+else (Không)
+  |Giao diện (Frontend)|
+  :Hiển thị cảnh báo lỗi (VD: Tên trống);
+  |Người dùng|
+  :Chỉnh sửa lại;
+  kill
+endif
+
+stop
+
+@enduml

@@ -19,6 +19,7 @@ from core import get_model, settings
 from rag_utils.retriever import QdrantHybridRetriever
 from rag_utils.reranker import BaseReranker, JinaReranker
 from rag_utils.lightrag_service import LightRAGService
+from rag_utils.semantic_cache import semantic_cache_service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -53,17 +54,55 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
     search_depth: "normal" (Tìm kiếm nhanh) hoặc "deep" (Tìm kiếm sâu trên đồ thị tri thức).
     """
     # Lấy query_mode từ config (mặc định là 'normal' nếu API không truyền)
-    query_mode = config.get("configurable", {}).get("query_mode", "normal")
+    query_mode = str(config.get("configurable", {}).get("query_mode", "normal")).strip().lower()
     
     logger.info(f"CALL TOOL: lookup_hcmut_info | QUERY: {query} | MODE: {query_mode}")
+
+    configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
+    kb_id = configurable.get("kb_id")
+    explicit_collection = str(configurable.get("kb_collection", "")).strip()
+    collection_name = explicit_collection or (f"kb_{kb_id}" if kb_id else settings.SEM_CACHE_NAMESPACE)
+    cache_namespace = collection_name
 
     # Ánh xạ query_mode (normal/deep) sang search_depth của logic cũ
     search_depth = "deep" if query_mode == "deep" else "normal"
     lightrag_mode = "hybrid" if search_depth == "deep" else "naive"
 
     try:
+        cached_dense_vector: list[float] | None = None
+        query_vector: dict[str, Any] | None = None
+        kb_version = 1
+        try:
+            query_vector = await retriever_service.encoder.encode_query(query)
+            cached_dense_vector = query_vector.get("dense")
+            kb_version = await semantic_cache_service.get_kb_version(namespace=cache_namespace)
+            if cached_dense_vector:
+                cache_hit = await semantic_cache_service.search(
+                    dense_vector=cached_dense_vector,
+                    query_mode=query_mode,
+                    kb_version=kb_version,
+                    namespace=cache_namespace,
+                )
+                if cache_hit and cache_hit.response_text:
+                    logger.info(
+                        "semantic_cache_hit mode=%s similarity=%.4f kb_version=%s key=%s",
+                        query_mode,
+                        cache_hit.similarity,
+                        kb_version,
+                        cache_hit.cache_key,
+                    )
+                    return cache_hit.response_text, cache_hit.artifacts
+            logger.info("semantic_cache_miss mode=%s kb_version=%s", query_mode, kb_version)
+        except Exception:
+            logger.exception("semantic_cache_lookup_failed")
+
         # 1. CHẠY SONG SONG QDRANT VÀ LIGHTRAG
-        task_qdrant = retriever_service.search(query=query, collection_name="kb_2", top_k=5)
+        task_qdrant = retriever_service.search(
+            query=query,
+            collection_name=cache_namespace,
+            top_k=5,
+            precomputed_query_vec=query_vector,
+        )
         task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
         
         qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
@@ -119,9 +158,40 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                         output_lines.append(f"- {r.src_id} -> {r.tgt_id}: {r.description}")
 
         if not output_lines:
-            return "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
+            output_text = "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
+            if cached_dense_vector:
+                try:
+                    await semantic_cache_service.upsert(
+                        query_text=query,
+                        response_text=output_text,
+                        artifacts=[],
+                        dense_vector=cached_dense_vector,
+                        query_mode=query_mode,
+                        kb_version=kb_version,
+                        namespace=cache_namespace,
+                    )
+                    logger.info("semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version)
+                except Exception:
+                    logger.exception("semantic_cache_write_failed")
+            return output_text
 
-        return "\n".join(output_lines), artifacts
+        output_text = "\n".join(output_lines)
+        if cached_dense_vector:
+            try:
+                await semantic_cache_service.upsert(
+                    query_text=query,
+                    response_text=output_text,
+                    artifacts=artifacts,
+                    dense_vector=cached_dense_vector,
+                    query_mode=query_mode,
+                    kb_version=kb_version,
+                    namespace=cache_namespace,
+                )
+                logger.info("semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version)
+            except Exception:
+                logger.exception("semantic_cache_write_failed")
+
+        return output_text, artifacts
 
     except Exception as e:
         logger.exception("Lỗi trong quá trình truy xuất dữ liệu")

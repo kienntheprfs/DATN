@@ -159,7 +159,7 @@ def find_route_func(
                 floor_level=None,
                 description=f"Người dùng tìm đường từ '{from_location}' đến '{to_location}' nhưng không tìm thấy địa điểm đến",
             )
-            
+
         if not start_results:
             return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
         if not end_results:
@@ -264,24 +264,37 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
 
         is_multi_floor = len(maps_in_route) > 1
 
-        # Get all maps data for multi-floor route
+        # Get only nodes/edges on the path (not all)
         route_maps = []
+        path_node_set = set(path_node_ids)
+
         for map_id in sorted(maps_in_route):
             map_response = requests.get(f"{WAYFINDER_API}/api/maps/{map_id}", timeout=10)
-            if map_response.status_code == 200:
-                map_info = map_response.json()
-                # Get nodes for this map
-                nodes_response = requests.get(
-                    f"{WAYFINDER_API}/api/nodes", params={"map_id": map_id}, timeout=10
-                )
-                nodes = nodes_response.json() if nodes_response.status_code == 200 else []
-                # Get edges for this map
-                edges_response = requests.get(
-                    f"{WAYFINDER_API}/api/edges", params={"map_id": map_id}, timeout=10
-                )
-                edges = edges_response.json() if edges_response.status_code == 200 else []
+            if map_response.status_code != 200:
+                continue
+            map_info = map_response.json()
 
-                route_maps.append({"map": map_info, "nodes": nodes, "edges": edges})
+            # Get nodes on this map that are in our path
+            nodes_response = requests.get(
+                f"{WAYFINDER_API}/api/nodes", params={"map_id": map_id}, timeout=10
+            )
+            all_nodes = nodes_response.json() if nodes_response.status_code == 200 else []
+            path_nodes = [n for n in all_nodes if n.get("id") in path_node_set]
+
+            # Get edges that connect path nodes on this map
+            path_node_ids_set = set(n["id"] for n in path_nodes)
+            edges_response = requests.get(
+                f"{WAYFINDER_API}/api/edges", params={"map_id": map_id}, timeout=10
+            )
+            all_edges = edges_response.json() if edges_response.status_code == 200 else []
+            path_edges = [
+                e
+                for e in all_edges
+                if e.get("start_node_id") in path_node_ids_set
+                and e.get("end_node_id") in path_node_ids_set
+            ]
+
+            route_maps.append({"map": map_info, "nodes": path_nodes, "edges": path_edges})
 
         # Get primary map info
         map_id = result.get("map_id", 1)

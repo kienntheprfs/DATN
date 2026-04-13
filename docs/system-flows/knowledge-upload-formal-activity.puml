@@ -1,0 +1,118 @@
+@startuml UploadFormalDocumentActivity
+!theme plain
+skinparam ParticipantPadding 30
+skinparam BoxPadding 30
+skinparam MinClassWidth 140
+skinparam swimlaneWidth 250
+
+<style>
+activityDiagram {
+  swimlane {
+    BackgroundColor #E8E8E8
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 16
+    FontStyle bold
+  }
+  activity {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontColor #0D47A1
+    FontSize 15
+    RoundCorner 15
+  }
+  diamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57C00
+    FontColor #E65100
+    FontSize 14
+  }
+  arrow {
+    LineColor #424242
+    LineThickness 2.5
+    FontSize 13
+  }
+  note {
+    BackgroundColor #FFFDE7
+    BorderColor #FBC02D
+    FontColor #333333
+    FontSize 13
+  }
+}
+</style>
+
+title Luồng Upload Tài liệu Formal (LightRAG Document)
+
+|Người dùng|
+start
+:Người dùng upload file tài liệu với is_formal_doc=True;
+
+|Giao diện (API)|
+:Gửi file upload qua API /documents/upload;
+:Thiết lập is_formal_doc=True;
+
+|Hệ thống BK-TBOT|
+:Kiểm tra LightRAG enabled;
+note right: LightRAGService.enabled\nphải = True
+
+if (LightRAG configured?) then (Có)
+  :Xác thực loại file (validate_upload_file);
+  
+  if (Hợp lệ?) then (Có)
+    :Upload file lên LightRAG;
+    note right: Gọi LightRAG API\nđể upload và index
+    
+    :Nhận track_id và doc_id;
+    
+    :Kiểm tra duplicate (get_by_track_id);
+    
+    if (Đã tồn tại?) then (Không)
+      :Tạo formal_document record;
+      note right: Lưu vào PostgreSQL\nvới: lightrag_track_id,\nlightrag_doc_id
+      
+      :Upload file gốc vào Storage (S3);
+      note right: Key format:\nraw/formal/{track_id}/{filename}
+      
+      :Commit to Database;
+      
+      :Trả về kết quả success;
+      
+      |Giao diện (API)|
+      :Trả về document_id + track_id + lightrag_doc_id;
+      
+      |Người dùng|
+      :Nhận thông báo thành công;
+      note right: Document đã được index\nvào LightRAG
+      
+    else (Rồi)
+      :Trả về document existing;
+      
+      |Giao diện (API)|
+      :Trả về document hiện có;
+      
+      |Người dùng|
+      :Nhận thông tin document;
+      stop
+    endif
+    
+  else (Không)
+    :Báo lỗi 400 (Invalid file type);
+    
+    |Giao diện (API)|
+    :Trả về lỗi validation;
+    
+    |Người dùng|
+    :Nhận thông báo lỗi;
+    stop
+  endif
+  
+else (Không)
+  :Báo lỗi 500 (LightRAG not configured);
+  
+  |Giao diện (API)|
+  :Trả về lỗi server config;
+  
+  |Người dùng|
+  :Nhận thông báo lỗi;
+  stop
+@enduml

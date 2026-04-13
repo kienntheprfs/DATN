@@ -1,21 +1,226 @@
-# System Flows Documentation
+# DATN Chatbot System Flows Documentation
 
 ## Tổng quan
 
-Documentation này mô tả chi tiết các luồng xử lý chính trong hệ thống DATN Chatbot, bao gồm user interactions, data flows, và service communications.
+Documentation này chứa các PlantUML flow diagrams chi tiết để mô tả các luồng xử lý trong hệ thống DATN Chatbot. Mỗi flow được tách thành file riêng để dễ dàng quản lý và visualize.
 
-## Table of Contents
+## 📁 Diagram Types
 
-1. [User Chat Flow](#1-user-chat-flow)
-2. [Voice Interaction Flow](#2-voice-interaction-flow)
-3. [Document Processing Flow](#3-document-processing-flow)
-4. [Authentication Flow](#4-authentication-flow)
-5. [Knowledge Retrieval Flow](#5-knowledge-retrieval-flow)
-6. [Rating & Feedback Flow](#6-rating--feedback-flow)
-7. [Indoor Navigation Flow](#7-indoor-navigation-flow)
-8. [Error Handling Flow](#8-error-handling-flow)
-9. [Admin Dashboard Flow](#9-admin-dashboard-flow)
-10. [Service Health Check Flow](#10-service-health-check-flow)
+### **Activity Diagrams** (Recommended for process flows)
+Các activity diagrams mô tả luồng xử lý step-by-step với decision points và parallel processing:
+
+### **Sequence Diagrams** 
+Các sequence diagrams mô tả interaction giữa các components với timeline chi tiết.
+
+## 📁 Activity Diagrams
+
+### 1. [Authentication Activity](./authentication-activity.puml)
+Mô tả luồng xác thực và phân quyền người dùng:
+- User registration & validation
+- Login với email/password và Google OAuth
+- JWT token management (access/refresh)
+- Token refresh và logout
+- Forward-auth cho external services
+- Admin token revocation
+
+### 2. [Chat Activity](./chat-activity.puml)
+Mô tả luồng chat với AI agents:
+- Message input & validation
+- API Gateway routing & JWT validation
+- Agent Service processing với LangGraph
+- Knowledge retrieval (RAG) từ Qdrant
+- LLM API integration
+- Response logging & analytics
+- Tool calling examples
+
+### 3. [Voice Activity](./voice-activity.puml)
+Mô tả luồng tương tác giọng nói:
+- WebRTC audio streaming
+- Speech-to-Text với Sherpa-ONNX
+- Voice Service orchestration
+- Text-to-Speech với Piper TTS
+- TURN server configuration
+- Error handling & fallbacks
+
+### 4. [Document Processing Activity](./document-processing-activity.puml)
+Mô tả luồng xử lý tài liệu:
+- File upload & validation
+- Background processing pipeline
+- Text extraction & chunking
+- Embedding generation
+- Vector storage trong Qdrant
+- Status updates & notifications
+- Search integration
+
+### 5. [Navigation Activity](./navigation-activity.puml)
+Mô tả luồng định vị nội thất:
+- Natural language location search
+- Database query & fuzzy matching
+- Route calculation với NetworkX
+- Accessibility considerations
+- Turn-by-turn directions
+- Missing location reporting
+
+### 6. [Microservices Communication](./microservices-communication.puml)
+Mô tả luồng giao tiếp giữa các services:
+- Service startup sequences
+- Request routing patterns
+- Service-to-service communication
+- Database connection patterns
+- Async processing & background tasks
+- Caching strategies
+- Health monitoring & discovery
+
+### 7. [Error Handling Flow](./error-handling-flow.puml)
+Mô tả luồng xử lý lỗi:
+- Request validation errors
+- Authentication & authorization errors
+- Rate limiting & circuit breaker
+- Service unavailability handling
+- Voice service specific errors
+- Database connection errors
+- Error recovery mechanisms
+- Error analytics & monitoring
+
+## 🏗️ System Architecture Overview
+
+### Services & Ports
+- **Frontend**: Next.js (Port 3000)
+- **API Gateway**: FastAPI (Port 8008)
+- **Agent Service**: LangGraph (Port 8080)
+- **Knowledge Base**: FastAPI (Port 8000)
+- **Wayfinder**: FastAPI (Port 8004)
+- **Dashboard**: FastAPI (Port 8007)
+- **Voice Service**: FastAPI (Port 7860)
+- **Piper TTS**: FastAPI (Port 5000)
+
+### Data Layer
+- **PostgreSQL**: 5432-5435 (databases cho từng service)
+- **Qdrant**: 6333 (vector database cho semantic search)
+- **Redis**: 6379 (cache, message queue, session storage)
+
+### External Services
+- **LLM APIs**: OpenAI, Anthropic, Ollama
+- **Google OAuth**: Authentication
+- **TURN Server**: WebRTC NAT traversal
+
+## 🛠️ How to Use
+
+### Prerequisites
+```bash
+# Install PlantUML
+npm install -g plantuml
+
+# VS Code extension
+code --install-extension jebbs.plantuml
+```
+
+### Generate Diagrams
+```bash
+# Generate PNG from all flows
+for file in *.puml; do
+  plantuml -tpng "$file"
+done
+
+# Generate SVG (recommended for web)
+for file in *.puml; do
+  plantuml -tsvg "$file"
+done
+```
+
+### VS Code Preview
+1. Mở file `.puml` trong VS Code
+2. Sử dụng `Ctrl+Shift+P` → "PlantUML: Preview"
+3. Hoặc `Alt+D` để preview diagram hiện tại
+
+## 📊 Flow Categories
+
+### **User-Facing Flows**
+- Authentication & Authorization
+- Chat Interactions
+- Voice Commands
+- Document Management
+- Indoor Navigation
+
+### **System Flows**
+- Microservices Communication
+- Service Health Monitoring
+- Error Handling & Recovery
+- Background Processing
+- Data Synchronization
+
+### **Integration Flows**
+- Third-party API Integration
+- Database Operations
+- Caching Strategies
+- Security & Compliance
+
+## 🔍 Key Features Documented
+
+### **Authentication & Security**
+- JWT-based authentication
+- OAuth2 integration (Google)
+- Role-based access control
+- Rate limiting & brute force protection
+- Forward-auth pattern
+
+### **AI & Machine Learning**
+- LangGraph agent orchestration
+- RAG (Retrieval-Augmented Generation)
+- Vector similarity search
+- Multiple LLM provider support
+- Tool calling framework
+
+### **Real-time Features**
+- WebRTC audio streaming
+- Live status updates
+- Real-time notifications
+- Background job processing
+
+### **Scalability & Reliability**
+- Microservices architecture
+- Circuit breaker pattern
+- Multi-level caching
+- Database sharding
+- Health monitoring
+
+## 🚀 Deployment Considerations
+
+### **Development Environment**
+- Local services với different ports
+- SQLite cho development databases
+- In-memory Redis
+- Development certificates
+
+### **Production Environment**
+- Docker containerization
+- PostgreSQL clusters
+- Redis cluster
+- Load balancers
+- SSL/TLS termination
+
+### **Monitoring & Observability**
+- Structured logging
+- Error tracking
+- Performance metrics
+- Health checks
+- Alerting
+
+## 📝 Contributing
+
+Khi thêm flows mới:
+1. Tạo file `.puml` mới với descriptive name
+2. Sử dụng consistent theme và styling
+3. Include detailed notes và annotations
+4. Update README với flow description
+5. Test diagram generation
+
+## 🔗 Related Documentation
+
+- [Complete System Architecture](./complete-system-architecture.puml) - Full system overview
+- [Original PlantUML Documentation](./plantuml-diagrams.md) - Legacy single-file version
+- [API Documentation](../services/) - Detailed API specs
+- [Deployment Guide](../../README.md) - Setup and deployment instructions
 
 ---
 

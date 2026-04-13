@@ -40,27 +40,37 @@ small_webrtc_handler: SmallWebRTCRequestHandler = SmallWebRTCRequestHandler()
 
 
 @app.post("/api/offer")
-async def offer(request: SmallWebRTCRequest, background_tasks: BackgroundTasks, req: Request):
-    """Handle WebRTC offer requests via SmallWebRTCRequestHandler."""
+async def offer(req: Request, background_tasks: BackgroundTasks):
+    """Handle WebRTC offer requests - parse manually to debug."""
+    try:
+        body = await req.json()
+        logger.info(f"Raw request body: {body}")
+    except Exception as e:
+        logger.error(f"Failed to parse request: {e}")
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-    # Extract agent_id, user_id, and thread_id from request_data if provided
+    # Extract params
+    request = SmallWebRTCRequest.from_dict(body)
+
     agent_id = "chatbot"
     user_id = "web-user-123"
     thread_id = None
+    query_mode = "normal"
 
-    request_data = getattr(request, "request_data", None)
+    request_data = request.request_data
     if request_data:
         agent_id = request_data.get("agent_id", agent_id)
         user_id = request_data.get("user_id", user_id)
         thread_id = request_data.get("thread_id")
+        query_mode = request_data.get("query_mode", "normal")
 
-    logger.info(f"Voice offer: agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}")
+    logger.info(
+        f"Voice offer: agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, query_mode={query_mode}"
+    )
 
-    # Prepare runner arguments with the callback to run your bot
     async def webrtc_connection_callback(connection):
-        background_tasks.add_task(run_bot, connection, agent_id, user_id, thread_id)
+        background_tasks.add_task(run_bot, connection, agent_id, user_id, thread_id, query_mode)
 
-    # Delegate handling to SmallWebRTCRequestHandler
     answer = await small_webrtc_handler.handle_web_request(
         request=request,
         webrtc_connection_callback=webrtc_connection_callback,
