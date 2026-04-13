@@ -1,79 +1,101 @@
 @startuml usecase-user
-!theme plain
+' --- Cấu hình chung ---
 left to right direction
-scale 3
+skinparam shadowing true
+skinparam roundcorner 20
+scale 2
 
-<style>
-usecaseDiagram {
-  usecase {
-    BackgroundColor #E3F2FD
-    BorderColor #1565C0
-    BorderThickness 2
-    FontColor #0D47A1
-    FontSize 15
-    RoundCorner 12
-  }
+' Bỏ linetype ortho để đường nối các use case mềm mại và tự nhiên hơn
 
-  actor {
-    BackgroundColor #E8F5E9
-    BorderColor #388E3C
-    BorderThickness 2
-    FontColor #1B5E20
+' --- Font chữ & Kích thước ---
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 14
+skinparam defaultFontColor #333333
+
+' --- Bảng màu Modern Blue ---
+!define DARK_BLUE #1565C0
+!define LIGHT_BLUE #E3F2FD
+!define ACCENT_ORANGE #EF6C00
+!define TEXT_COLOR #263238
+!define LINE_COLOR #455A64
+
+' --- Style cho Actor ---
+skinparam actor {
+    BorderColor DARK_BLUE
+    BackgroundColor LIGHT_BLUE
     FontSize 16
     FontStyle bold
-  }
+    FontColor Black
+}
 
-  arrow {
-    LineColor #424242
-    LineThickness 2
-  }
+' --- Style cho Use Case ---
+skinparam usecase {
+    BackgroundColor White
+    BorderColor DARK_BLUE
+    BorderThickness 2
+    FontSize 15
+    FontColor DARK_BLUE
+    ArrowColor LINE_COLOR
+    ArrowThickness 1.5
+}
 
-  rectangle {
+' --- Style cho Khung hệ thống (Rectangle) ---
+skinparam rectangle {
     BackgroundColor #FAFAFA
     BorderColor #B0BEC5
     BorderThickness 1
-  }
 }
-</style>
 
-actor "Người dùng" as User
+' --- Tùy chỉnh mũi tên Extend/Include ---
+skinparam arrow {
+    MessageAlign center
+    FontColor ACCENT_ORANGE
+    FontSize 13
+    FontStyle bold
+}
+
+' === NỘI DUNG SƠ ĐỒ ===
+actor "Người dùng\nvãng lai" as User
 actor "Người dùng\nđã đăng nhập" as AuthUser
 
+' Kế thừa Actor
+AuthUser -up-|> User
+
 rectangle "Hệ thống BK-TBOT" {
-    usecase "Đăng ký tài khoản" as Register
-    usecase "Đăng nhập" as Login
     
-    usecase "Hỏi đáp\nthông tin" as Chat
-    usecase "Hỏi đáp\nchuyên sâu\n(Deepmode)" as Deepmode
-    usecase "Tương tác\ngiọng nói" as Voice
-    usecase "Tra cứu\nsự kiện" as EventLookup
-    usecase "Yêu cầu\nchỉ đường" as NavMini
-    usecase "Tìm đường\ntrực tiếp" as DirectMap
-    usecase "Đánh giá\ncâu trả lời" as Rate
-    usecase "Quản lý\nlịch sử hội thoại" as HistoryMgmt
-    usecase "Sửa tên\nphiên hội thoại" as EditSession
-    usecase "Xóa phiên\nhội thoại" as DeleteSession
+    package "Xác thực" {
+        usecase "Đăng ký tài khoản" as Register
+        usecase "Đăng nhập" as Login
+    }
+    
+    package "Hội thoại" {
+        usecase "Hỏi đáp thông tin" as Chat
+        usecase "Hỏi đường" as Nav
+        usecase "Đánh giá\ncâu trả lời" as Rate
+        usecase "Hỏi đáp chuyên sâu" as DeepChat
+    }
+
+    package "Quản lý" {
+        usecase "Quản lý\nlịch sử hội thoại" as HistoryMgmt
+    }
 }
 
-User --> Login
+' --- KẾT NỐI ACTOR VỚI USE CASE ---
+' Người dùng vãng lai
 User --> Register
+User --> Login
 User --> Chat
-User --> EventLookup
-User --> NavMini
-User --> Rate
+User --> Nav
 
-Deepmode .up.> Chat : <<extend>>
-Voice .up.> Chat : <<extend>>
-NavMini .right.> Chat : <<extend>>
-Rate .left.> Chat : <<extend>>
-EditSession .up.> HistoryMgmt : <<extend>>
-DeleteSession .up.> HistoryMgmt : <<extend>>
-
-AuthUser --> Deepmode
-AuthUser --> Voice
-AuthUser --> DirectMap
+' Người dùng đã đăng nhập (Được thừa hưởng các quyền trên)
 AuthUser --> HistoryMgmt
+AuthUser --> DeepChat
+AuthUser --> Rate
 
-AuthUser -up-|> User
+' --- KẾT NỐI GIỮA CÁC USE CASE (EXTEND) ---
+' Mũi tên trỏ từ tính năng mở rộng về tính năng gốc
+Nav .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
+Rate .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
+DeepChat .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
 
 @enduml
