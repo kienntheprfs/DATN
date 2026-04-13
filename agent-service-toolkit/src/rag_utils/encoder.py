@@ -31,11 +31,9 @@ class HybridQueryEncoder:
             self._dense_embedder = AzureOpenAIEmbeddings(
                 deployment=settings.EMBEDDING_DEPLOYMENT_NAME,
                 model=settings.EMBEDDING_MODEL,
-                azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
-                api_key=settings.AZURE_OPENAI_API_KEY,
+                azure_endpoint=settings.EMBEDDING_ENDPOINT,
+                api_key=settings.EMBEDDING_API_KEY,
                 api_version=settings.EMBEDDING_API_VERSION,
-                # Nếu bên KM bạn fix dimension=1536 thì ở đây cũng phải có
-                # dimensions=1536 
             )
 
     async def encode_query(self, query: str) -> Dict[str, Any]:
