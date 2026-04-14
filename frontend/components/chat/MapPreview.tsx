@@ -309,19 +309,19 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
       />
 
       {currentFloor.instructions && currentFloor.instructions.length > 0 && (
-        <div className="p-3 max-h-30 overflow-y-auto">
+        <div className="p-3 max-h-50 overflow-y-auto">
           <div className="space-y-0.5">
             {currentFloor.instructions.map((inst, idx) => (
               <div
                 key={idx}
                 className="flex items-center gap-2 py-1 text-xs"
               >
-                <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-[10px]">
+                <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-[10px] shrink-0">
                   {inst.step}
                 </span>
-                <span className="flex-1 text-foreground truncate">{inst.text}</span>
+                <span className="flex-1 text-foreground">{inst.text}</span>
                 {inst.distance_m > 0 && (
-                  <span className="text-muted-foreground font-mono text-[10px]">
+                  <span className="text-muted-foreground font-mono text-[10px] shrink-0">
                     {inst.distance_m}m
                   </span>
                 )}

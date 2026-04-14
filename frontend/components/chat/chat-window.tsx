@@ -12,6 +12,7 @@ import { MapData, MapNode, Instruction } from "@/types";
 import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
 import { RatingButtons } from "./RatingButtons";
+import { MiniNavigation } from "./MapPreview";
 
 interface ToolCall {
 	id: string;
@@ -118,6 +119,8 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 	                    name.toLowerCase().includes('find') ||
 	                    name.toLowerCase().includes('map');
 
+	const hasMarkdown = !isJson && content.includes('**');
+
 	return (
 		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
 			<CollapsibleTrigger asChild>
@@ -178,6 +181,12 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 										</pre>
 									)}
 								</>
+							) : hasMarkdown ? (
+								<div className="prose prose-xs dark:prose-invert max-w-none">
+									<Markdown remarkPlugins={[remarkGfm]}>
+										{content}
+									</Markdown>
+								</div>
 							) : (
 								<pre className="whitespace-pre-wrap font-mono text-xs max-h-48 overflow-auto">
 									{content}
@@ -216,6 +225,8 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 
 	const isDone = tool.status === "done";
 	const isExecuting = tool.status === "executing";
+
+	const hasMarkdown = !isJson && tool.content?.includes('**');
 
 	return (
 		<Collapsible open={isOpen} onOpenChange={setIsOpen} className="rounded-lg border border-blue-200 bg-blue-50/50 overflow-hidden">
@@ -272,6 +283,12 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 										</div>
 									)}
 								</>
+							) : hasMarkdown ? (
+								<div className="prose prose-xs dark:prose-invert max-w-none">
+									<Markdown remarkPlugins={[remarkGfm]}>
+										{tool.content}
+									</Markdown>
+								</div>
 							) : (
 								<pre className="whitespace-pre-wrap font-mono text-xs max-h-48 overflow-auto">
 									{tool.content}
@@ -346,8 +363,9 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 		}
 	}, [visibleMessages, currentTools.length, partialText]);
 
-	// Extract route data from completed tools
+	// Extract route data from completed tools (current streaming + history)
 	const routeData = useMemo(() => {
+		// First check current streaming tools
 		const routeTool = currentTools.find(tool => {
 			const name = tool.name.toLowerCase();
 			return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
@@ -363,8 +381,28 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 				// Not JSON
 			}
 		}
+
+		// Then check historical tool messages
+		for (const m of visibleMessages) {
+			if (m.msgType === "tool") {
+				const toolName = (m.toolName || "").toLowerCase();
+				if (toolName.includes('route') || toolName.includes('find') || toolName.includes('map')) {
+					if (m.content) {
+						try {
+							const parsed = JSON.parse(m.content);
+							if (parsed.type === 'route') {
+								return parsed as RouteData;
+							}
+						} catch {
+							// Not JSON
+						}
+					}
+				}
+			}
+		}
+
 		return null;
-	}, [currentTools]);
+	}, [currentTools, visibleMessages]);
 
 	const groupedMessages = useMemo(() => {
 		const groups: GroupedMessages[] = [];
@@ -515,16 +553,16 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					);
 				})}
 
-				{routeData && (
-					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
-							<Bot className="size-6" />
-						</div>
-						<div className="flex-1 max-w-[85%]">
-							<RouteMessage routeData={routeData} />
-						</div>
+			{routeData && (
+				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+						<Bot className="size-6" />
 					</div>
-				)}
+					<div className="flex-1 max-w-[85%]">
+						<MiniNavigation routeData={routeData} />
+					</div>
+				</div>
+			)}
 
 				{error && (
 					<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">
