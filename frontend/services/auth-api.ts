@@ -1,11 +1,33 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import { toast } from 'sonner';
 import { User, TokenResponse, LoginRequest, RegisterRequest } from '@/types';
 
 const API_URL = '/api';
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const getRetryDelay = (retryCount: number) => RETRY_DELAY * Math.pow(2, retryCount);
+
 export const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 30000,
 });
+
+const isRetryableError = (error: AxiosError): boolean => {
+  if (!error.response) return true;
+  const status = error.response.status;
+  return status === 408 || status === 429 || status >= 500;
+};
+
+interface CustomAxiosConfig extends AxiosRequestConfig {
+  _retryCount?: number;
+  _retry?: boolean;
+  _skipAuthRefresh?: boolean;
+  _skipRetry?: boolean;
+}
 
 const decodeJWT = (token: string): { exp: number; iat: number } | null => {
   try {
@@ -127,10 +149,32 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-  apiClient.interceptors.response.use(
+const retryRequest = async (config: AxiosRequestConfig, retryCount: number): Promise<any> => {
+  await sleep(getRetryDelay(retryCount));
+  return apiClient(config);
+};
+
+const showRetryError = (attempt: number, error: AxiosError) => {
+  const status = error.response?.status;
+  const message = error.message || 'Lỗi kết nối';
+  let errorMsg = `Lỗi ${attempt}/${MAX_RETRIES}: ${message}`;
+  
+  if (status === 500) errorMsg = `Lỗi server (${status}). Vui lòng thử lại sau.`;
+  else if (status === 502 || status === 503) errorMsg = `Server đang bảo trì. Vui lòng thử lại sau.`;
+  else if (status === 429) errorMsg = 'Quá nhiều yêu cầu. Vui lòng chờ một lát.';
+  else if (!status) errorMsg = 'Không thể kết nối server. Vui lòng kiểm tra kết nối mạng.';
+  
+  toast.error(errorMsg, { duration: 4000 });
+};
+
+apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as CustomAxiosConfig;
+    
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
     
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._skipAuthRefresh) {
       originalRequest._retry = true;
@@ -141,7 +185,7 @@ apiClient.interceptors.request.use(async (config) => {
           const newToken = await refreshAccessToken();
           isRefreshing = false;
           
-          if (newToken) {
+          if (newToken && originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             return apiClient(originalRequest);
           }
@@ -152,12 +196,25 @@ apiClient.interceptors.request.use(async (config) => {
       } else {
         return new Promise((resolve, reject) => {
           subscribeTokenRefresh((newToken) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            }
             resolve(apiClient(originalRequest));
           });
           onRefreshFailed();
         });
       }
+    }
+    
+    if (!originalRequest._skipRetry && isRetryableError(error)) {
+      const retryCount = originalRequest._retryCount || 0;
+      
+      if (retryCount < MAX_RETRIES) {
+        originalRequest._retryCount = retryCount + 1;
+        return retryRequest(originalRequest, retryCount);
+      }
+      
+      showRetryError(retryCount + 1, error);
     }
     
     return Promise.reject(error);
@@ -168,6 +225,7 @@ export const authService = {
   register: async (data: RegisterRequest): Promise<User> => {
     const response = await apiClient.post<User>('/auth/register', data, {
       _skipAuthRefresh: true,
+      _skipRetry: true,
     } as any);
     return response.data;
   },
@@ -175,6 +233,7 @@ export const authService = {
   login: async (email: string, password: string): Promise<TokenResponse> => {
     const response = await apiClient.post<TokenResponse>('/auth/login', { email, password }, {
       _skipAuthRefresh: true,
+      _skipRetry: true,
     } as any);
     if (response.data.access_token) {
       localStorage.setItem('access_token', response.data.access_token);
@@ -192,6 +251,7 @@ export const authService = {
   googleLogin: async (data: { credential?: string; access_token?: string }): Promise<TokenResponse> => {
     const response = await apiClient.post<TokenResponse>('/auth/google', data, {
       _skipAuthRefresh: true,
+      _skipRetry: true,
     } as any);
     if (response.data.access_token) {
       localStorage.setItem('access_token', response.data.access_token);
@@ -212,6 +272,7 @@ export const authService = {
       try {
         await apiClient.post('/auth/logout', { refresh_token: refreshToken }, {
           _skipAuthRefresh: true,
+          _skipRetry: true,
         } as any);
       } catch {
         // Ignore logout errors
