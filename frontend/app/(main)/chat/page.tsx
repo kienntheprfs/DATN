@@ -112,11 +112,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		}
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router]);
 
-	useEffect(() => {
-		if (routeData && !isDocumentPanelOpen) {
-			setIsDocumentPanelOpen(true);
-		}
-	}, [routeData]);
+	
 
 	const voice = useVoice({
 		agentId: agent || "chatbot",

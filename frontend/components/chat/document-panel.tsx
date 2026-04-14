@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Search, FileText, ChevronDown, ChevronUp, ExternalLink, Map } from "lucide-react";
+import { X, Search, FileText, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MiniNavigation } from "./MapPreview";
 
 interface DocumentSection {
 	id: string;
@@ -137,19 +136,12 @@ export function DocumentPanel({ onClose, citations, routeData }: DocumentPanelPr
 	const [expandedSection, setExpandedSection] = useState<string | null>(null);
 	const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
 	const [previewSearch, setPreviewSearch] = useState("");
-	const [activeTab, setActiveTab] = useState<"documents" | "map">("documents");
 
 	useEffect(() => {
 		if (citations && citations.length > 0 && !selectedCitation) {
 			setSelectedCitation(citations[0]);
 		}
 	}, [citations, selectedCitation]);
-
-	useEffect(() => {
-		if (routeData) {
-			setActiveTab("map");
-		}
-	}, [routeData]);
 
 	const filteredDocs = mockDocuments.map((doc) => {
 		if (!searchQuery.trim()) return doc;
@@ -174,135 +166,99 @@ export function DocumentPanel({ onClose, citations, routeData }: DocumentPanelPr
 	return (
 		<div className="flex flex-col h-full bg-background">
 			<div className="flex items-center justify-between p-4 border-b shrink-0">
-				<h2 className="text-lg font-semibold">
-					{activeTab === "map" ? "Bản đồ" : "Tài liệu tham khảo"}
-				</h2>
+				<h2 className="text-lg font-semibold">Tài liệu tham khảo</h2>
 				<Button variant="ghost" size="icon" onClick={onClose}>
 					<X className="size-5" />
 				</Button>
 			</div>
 
-			{routeData && (
-				<div className="flex border-b shrink-0">
-					<button
-						onClick={() => setActiveTab("documents")}
-						className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-							activeTab === "documents"
-								? "border-primary text-primary"
-								: "border-transparent text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						Tài liệu
-					</button>
-					<button
-						onClick={() => setActiveTab("map")}
-						className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-2 ${
-							activeTab === "map"
-								? "border-primary text-primary"
-								: "border-transparent text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						<Map className="size-4" />
-						Bản đồ
-					</button>
+			<div className="p-4 border-b shrink-0">
+				<div className="relative">
+					<Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+					<Input
+						placeholder="Tìm kiếm trong tài liệu..."
+						value={searchQuery}
+						onChange={(e) => setSearchQuery(e.target.value)}
+						className="pl-9"
+					/>
 				</div>
-			)}
+			</div>
 
-			{activeTab === "map" && routeData ? (
-				<div className="flex-1 overflow-y-auto p-4">
-					<MiniNavigation routeData={routeData} />
-				</div>
-			) : (
-				<>
-					<div className="p-4 border-b shrink-0">
-						<div className="relative">
-							<Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-							<Input
-								placeholder="Tìm kiếm trong tài liệu..."
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value)}
-								className="pl-9"
-							/>
+			<div className="flex-1 overflow-y-auto">
+				{citations && citations.length > 0 && (
+					<div className="p-4 border-b bg-blue-50/50">
+						<div className="text-xs font-semibold text-blue-600 mb-2">Nguồn trong cuộc trò chuyện</div>
+						<div className="space-y-2">
+							{filteredCitations?.map((cite, idx) => (
+								<button
+									key={idx}
+									onClick={() => setSelectedCitation(cite)}
+									className="w-full text-left p-2 rounded bg-white border hover:bg-blue-50 transition-colors"
+								>
+									<div className="flex items-center gap-2">
+										<FileText className="size-4 text-blue-500" />
+										<span className="text-sm font-medium text-blue-700">{cite.file_name}</span>
+									</div>
+									<p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cite.text_preview}</p>
+								</button>
+							))}
 						</div>
 					</div>
+				)}
 
-					<div className="flex-1 overflow-y-auto">
-						{citations && citations.length > 0 && (
-							<div className="p-4 border-b bg-blue-50/50">
-								<div className="text-xs font-semibold text-blue-600 mb-2">Nguồn trong cuộc trò chuyện</div>
-								<div className="space-y-2">
-									{filteredCitations?.map((cite, idx) => (
-										<button
-											key={idx}
-											onClick={() => setSelectedCitation(cite)}
-											className="w-full text-left p-2 rounded bg-white border hover:bg-blue-50 transition-colors"
-										>
-											<div className="flex items-center gap-2">
-												<FileText className="size-4 text-blue-500" />
-												<span className="text-sm font-medium text-blue-700">{cite.file_name}</span>
-											</div>
-											<p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cite.text_preview}</p>
-										</button>
+				<div className="p-4 space-y-3">
+					{filteredDocs.map((doc) => (
+						<div key={doc.id} className="border rounded-lg overflow-hidden">
+							<button
+								onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
+								className="w-full flex items-center justify-between p-3 bg-muted/50 hover:bg-muted transition-colors"
+							>
+								<div className="flex items-center gap-2">
+									<FileText className="size-4 text-muted-foreground" />
+									<span className="font-medium text-sm">{doc.title}</span>
+								</div>
+								{expandedDoc === doc.id ? (
+									<ChevronUp className="size-4" />
+								) : (
+									<ChevronDown className="size-4" />
+								)}
+							</button>
+
+							{expandedDoc === doc.id && (
+								<div className="border-t">
+									{doc.sections.map((section) => (
+										<div key={section.id} className="border-b last:border-b-0">
+											<button
+												onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
+												className="w-full p-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between"
+											>
+												<span className="text-sm font-medium">{section.title}</span>
+												{expandedSection === section.id ? (
+													<ChevronUp className="size-3 text-muted-foreground" />
+												) : (
+													<ChevronDown className="size-3 text-muted-foreground" />
+												)}
+											</button>
+
+											{expandedSection === section.id && (
+												<div className="px-3 pb-3">
+													<p className="text-sm text-muted-foreground leading-relaxed">
+														<HighlightedText text={section.content} highlight={searchQuery} />
+													</p>
+												</div>
+											)}
+										</div>
 									))}
 								</div>
-							</div>
-						)}
-
-						<div className="p-4 space-y-3">
-							{filteredDocs.map((doc) => (
-								<div key={doc.id} className="border rounded-lg overflow-hidden">
-									<button
-										onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
-										className="w-full flex items-center justify-between p-3 bg-muted/50 hover:bg-muted transition-colors"
-									>
-										<div className="flex items-center gap-2">
-											<FileText className="size-4 text-muted-foreground" />
-											<span className="font-medium text-sm">{doc.title}</span>
-										</div>
-										{expandedDoc === doc.id ? (
-											<ChevronUp className="size-4" />
-										) : (
-											<ChevronDown className="size-4" />
-										)}
-									</button>
-
-									{expandedDoc === doc.id && (
-										<div className="border-t">
-											{doc.sections.map((section) => (
-												<div key={section.id} className="border-b last:border-b-0">
-													<button
-														onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
-														className="w-full p-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between"
-													>
-														<span className="text-sm font-medium">{section.title}</span>
-														{expandedSection === section.id ? (
-															<ChevronUp className="size-3 text-muted-foreground" />
-														) : (
-															<ChevronDown className="size-3 text-muted-foreground" />
-														)}
-													</button>
-
-													{expandedSection === section.id && (
-														<div className="px-3 pb-3">
-															<p className="text-sm text-muted-foreground leading-relaxed">
-																<HighlightedText text={section.content} highlight={searchQuery} />
-															</p>
-														</div>
-													)}
-												</div>
-											))}
-										</div>
-									)}
-								</div>
-							))}
-
-							{searchQuery && filteredDocs.every((doc) => doc.sections.every((section) => !section.title.toLowerCase().includes(searchQuery.toLowerCase()) && !section.content.toLowerCase().includes(searchQuery.toLowerCase()))) && (
-								<p className="text-center text-muted-foreground text-sm py-8">Không tìm thấy kết quả nào</p>
 							)}
 						</div>
-					</div>
-				</>
-			)}
+					))}
+
+					{searchQuery && filteredDocs.every((doc) => doc.sections.every((section) => !section.title.toLowerCase().includes(searchQuery.toLowerCase()) && !section.content.toLowerCase().includes(searchQuery.toLowerCase()))) && (
+						<p className="text-center text-muted-foreground text-sm py-8">Không tìm thấy kết quả nào</p>
+					)}
+				</div>
+			</div>
 
 			{selectedCitation && (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">

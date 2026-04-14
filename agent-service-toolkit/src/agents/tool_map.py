@@ -123,7 +123,54 @@ def find_route_func(
     from_location: str,
     to_location: str,
 ) -> str:
-    """Tìm đường đi từ địa điểm xuất phát đến địa điểm đến (đa tầng). Tự động tìm kiếm và xử lý nếu có nhiều kết quả."""
+    """Tìm đường đi từ địa điểm xuất phát đến địa điểm đến (đa tầng).
+
+    IMPORTANT: Đầu vào PHẢI là tên cụ thể của địa điểm thực tế trong trường.
+    - from_location: Phải là tên Phòng/Tòa/Tầng cụ thể (VD: "Phòng 101 Tòa B4", "Thư viện Tầng 1", "Căn tin Khu A"). KHÔNG dùng "vị trí hiện tại", "đây", "tôi đang ở".
+    - to_location: Phải là tên địa điểm cụ thể (VD: "Phòng họp A Tầng 2", "Phòng đào tạo Tòa B3"). KHÔNG dùng "điểm đến", "đó", "nơi đó".
+
+    Returns:
+        JSON string containing route data for frontend rendering.
+    """
+    generic_patterns = [
+        "vị trí hiện tại",
+        "điểm đến",
+        "đây",
+        "đó",
+        "tôi đang ở",
+        "nơi đó",
+        "current location",
+        "destination",
+        "here",
+        "there",
+    ]
+
+    from_lower = from_location.lower().strip()
+    to_lower = to_location.lower().strip()
+
+    if any(p in from_lower for p in generic_patterns):
+        return json.dumps(
+            {
+                "type": "route",
+                "status": "error",
+                "error_type": "unknown_start",
+                "message": "Chưa xác định được vị trí xuất phát. Bạn đang ở đâu? Vui lòng cung cấp tên cụ thể (ví dụ: 'Phòng 101 Tòa B4' hoặc 'Tầng 1 - Khu A').",
+                "start_name": from_location,
+                "end_name": to_location,
+            }
+        )
+    if any(p in to_lower for p in generic_patterns):
+        return json.dumps(
+            {
+                "type": "route",
+                "status": "error",
+                "error_type": "unknown_end",
+                "message": "Chưa xác định được điểm đến. Bạn muốn đi đâu? Vui lòng cung cấp tên cụ thể (ví dụ: 'Phòng họp A' hoặc 'Thư viện').",
+                "start_name": from_location,
+                "end_name": to_location,
+            }
+        )
+
     try:
         # Search start location (all floors) - increase limit
         start_response = requests.get(
@@ -143,7 +190,7 @@ def find_route_func(
         end_response.raise_for_status()
         end_results = end_response.json()
 
-        # Validate results
+        # Report missing locations if not found in DB
         if not start_results:
             _report_missing_location_internal(
                 name=from_location,
@@ -161,9 +208,27 @@ def find_route_func(
             )
 
         if not start_results:
-            return f"Không tìm thấy địa điểm xuất phát '{from_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 1' thay vì 'Phòng 1 - Tòa B4')."
+            return json.dumps(
+                {
+                    "type": "route",
+                    "status": "error",
+                    "error_type": "start_not_found",
+                    "message": f"Không tìm thấy địa điểm xuất phát '{from_location}'. Bạn có thể cung cấp thông tin cụ thể hơn không? (Ví dụ: 'Phòng 1 Tòa B4' hoặc 'Tầng 1 - Khu A')",
+                    "start_name": from_location,
+                    "end_name": to_location,
+                }
+            )
         if not end_results:
-            return f"Không tìm thấy địa điểm đến '{to_location}'. Hệ thống đã ghi nhận và sẽ cập nhật sau. Bạn có thể thử tìm kiếm với tên ngắn hơn (ví dụ: 'Phòng 2' thay vì 'Phòng 2 - Tòa B4')."
+            return json.dumps(
+                {
+                    "type": "route",
+                    "status": "error",
+                    "error_type": "end_not_found",
+                    "message": f"Không tìm thấy địa điểm đến '{to_location}'. Bạn có thể cung cấp thông tin cụ thể hơn không? (Ví dụ: 'Phòng 2 Tòa B4' hoặc 'Thư viện Tầng 3')",
+                    "start_name": from_location,
+                    "end_name": to_location,
+                }
+            )
 
         # Helper to format location string
         def format_location(item):
@@ -191,16 +256,17 @@ def find_route_func(
                 start_display = format_location(start_results[0])
             else:
                 # Low confidence - ask user
-                confirm_msg = f"""Tìm thấy nhiều địa điểm có thể là '{from_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn:
-
-Địa điểm xuất phát:
-{chr(10).join(f"- {opt}" for opt in start_opts)}
-
-Địa điểm đến:
-{chr(10).join(f"- {opt}" for opt in end_opts)}
-
-Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 1 Tòa B4 Tầng 1" hoặc "Tòa B4")"""
-                return confirm_msg
+                return json.dumps(
+                    {
+                        "type": "route",
+                        "status": "needs_confirmation",
+                        "message": f"Tìm thấy nhiều địa điểm có thể là '{from_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn.",
+                        "start_name": from_location,
+                        "end_name": to_location,
+                        "start_options": start_opts,
+                        "end_options": end_opts,
+                    }
+                )
 
             if end_results[0].get("score", 0) >= 70 and len(end_results) == 1:
                 end_node_id = end_results[0]["node_id"]
@@ -209,14 +275,17 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 1 Tòa B4 Tầng 1
                 end_node_id = end_results[0]["node_id"]
                 end_display = format_location(end_results[0])
             else:
-                confirm_msg = f"""Tìm thấy nhiều địa điểm có thể là '{to_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn:
-
-Địa điểm xuất phát: {start_display}
-Địa điểm đến:
-{chr(10).join(f"- {opt}" for opt in end_opts)}
-
-Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2")"""
-                return confirm_msg
+                return json.dumps(
+                    {
+                        "type": "route",
+                        "status": "needs_confirmation",
+                        "message": f"Tìm thấy nhiều địa điểm có thể là '{to_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn.",
+                        "start_name": start_display,
+                        "end_name": to_location,
+                        "start_options": [start_display],
+                        "end_options": end_opts,
+                    }
+                )
         else:
             start_node_id = start_results[0]["node_id"]
             end_node_id = end_results[0]["node_id"]
@@ -236,9 +305,27 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
                 end_name=end_display,
                 reason="disconnected_graph",
             )
-            return f"Không tìm được đường từ '{start_display}' đến '{end_display}'. Hệ thống đã ghi nhận vấn đề này và sẽ xử lý sớm."
+            return json.dumps(
+                {
+                    "type": "route",
+                    "status": "error",
+                    "error_type": "route_not_found",
+                    "message": f"Không tìm được đường từ '{start_display}' đến '{end_display}'. Hệ thống đã ghi nhận vấn đề này và sẽ xử lý sớm.",
+                    "start_name": start_display,
+                    "end_name": end_display,
+                }
+            )
         if route_response.status_code == 400:
-            return f"Lỗi: {route_response.json().get('detail', 'Node không hợp lệ')}"
+            return json.dumps(
+                {
+                    "type": "route",
+                    "status": "error",
+                    "error_type": "invalid_node",
+                    "message": f"Lỗi: {route_response.json().get('detail', 'Node không hợp lệ')}",
+                    "start_name": start_display,
+                    "end_name": end_display,
+                }
+            )
 
         route_response.raise_for_status()
         result = route_response.json()
@@ -308,6 +395,7 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
         # Return structured JSON for frontend rendering
         response_data = {
             "type": "route",
+            "status": "success",
             "start_name": start_display,
             "end_name": end_display,
             "map": map_data,
@@ -325,7 +413,16 @@ Hãy cho biết chính xác địa điểm (ví dụ: "Phòng 2 Tòa B4 Tầng 2
         return json.dumps(response_data)
 
     except requests.RequestException as e:
-        return f"Lỗi tìm đường: {str(e)}"
+        return json.dumps(
+            {
+                "type": "route",
+                "status": "error",
+                "error_type": "request_error",
+                "message": f"Lỗi tìm đường: {str(e)}",
+                "start_name": from_location,
+                "end_name": to_location,
+            }
+        )
 
 
 find_route: Any = tool(find_route_func)

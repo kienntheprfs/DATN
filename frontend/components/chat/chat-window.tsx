@@ -29,6 +29,7 @@ interface RouteMapData {
 
 interface RouteData {
 	type: "route";
+	status?: "success" | "error" | "needs_confirmation";
 	start_name: string;
 	end_name: string;
 	map: MapData;
@@ -342,6 +343,7 @@ interface GroupedMessages {
 	role: "user" | "assistant";
 	messages: ChatMessage[];
 	toolMessages?: ChatMessage[];
+	routeData?: RouteData;
 }
 
 export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState }: ChatWindowProps) {
@@ -362,47 +364,6 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 			scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
 		}
 	}, [visibleMessages, currentTools.length, partialText]);
-
-	// Extract route data from completed tools (current streaming + history)
-	const routeData = useMemo(() => {
-		// First check current streaming tools
-		const routeTool = currentTools.find(tool => {
-			const name = tool.name.toLowerCase();
-			return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
-		});
-		
-		if (routeTool?.content) {
-			try {
-				const parsed = JSON.parse(routeTool.content);
-				if (parsed.type === 'route') {
-					return parsed as RouteData;
-				}
-			} catch {
-				// Not JSON
-			}
-		}
-
-		// Then check historical tool messages
-		for (const m of visibleMessages) {
-			if (m.msgType === "tool") {
-				const toolName = (m.toolName || "").toLowerCase();
-				if (toolName.includes('route') || toolName.includes('find') || toolName.includes('map')) {
-					if (m.content) {
-						try {
-							const parsed = JSON.parse(m.content);
-							if (parsed.type === 'route') {
-								return parsed as RouteData;
-							}
-						} catch {
-							// Not JSON
-						}
-					}
-				}
-			}
-		}
-
-		return null;
-	}, [currentTools, visibleMessages]);
 
 	const groupedMessages = useMemo(() => {
 		const groups: GroupedMessages[] = [];
@@ -428,8 +389,63 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 			}
 		}
 
+		// Extract routeData for each group
+		for (const group of groups) {
+			if (group.role !== "assistant") continue;
+			// Check both messages and toolMessages for route data
+			const messagesToCheck = [...(group.toolMessages || []), ...group.messages];
+			for (const m of messagesToCheck) {
+				// Check if it's a tool message or has toolName
+				const isToolMessage = m.msgType === "tool" || m.toolName;
+				if (isToolMessage && m.content) {
+					const toolName = (m.toolName || "").toLowerCase();
+					if (toolName.includes('route') || toolName.includes('find') || toolName.includes('map')) {
+						try {
+							const parsed = JSON.parse(m.content);
+							if (parsed.type === 'route' && parsed.status === 'success') {
+								group.routeData = parsed as RouteData;
+								break;
+							}
+						} catch {
+							// Not JSON
+						}
+					}
+				}
+			}
+		}
+
 		return groups;
-	}, [visibleMessages]);
+	}, [visibleMessages, currentTools]);
+
+	// Get routeData for display - combines history data and current streaming tools
+	const routeDataForDisplay = useMemo(() => {
+		// First check currentTools for streaming
+		if (currentTools.length > 0) {
+			const routeTool = currentTools.find(tool => {
+				const name = tool.name.toLowerCase();
+				return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
+			});
+			if (routeTool?.content) {
+				try {
+					const parsed = JSON.parse(routeTool.content);
+					if (parsed.type === 'route' && parsed.status === 'success') {
+						return parsed as RouteData;
+					}
+				} catch {
+					// Not JSON
+				}
+			}
+		}
+
+		// Then check last assistant group in history
+		const assistantGroups = groupedMessages.filter(g => g.role === "assistant");
+		const lastGroup = assistantGroups[assistantGroups.length - 1];
+		if (lastGroup?.routeData) {
+			return lastGroup.routeData;
+		}
+
+		return null;
+	}, [groupedMessages, currentTools]);
 
 	const getGroupRunId = (group: GroupedMessages): string | undefined => {
 		if (group.role !== "assistant") return undefined;
@@ -462,6 +478,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					const ratingId = groupRunId || groupId;
 					const showRating = ratingId && threadId && group.role === "assistant" && combinedContent;
 					const citations = group.messages.find(m => m.citations)?.citations;
+					const displayRouteData = isLastGroup && routeDataForDisplay ? routeDataForDisplay : group.routeData;
 
 					if (group.role === "user") {
 						return (
@@ -501,7 +518,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 								<Bot className="size-6" />
 							</div>
 							<div className="group relative max-w-[85%] space-y-3">
-								{!routeData && (group.toolMessages?.map((toolMsg) => {
+								{group.toolMessages?.map((toolMsg) => {
 									const toolData = toolMsg.content ? (() => {
 										try {
 											return JSON.parse(toolMsg.content);
@@ -512,8 +529,8 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 									return (
 										<HistoryToolCollapsible key={toolMsg.id} name={toolMsg.toolName || "tool"} content={toolMsg.content} />
 									);
-								}))}
-								{showToolsForThisGroup && !routeData && currentTools.map((tool) => (
+								})}
+								{showToolsForThisGroup && currentTools.map((tool) => (
 									<ToolCollapsible key={tool.id} tool={tool} />
 								))}
 								{combinedContent && (
@@ -553,13 +570,13 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					);
 				})}
 
-			{routeData && (
+			{routeDataForDisplay && (
 				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 						<Bot className="size-6" />
 					</div>
-					<div className="flex-1 max-w-[85%]">
-						<MiniNavigation routeData={routeData} />
+					<div className="flex-1 max-w-full">
+						<MiniNavigation routeData={routeDataForDisplay} />
 					</div>
 				</div>
 			)}

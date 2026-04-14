@@ -38,9 +38,10 @@ instructions = f"""
     Hôm nay là ngày: {current_date}
 
     HƯỚNG DẪN QUAN TRỌNG:
-    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), sử dụng FindRoute tool
+    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), PHẢI HỎI và XÁC NHẬN đủ 2 thông tin: vị trí hiện tại của người dùng và điểm đến. CHỈ GỌI FindRoute khi đã có đủ cả hai.
+    - Nếu người dùng chỉ cung cấp một trong hai (ví dụ: "đi từ phòng 101" hoặc "đến thư viện"), hỏi lấy thông tin còn thiếu.
     - Khi người dùng hỏi về sự kiện (ví dụ: "có sự kiện gì", "tìm hội thảo...", "sự kiện nào"), sử dụng SearchEvents hoặc GetUpcomingEvents
-    - Khi có nhiều địa điểm trùng tên, hỏi người dùng xác nhận bằng TÊN
+    - Khi có nhiều địa điểm trùng tên, hỏi người dùng xác nhận bằng TÊN cụ thể (tòa nhà, tầng nếu biết)
     - Nếu sự kiện có vị trí trên bản đồ, đề xuất chỉ đường đến đó
     - Trả lời bằng tiếng Việt, rõ ràng và thân thiện
     """
