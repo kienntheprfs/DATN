@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { SearchFilterPanel } from "@/components/admin/knowledge/SearchFilterPanel";
 import { DocumentTable, Document } from "@/components/admin/knowledge/DocumentTable";
-import { Pagination } from "@/components/admin/knowledge/Pagination";
+import { Pagination } from "@/components/admin/knowledge/pagination";
 import { UploadModal } from "@/components/admin/knowledge/UploadModal";
 
 const MOCK_DOCUMENTS: Document[] = [

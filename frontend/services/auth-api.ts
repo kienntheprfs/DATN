@@ -38,10 +38,14 @@ const onTokenRefreshed = (token: string) => {
 
 const onRefreshFailed = () => {
   refreshSubscribers = [];
+  const hasToken = !!localStorage.getItem('access_token');
+  const hasRefreshToken = !!localStorage.getItem('refresh_token');
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
-  window.location.href = '/auth';
+  if (hasToken || hasRefreshToken) {
+    window.location.href = '/auth';
+  }
 };
 
 export const refreshAccessToken = async (): Promise<string | null> => {

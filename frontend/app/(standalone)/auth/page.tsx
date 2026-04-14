@@ -229,7 +229,7 @@ function AuthForm() {
 						<form className="flex flex-col gap-5" onSubmit={handleSubmit}>
 							{errors.general && (
 								<div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm">
-									<AlertCircle className="size-4 flex-shrink-0" />
+									<AlertCircle className="size-4 shrink-0" />
 									<span>{errors.general}</span>
 								</div>
 							)}

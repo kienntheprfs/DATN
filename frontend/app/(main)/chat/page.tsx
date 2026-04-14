@@ -10,7 +10,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
 import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
-import { getUserId } from "@/services/auth-api";
+import { getUserId, authService } from "@/services/auth-api";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useAppStore } from "@/stores/app.store";
 
@@ -169,7 +169,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	useEffect(() => {
 		if (voice.state === "connected" && !voiceStarted.current) {
 			voiceStarted.current = true;
-			onConversationStart?.();
+			if (authService.isAuthenticated()) {
+				onConversationStart?.();
+			}
 		}
 	}, [voice.state]);
 

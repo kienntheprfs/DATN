@@ -272,7 +272,7 @@ export default function NavigationPage() {
           const newFloorIdx = floorMaps.findIndex(f => f.map.id === nodeMapId);
           if (newFloorIdx !== -1) {
             currentFloorIdx = newFloorIdx;
-            currentMapId = nodeMapId;
+            if (nodeMapId !== undefined) currentMapId = nodeMapId;
             currentCoords = [coord];
             currentNodes = [nodeId];
             continue;
@@ -291,7 +291,7 @@ export default function NavigationPage() {
             }
             // Start new segment with transition node as starting point
             currentFloorIdx = newFloorIdx;
-            currentMapId = nodeMapId;
+            if (nodeMapId !== undefined) currentMapId = nodeMapId;
             currentCoords = [coord];  // Start new segment with transition node
             currentNodes = [nodeId];
             continue;  // Skip adding coord again below

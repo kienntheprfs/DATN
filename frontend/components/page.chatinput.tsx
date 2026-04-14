@@ -54,21 +54,15 @@ export function ChatInput({
   const [message, setMessage] = useState("");
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
 
-  const requireAuth = () => {
-    if (!authService.isAuthenticated()) {
-      router.push("/auth?redirected=true");
-      return false;
-    }
-    return true;
-  };
-
   const toggleQueryMode = () => {
-    if (!requireAuth()) return;
+    if (!authService.isAuthenticated()) {
+      toast.error("Yêu cầu đăng nhập để sử dụng tính năng");
+      return;
+    }
     setQueryMode((prev) => (prev === "normal" ? "deep" : "normal"));
   };
 
   const handleVoiceToggle = () => {
-    if (!requireAuth()) return;
     if (onVoiceToggle) {
       onVoiceToggle();
     }
@@ -105,6 +99,7 @@ export function ChatInput({
 
   const isVoiceConnected = voiceState === "connected";
   const isDeepMode = queryMode === "deep";
+  const isLoggedIn = typeof window !== "undefined" && authService.isAuthenticated();
 
   return (
     <TooltipProvider>
@@ -127,14 +122,14 @@ export function ChatInput({
                   variant="ghost"
                   size="icon"
                   aria-label={isDeepMode ? "Tắt chế độ tìm kiếm sâu" : "Bật chế độ tìm kiếm sâu"}
-                  className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"}`}
+                  className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"} ${!isLoggedIn ? "opacity-50" : ""}`}
                   onClick={toggleQueryMode}
                 >
                   <Sparkles className="size-4" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isDeepMode ? "Tắt suy nghĩ kỹ" : "Suy nghĩ kỹ hơn"}
+                {isLoggedIn ? (isDeepMode ? "Tắt suy nghĩ kỹ" : "Suy nghĩ kỹ hơn") : "Yêu cầu đăng nhập để sử dụng"}
               </TooltipContent>
             </Tooltip>
             {showDocumentButton && (
