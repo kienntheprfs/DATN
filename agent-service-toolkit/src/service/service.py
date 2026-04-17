@@ -35,7 +35,7 @@ from schema import (
     StreamInput,
     UserInput,
     ThreadListResponse,
-    UpdateTitleRequest
+    UpdateTitleRequest,
 )
 from service.utils import (
     convert_message_content_to_string,
@@ -51,6 +51,7 @@ from core.database import AsyncSessionLocal
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=settings.LOG_LEVEL.to_logging_level())
+
 
 def custom_generate_unique_id(route: APIRoute) -> str:
     """Generate idiomatic operation IDs for OpenAPI client generation."""
@@ -134,11 +135,8 @@ async def info() -> ServiceMetadata:
 
 
 async def _handle_input(
-        user_input: UserInput, 
-        agent: AgentGraph, 
-        user_id: str,
-        thread_id: str
-        ) -> tuple[dict[str, Any], UUID]:
+    user_input: UserInput, agent: AgentGraph, user_id: str, thread_id: str
+) -> tuple[dict[str, Any], UUID]:
     """
     Parse user input and handle any required interrupt resumption.
     Returns kwargs for agent invocation and the run_id.
@@ -150,7 +148,7 @@ async def _handle_input(
     configurable = {"thread_id": thread_id, "user_id": user_id}
     if user_input.model is not None:
         configurable["model"] = user_input.model
-    
+
     # Config query mode
     if getattr(user_input, "query_mode", None) is not None:
         configurable["query_mode"] = user_input.query_mode
@@ -190,13 +188,14 @@ async def _handle_input(
         input = Command(resume=user_input.message)
     else:
         current_time = datetime.now(timezone.utc).isoformat()
-        input = {"messages": [HumanMessage(
-            content=user_input.message, 
-            additional_kwargs={
-                "timestamp": current_time,
-                "run_id": str(run_id)
-                })]
-            }
+        input = {
+            "messages": [
+                HumanMessage(
+                    content=user_input.message,
+                    additional_kwargs={"timestamp": current_time, "run_id": str(run_id)},
+                )
+            ]
+        }
 
     kwargs = {
         "input": input,
@@ -209,11 +208,11 @@ async def _handle_input(
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
 async def invoke(
-    user_input: UserInput, 
+    user_input: UserInput,
     background_tasks: BackgroundTasks,
     agent_id: str = DEFAULT_AGENT,
-    chat_service: ChatService = Depends(get_chat_service),           
-    ) -> ChatMessage:
+    chat_service: ChatService = Depends(get_chat_service),
+) -> ChatMessage:
     """
     Invoke an agent with user input to retrieve a final response.
 
@@ -230,9 +229,9 @@ async def invoke(
     agent: AgentGraph = get_agent(agent_id)
 
     valid_thread_id = await chat_service.get_or_create_thread(
-        thread_id=user_input.thread_id, 
+        thread_id=user_input.thread_id,
         user_query=user_input.message,
-        background_tasks=background_tasks
+        background_tasks=background_tasks,
     )
 
     kwargs, run_id = await _handle_input(user_input, agent, chat_service.user_id, valid_thread_id)
@@ -261,28 +260,28 @@ async def invoke(
 
 import asyncio
 
+
 # Hàm chạy ngầm xử lý việc lấy URL S3 và đẩy vào Queue
 async def background_s3_task(artifacts: list, queue: asyncio.Queue):
     try:
         from rag_utils.reference import reference_service
         from core.database import AsyncSessionLocal
-        
+
         async with AsyncSessionLocal() as db:
             resolved_citations = await reference_service.resolve_citations(artifacts, db)
             if resolved_citations:
-                sse_data = {
-                    "type": "citations_ready",
-                    "content": resolved_citations
-                }
+                sse_data = {"type": "citations_ready", "content": resolved_citations}
                 await queue.put(f"data: {json.dumps(sse_data, ensure_ascii=False)}\n\n")
     except Exception as e:
         logger.error(f"Lỗi khi xử lý link S3: {e}")
 
+
 # =========================================================================
 
+
 async def message_generator(
-    user_input: StreamInput, 
-    user_id: str,    
+    user_input: StreamInput,
+    user_id: str,
     thread_id: str,
     agent_id: str = DEFAULT_AGENT,
 ) -> AsyncGenerator[str, None]:
@@ -346,13 +345,37 @@ async def message_generator(
 
                 # THÊM MỚI: Quét qua các tin nhắn mới, nếu là Tool RAG thì kích hoạt background task
                 for msg in new_messages:
-                    if isinstance(msg, ToolMessage) and getattr(msg, "name", "") == "lookup_hcmut_info":
-                        artifacts = getattr(msg, "artifact", [])
-                        if artifacts:
-                            # Phóng task ngầm xử lý S3
-                            task = asyncio.create_task(background_s3_task(artifacts, queue))
-                            background_tasks.add(task)
-                            task.add_done_callback(background_tasks.discard)
+                    # Log message type and attributes for debugging
+                    if isinstance(msg, ToolMessage):
+                        tool_name = getattr(msg, "name", "NO_NAME")
+                        artifacts = getattr(msg, "artifact", None)
+                        logger.info(
+                            f"ToolMessage detected - name={tool_name}, has_artifact={artifacts is not None}, content_len={len(str(msg.content))}"
+                        )
+                        if tool_name == "lookup_hcmut_info":
+                            if artifacts:
+                                logger.info(f"FAQ artifacts found on ToolMessage: {artifacts}")
+                                task = asyncio.create_task(background_s3_task(artifacts, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
+                            else:
+                                logger.warning("lookup_hcmut_info ToolMessage has NO artifacts!")
+                    elif isinstance(msg, tuple) and len(msg) == 2:
+                        key, value = msg
+                        if key == "artifact":
+                            logger.info(f"Found artifact in tuple format: {value}")
+                            if value:
+                                task = asyncio.create_task(background_s3_task(value, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
+                    elif isinstance(msg, tuple) and len(msg) == 2:
+                        key, value = msg
+                        if key == "artifact":
+                            logger.info(f"Found artifact in tuple format: {value}")
+                            if value:
+                                task = asyncio.create_task(background_s3_task(value, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
 
                 # LangGraph streaming may emit tuples: (field_name, field_value)
                 # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
@@ -360,11 +383,16 @@ async def message_generator(
                 # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
                 processed_messages = []
                 current_message: dict[str, Any] = {}
+                current_artifact: list | None = None
                 for message in new_messages:
                     if isinstance(message, tuple):
                         key, value = message
                         # Store parts in temporary dict
                         current_message[key] = value
+                        # Capture artifact if it comes as a tuple
+                        if key == "artifact" and isinstance(value, list):
+                            current_artifact = value
+                            logger.info(f"Captured artifact from tuple: {value}")
                     else:
                         # Add complete message if we have one in progress
                         if current_message:
@@ -383,14 +411,18 @@ async def message_generator(
                     except Exception as e:
                         logger.error(f"Error parsing message: {e}")
                         # SỬA ĐỔI: yield -> await queue.put
-                        await queue.put(f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n")
+                        await queue.put(
+                            f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
+                        )
                         continue
                     # LangGraph re-sends the input message, which feels weird, so drop it
                     if chat_message.type == "human" and chat_message.content == user_input.message:
                         continue
-                    
+
                     # SỬA ĐỔI: yield -> await queue.put
-                    await queue.put(f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n")
+                    await queue.put(
+                        f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+                    )
 
                 if stream_mode == "messages":
                     if not user_input.stream_tokens:
@@ -407,22 +439,26 @@ async def message_generator(
                         # Empty content in the context of OpenAI usually means
                         # that the model is asking for a tool to be invoked.
                         # So we only print non-empty content.
-                        
+
                         # SỬA ĐỔI: yield -> await queue.put
-                        await queue.put(f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n")
-        
+                        await queue.put(
+                            f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+                        )
+
         except Exception as e:
             logger.error(f"Error in message generator: {e}")
             # SỬA ĐỔI: yield -> await queue.put
-            await queue.put(f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n")
+            await queue.put(
+                f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
+            )
         finally:
             # THÊM MỚI: Đợi các task lấy link S3 hoàn tất (nếu có) trước khi đóng stream
             if background_tasks:
                 await asyncio.gather(*background_tasks, return_exceptions=True)
-            
+
             # SỬA ĐỔI: yield -> await queue.put
             await queue.put("data: [DONE]\n\n")
-            
+
             # THÊM MỚI: Gửi Sentinel value (None) để báo hiệu vòng lặp chính kết thúc
             await queue.put(None)
 
@@ -435,6 +471,8 @@ async def message_generator(
         if item is None:
             break
         yield item
+
+
 # ---------------
 # import asyncio
 # async def background_s3_task(artifacts: list, queue: asyncio.Queue):
@@ -443,15 +481,15 @@ async def message_generator(
 #         # Tạo session độc lập không chặn luồng chính
 #         async with AsyncSessionLocal() as db:
 #             resolved_citations = await reference_service.resolve_citations(artifacts, db)
-            
+
 #             # Đẩy vào stream cho Client
 #             await queue.put(f"data: {json.dumps({'type': 'citations_ready', 'content': resolved_citations})}\n\n")
 #     except Exception as e:
 #         logger.error(f"Lỗi khi resolve S3 citations: {e}")
 
 # async def message_generator(
-#     user_input: StreamInput, 
-#     user_id: str,    
+#     user_input: StreamInput,
+#     user_id: str,
 #     thread_id: str,
 #     agent_id: str = DEFAULT_AGENT,
 # ) -> AsyncGenerator[str, None]:
@@ -594,11 +632,11 @@ def _sse_response_example() -> dict[int | str, Any]:
 )
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
-    user_input: StreamInput, 
+    user_input: StreamInput,
     background_tasks: BackgroundTasks,
     chat_service: ChatService = Depends(get_chat_service),
-    agent_id: str = DEFAULT_AGENT
-    ) -> StreamingResponse:
+    agent_id: str = DEFAULT_AGENT,
+) -> StreamingResponse:
     """
     Stream an agent's response to a user input, including intermediate messages and tokens.
 
@@ -610,9 +648,9 @@ async def stream(
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
     valid_thread_id = await chat_service.get_or_create_thread(
-        thread_id=user_input.thread_id, 
+        thread_id=user_input.thread_id,
         user_query=user_input.message,
-        background_tasks=background_tasks
+        background_tasks=background_tasks,
     )
     return StreamingResponse(
         message_generator(user_input, chat_service.user_id, valid_thread_id, agent_id),
@@ -639,11 +677,11 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
     )
     return FeedbackResponse()
 
+
 # TODO: cải thiện bảo mật, hiện giờ đưa thread_id cái là được coi
 @router.post("/history")
 async def history(
-    input: ChatHistoryInput,
-    chat_service: ChatService = Depends(get_chat_service)
+    input: ChatHistoryInput, chat_service: ChatService = Depends(get_chat_service)
 ) -> ChatHistory:
     """
     Get chat history.
@@ -660,73 +698,70 @@ async def history(
         messages: list[AnyMessage] = state_snapshot.values.get("messages", [])
 
         chat_messages: list[ChatMessage] = []
-        current_run_id = None 
+        current_run_id = None
 
         for m in messages:
             # 1. Nếu là tin nhắn của user, rút run_id từ additional_kwargs ra
             if isinstance(m, HumanMessage) and "run_id" in m.additional_kwargs:
                 current_run_id = m.additional_kwargs["run_id"]
-                
+
             chat_msg = langchain_to_chat_message(m)
-            
-            # 2. Gán run_id cho tin nhắn. 
+
+            # 2. Gán run_id cho tin nhắn.
             # Dùng current_run_id gốc của bạn, nếu không có thì fallback sang m.id (phòng hờ cho các đoạn chat cũ trong DB)
             if current_run_id:
                 chat_msg.run_id = current_run_id
-            elif hasattr(m, 'id') and m.id:
+            elif hasattr(m, "id") and m.id:
                 chat_msg.run_id = str(m.id)
-                
+
             chat_messages.append(chat_msg)
 
         return ChatHistory(messages=chat_messages)
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error")
-    
+
 
 @router.get(
-    "/threads", 
-    response_model=ThreadListResponse, 
+    "/threads",
+    response_model=ThreadListResponse,
     summary="Lấy danh sách lịch sử hội thoại",
-    description="Lấy tất cả các threads đang hoạt động của user hiện tại, có hỗ trợ phân trang."
+    description="Lấy tất cả các threads đang hoạt động của user hiện tại, có hỗ trợ phân trang.",
 )
 async def get_history_threads(
     chat_service: ChatService = Depends(get_chat_service),
     limit: int = Query(20, ge=1, le=100, description="Limit (1-100)"),
-    offset: int = Query(0, ge=0, description="Offset (pagination)")
+    offset: int = Query(0, ge=0, description="Offset (pagination)"),
 ):
     try:
         threads = await chat_service.get_all_threads(offset=offset, limit=limit)
-        
+
         # Trả về theo format của ThreadListResponse
-        return ThreadListResponse(
-            items=threads,
-            limit=limit,
-            offset=offset
-        )
-        
+        return ThreadListResponse(items=threads, limit=limit, offset=offset)
+
     except Exception as e:
         logger.error(f"An exception occurred while fetching threads: {e}")
         # Không nên throw chi tiết lỗi hệ thống ra cho client, chỉ trả về 500
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @router.patch(
     "/threads/{thread_id}/title",
     summary="Cập nhật tiêu đề hội thoại",
-    description="Đổi tên (title) của một hội thoại theo thread_id của user hiện tại."
+    description="Đổi tên (title) của một hội thoại theo thread_id của user hiện tại.",
 )
 async def update_thread_title(
     thread_id: str,
     payload: UpdateTitleRequest,
     status_code=status.HTTP_204_NO_CONTENT,
-    chat_service: ChatService = Depends(get_chat_service)
+    chat_service: ChatService = Depends(get_chat_service),
 ):
     try:
         await chat_service.update_thread_title(thread_id, payload.new_title)
         return {
             "message": "Cập nhật tiêu đề hội thoại thành công.",
             "thread_id": thread_id,
-            "new_title": payload.new_title
+            "new_title": payload.new_title,
         }
     except HTTPException as he:
         # Bắt và trả về nguyên trạng các lỗi 400, 403, 404 từ tầng chat_service
@@ -735,15 +770,13 @@ async def update_thread_title(
         logger.error(f"Lỗi khi cập nhật tiêu đề thread {thread_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @router.delete(
     "/threads/{thread_id}",
     summary="Xóa một lịch sử hội thoại",
-    description="Thực hiện xóa (soft delete) một hội thoại theo thread_id của user hiện tại."
+    description="Thực hiện xóa (soft delete) một hội thoại theo thread_id của user hiện tại.",
 )
-async def delete_thread(
-    thread_id: str,
-    chat_service: ChatService = Depends(get_chat_service)
-):
+async def delete_thread(thread_id: str, chat_service: ChatService = Depends(get_chat_service)):
     try:
         await chat_service.delete_thread(thread_id)
         return {"message": "Đã xóa hội thoại thành công.", "thread_id": thread_id}
@@ -754,21 +787,23 @@ async def delete_thread(
         logger.error(f"An exception occurred while deleting thread {thread_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 # THÊM MỚI: API Xóa tất cả thread của user
 @router.delete(
     "/threads",
     summary="Xóa toàn bộ lịch sử hội thoại",
-    description="Thực hiện xóa (soft delete) tất cả các hội thoại của user hiện tại."
+    description="Thực hiện xóa (soft delete) tất cả các hội thoại của user hiện tại.",
 )
-async def delete_all_threads(
-    chat_service: ChatService = Depends(get_chat_service)
-):
+async def delete_all_threads(chat_service: ChatService = Depends(get_chat_service)):
     try:
         await chat_service.delete_all_threads()
         return {"message": "Đã xóa tất cả lịch sử hội thoại thành công."}
     except Exception as e:
-        logger.error(f"An exception occurred while deleting all threads for user {chat_service.user_id}: {e}")
+        logger.error(
+            f"An exception occurred while deleting all threads for user {chat_service.user_id}: {e}"
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @app.get("/health")
 async def health_check():

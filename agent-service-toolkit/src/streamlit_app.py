@@ -109,7 +109,9 @@ async def main() -> None:
             messages = []
         else:
             try:
-                messages: ChatHistory = agent_client.get_history(thread_id=thread_id, user_id=user_id).messages
+                messages: ChatHistory = agent_client.get_history(
+                    thread_id=thread_id, user_id=user_id
+                ).messages
             except AgentClientError:
                 st.error(AgentClientError)
                 st.error("No message history found for this Thread ID.")
@@ -149,8 +151,14 @@ async def main() -> None:
                 "Enable audio generation",
                 value=True,
                 disabled=not voice or not voice.tts,
-                help="Configure VOICE_TTS_PROVIDER in .env to enable" if not voice or not voice.tts else None,
-                on_change=lambda: st.session_state.pop("last_audio", None) if not st.session_state.get("enable_audio", True) else None,
+                help="Configure VOICE_TTS_PROVIDER in .env to enable"
+                if not voice or not voice.tts
+                else None,
+                on_change=lambda: (
+                    st.session_state.pop("last_audio", None)
+                    if not st.session_state.get("enable_audio", True)
+                    else None
+                ),
                 key="enable_audio",
             )
 
@@ -159,25 +167,35 @@ async def main() -> None:
 
         @st.dialog("Architecture")
         def architecture_dialog() -> None:
-            st.image("https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true")
+            st.image(
+                "https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png?raw=true"
+            )
             "[View full size on Github](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/media/agent_architecture.png)"
-            st.caption("App hosted on [Streamlit Cloud](https://share.streamlit.io/) with FastAPI service running in [Azure](https://learn.microsoft.com/en-us/azure/app-service/)")
+            st.caption(
+                "App hosted on [Streamlit Cloud](https://share.streamlit.io/) with FastAPI service running in [Azure](https://learn.microsoft.com/en-us/azure/app-service/)"
+            )
 
         if st.button(":material/schema: Architecture", use_container_width=True):
             architecture_dialog()
 
         with st.popover(":material/policy: Privacy", use_container_width=True):
-            st.write("Prompts, responses and feedback in this app are anonymously recorded and saved to LangSmith for product evaluation and improvement purposes only.")
+            st.write(
+                "Prompts, responses and feedback in this app are anonymously recorded and saved to LangSmith for product evaluation and improvement purposes only."
+            )
 
         @st.dialog("Share/resume chat")
         def share_chat_dialog() -> None:
             session = st.runtime.get_instance()._session_mgr.list_active_sessions()[0]
-            st_base_url = urllib.parse.urlunparse([session.client.request.protocol, session.client.request.host, "", "", "", ""])
+            st_base_url = urllib.parse.urlunparse(
+                [session.client.request.protocol, session.client.request.host, "", "", "", ""]
+            )
             # if it's not localhost, switch to https by default
             if not st_base_url.startswith("https") and "localhost" not in st_base_url:
                 st_base_url = st_base_url.replace("http", "https")
             # Include both thread_id and user_id in the URL for sharing to maintain user identity
-            chat_url = f"{st_base_url}?thread_id={st.session_state.thread_id}&{USER_ID_COOKIE}={user_id}"
+            chat_url = (
+                f"{st_base_url}?thread_id={st.session_state.thread_id}&{USER_ID_COOKIE}={user_id}"
+            )
             st.markdown(f"**Chat URL:**\n```text\n{chat_url}\n```")
             st.info("Copy the above URL to share or revisit this chat")
 
@@ -185,7 +203,9 @@ async def main() -> None:
             share_chat_dialog()
 
         "[View the source code](https://github.com/JoshuaC215/agent-service-toolkit)"
-        st.caption("Made with :material/favorite: by [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) in Oakland")
+        st.caption(
+            "Made with :material/favorite: by [Joshua](https://www.linkedin.com/in/joshua-k-carroll/) in Oakland"
+        )
 
     # Draw existing messages
     messages: list[ChatMessage] = st.session_state.messages
@@ -218,7 +238,14 @@ async def main() -> None:
 
     # Render saved audio for the last AI message (if it exists)
     # This ensures audio persists across st.rerun() calls
-    if voice and enable_audio and "last_audio" in st.session_state and st.session_state.last_message and len(messages) > 0 and messages[-1].type == "ai":
+    if (
+        voice
+        and enable_audio
+        and "last_audio" in st.session_state
+        and st.session_state.last_message
+        and len(messages) > 0
+        and messages[-1].type == "ai"
+    ):
         with st.session_state.last_message:
             audio_data = st.session_state.last_audio
             st.audio(audio_data["data"], format=audio_data["format"])
@@ -469,7 +496,7 @@ async def main() -> None:
 #     # Placeholder for intermediate streaming tokens
 #     streaming_content = ""
 #     streaming_placeholder = None
-    
+
 #     # [THÊM MỚI]: Biến lưu trữ danh sách trích dẫn tạm thời cho message hiện tại
 #     current_citations = []
 
@@ -489,10 +516,10 @@ async def main() -> None:
 #             streaming_content += msg
 #             streaming_placeholder.write(streaming_content)
 #             continue
-            
+
 #         if isinstance(msg, dict) and msg.get("type") == "citations_ready":
 #             citations = msg.get("data", [])
-            
+
 #             # 1. Vẽ trực tiếp lên container AI hiện tại
 #             if citations and st.session_state.last_message:
 #                 with st.session_state.last_message:
@@ -502,15 +529,15 @@ async def main() -> None:
 #                             s3_url = cite.get("s3_url", "#")
 #                             preview = cite.get("text_preview", "")
 #                             source_type = cite.get("source_type", "Nội bộ")
-                            
+
 #                             st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
 #                             if preview:
 #                                 st.caption(f"> {preview}...")
-            
+
 #             # 2. Lưu thuộc tính 'citations' vào tin nhắn AI cuối cùng để render lại khi F5
 #             if st.session_state.messages and st.session_state.messages[-1].type == "ai":
 #                 setattr(st.session_state.messages[-1], "citations", citations)
-                
+
 #             continue
 
 #         if not isinstance(msg, ChatMessage):
@@ -554,7 +581,7 @@ async def main() -> None:
 #                                 s3_url = cite.get("s3_url", "#")
 #                                 preview = cite.get("text_preview", "")
 #                                 source_type = cite.get("source_type", "Nội bộ")
-                                
+
 #                                 st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
 #                                 if preview:
 #                                     st.caption(f"> {preview}...")
@@ -637,6 +664,7 @@ async def main() -> None:
 #                 st.write(msg)
 #                 st.stop()
 
+
 async def draw_messages(
     messages_agen: AsyncGenerator[ChatMessage | str | dict, None],
     is_new: bool = False,
@@ -660,31 +688,36 @@ async def draw_messages(
             streaming_content += msg
             streaming_placeholder.write(streaming_content)
             continue
-            
+
         # 2. XỬ LÝ EVENT CITATIONS_READY (DICT)
         if isinstance(msg, dict) and msg.get("type") == "citations_ready":
             citations = msg.get("data", [])
-            
+
             # A. Vẽ ngay lập tức lên giao diện hiện hành
             if citations and st.session_state.last_message:
                 with st.session_state.last_message:
                     with st.expander("📚 Nguồn tham khảo"):
                         for idx, cite in enumerate(citations):
-                            file_name = cite.get("file_name", f"Tài liệu {idx+1}")
-                            s3_url = cite.get("s3_url", "#")
+                            file_name = cite.get("file_name") or f"Tài liệu {idx + 1}"
+                            s3_url = cite.get("s3_url") or "#"
                             preview = cite.get("text_preview", "")
                             source_type = cite.get("source_type", "Nội bộ")
-                            
-                            st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+
+                            st.markdown(
+                                f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`"
+                            )
                             if preview:
                                 st.caption(f"> {preview}...")
-            
+
             # B. LƯU VÀO STATE ĐỂ GIỮ LẠI SAU KHI RERUN
             if is_new:
                 # Trường hợp 1: Nếu AI message CỦA LƯỢT NÀY ĐÃ được chốt vào mảng (do tiến trình S3 xử lý chậm hơn LLM)
                 if st.session_state.messages and st.session_state.messages[-1].type == "ai":
                     try:
-                        if getattr(st.session_state.messages[-1], "additional_kwargs", None) is None:
+                        if (
+                            getattr(st.session_state.messages[-1], "additional_kwargs", None)
+                            is None
+                        ):
                             st.session_state.messages[-1].additional_kwargs = {}
                         st.session_state.messages[-1].additional_kwargs["citations"] = citations
                     except Exception:
@@ -694,7 +727,7 @@ async def draw_messages(
                     # Trường hợp 2: Nếu AI message CHƯA được chốt (đang stream text)
                     # -> Lưu tạm vào state chờ Lát nữa gán
                     st.session_state.pending_citations = citations
-                    
+
             continue
 
         # 3. XỬ LÝ CHATMESSAGE OBJECT CHÍNH THỨC
@@ -718,9 +751,9 @@ async def draw_messages(
                             msg.additional_kwargs["citations"] = st.session_state.pending_citations
                         except Exception:
                             setattr(msg, "citations", st.session_state.pending_citations)
-                        
+
                         del st.session_state.pending_citations
-                        
+
                     # Chốt lưu vào lịch sử
                     st.session_state.messages.append(msg)
 
@@ -743,16 +776,18 @@ async def draw_messages(
                     saved_citations = getattr(msg, "additional_kwargs", {}).get("citations", [])
                     if not saved_citations:
                         saved_citations = getattr(msg, "citations", [])
-                        
+
                     if saved_citations:
                         with st.expander("📚 Nguồn tham khảo"):
                             for idx, cite in enumerate(saved_citations):
-                                file_name = cite.get("file_name", f"Tài liệu {idx+1}")
-                                s3_url = cite.get("s3_url", "#")
+                                file_name = cite.get("file_name") or f"Tài liệu {idx + 1}"
+                                s3_url = cite.get("s3_url") or "#"
                                 preview = cite.get("text_preview", "")
                                 source_type = cite.get("source_type", "Nội bộ")
-                                
-                                st.markdown(f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`")
+
+                                st.markdown(
+                                    f"**[{idx + 1}] [{file_name}]({s3_url})** - `{source_type}`"
+                                )
                                 if preview:
                                     st.caption(f"> {preview}...")
 
@@ -813,7 +848,9 @@ async def draw_messages(
 
                 if last_message_type != "task":
                     last_message_type = "task"
-                    st.session_state.last_message = st.chat_message(name="task", avatar=":material/manufacturing:")
+                    st.session_state.last_message = st.chat_message(
+                        name="task", avatar=":material/manufacturing:"
+                    )
                     with st.session_state.last_message:
                         status = TaskDataStatus()
 
@@ -895,7 +932,11 @@ async def handle_sub_agent_msgs(messages_agen, status, is_new):
             continue
 
         # Handle transfer_back_to tool calls - these indicate a sub-agent is returning control
-        if hasattr(sub_msg, "tool_calls") and sub_msg.tool_calls and any("transfer_back_to" in tc.get("name", "") for tc in sub_msg.tool_calls):
+        if (
+            hasattr(sub_msg, "tool_calls")
+            and sub_msg.tool_calls
+            and any("transfer_back_to" in tc.get("name", "") for tc in sub_msg.tool_calls)
+        ):
             # Process transfer_back_to tool calls
             for tc in sub_msg.tool_calls:
                 if "transfer_back_to" in tc.get("name", ""):

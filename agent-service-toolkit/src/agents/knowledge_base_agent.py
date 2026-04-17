@@ -28,8 +28,14 @@ logger.setLevel(logging.INFO)
 # CONFIGURATION
 # ==============================================================================
 # Ngưỡng điểm để đánh dấu High Confidence (để format đẹp hơn cho Agent đọc)
-HIGH_CONFIDENCE_THRESHOLD = 0.75 
+HIGH_CONFIDENCE_THRESHOLD = 0.75
 MAX_TURNS = 6  # Số lượt hội thoại tối đa để ngắt mạch
+
+# FAQ Configuration (Dense-only search)
+FAQ_COLLECTION_NAME = "faqs"  # Collection name trong Qdrant
+FAQ_SCORE_THRESHOLD = 0.75  # Ngưỡng cao để tránh false positive
+FAQ_EXACT_MATCH_THRESHOLD = 0.78  # Ngưỡng rất cao -> return trực tiếp
+# NOTE: Không cache FAQ results vì chưa có cache invalidation mechanism khi FAQ được cập nhật
 
 # ==============================================================================
 # INIT SERVICES
@@ -37,6 +43,7 @@ MAX_TURNS = 6  # Số lượt hội thoại tối đa để ngắt mạch
 retriever_service = QdrantHybridRetriever()
 reranker_service: BaseReranker = JinaReranker()
 lightrag_service: LightRAGService = LightRAGService()
+
 
 # ==============================================================================
 # DEFINING TOOLS
@@ -47,21 +54,24 @@ class UnifiedDocument:
         self.source_type = source_type
         self.doc_id = doc_id
 
+
 @tool("lookup_hcmut_info", response_format="content_and_artifact")
 async def lookup_hcmut_info(query: str, config: RunnableConfig):
     """
-    Tìm kiếm thông tin nội bộ. 
+    Tìm kiếm thông tin nội bộ.
     search_depth: "normal" (Tìm kiếm nhanh) hoặc "deep" (Tìm kiếm sâu trên đồ thị tri thức).
     """
     # Lấy query_mode từ config (mặc định là 'normal' nếu API không truyền)
     query_mode = str(config.get("configurable", {}).get("query_mode", "normal")).strip().lower()
-    
+
     logger.info(f"CALL TOOL: lookup_hcmut_info | QUERY: {query} | MODE: {query_mode}")
 
     configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
     kb_id = configurable.get("kb_id")
     explicit_collection = str(configurable.get("kb_collection", "")).strip()
-    collection_name = explicit_collection or (f"kb_{kb_id}" if kb_id else settings.SEM_CACHE_NAMESPACE)
+    collection_name = explicit_collection or (
+        f"kb_{kb_id}" if kb_id else settings.SEM_CACHE_NAMESPACE
+    )
     cache_namespace = collection_name
 
     # Ánh xạ query_mode (normal/deep) sang search_depth của logic cũ
@@ -69,34 +79,126 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
     lightrag_mode = "hybrid" if search_depth == "deep" else "naive"
 
     try:
-        cached_dense_vector: list[float] | None = None
-        query_vector: dict[str, Any] | None = None
-        kb_version = 1
-        try:
-            query_vector = await retriever_service.encoder.encode_query(query)
-            cached_dense_vector = query_vector.get("dense")
-            kb_version = await semantic_cache_service.get_kb_version(namespace=cache_namespace)
-            if cached_dense_vector:
-                cache_hit = await semantic_cache_service.search(
-                    dense_vector=cached_dense_vector,
-                    query_mode=query_mode,
-                    kb_version=kb_version,
-                    namespace=cache_namespace,
-                )
-                if cache_hit and cache_hit.response_text:
-                    logger.info(
-                        "semantic_cache_hit mode=%s similarity=%.4f kb_version=%s key=%s",
-                        query_mode,
-                        cache_hit.similarity,
-                        kb_version,
-                        cache_hit.cache_key,
-                    )
-                    return cache_hit.response_text, cache_hit.artifacts
-            logger.info("semantic_cache_miss mode=%s kb_version=%s", query_mode, kb_version)
-        except Exception:
-            logger.exception("semantic_cache_lookup_failed")
+        # 1. Encode query trước (cần cho cả cache và FAQ)
+        query_vector = await retriever_service.encoder.encode_query(query)
+        cached_dense_vector = query_vector.get("dense")
 
-        # 1. CHẠY SONG SONG QDRANT VÀ LIGHTRAG
+        # 2. CHẠY SONG SONG: CACHE + FAQ (Cơ chế Short-Circuit)
+        kb_version = await semantic_cache_service.get_kb_version(namespace=cache_namespace)
+
+        # Bọc coroutine vào asyncio.Task để có thể chủ động hủy (cancel) giải phóng tài nguyên
+        task_cache = asyncio.create_task(
+            semantic_cache_service.search(
+                dense_vector=cached_dense_vector,
+                query_mode=query_mode,
+                kb_version=kb_version,
+                namespace=cache_namespace,
+            )
+        )
+        task_faq = asyncio.create_task(
+            retriever_service.search_dense_only(
+                query=query,
+                collection_name=FAQ_COLLECTION_NAME,
+                top_k=3,
+                score_threshold=FAQ_SCORE_THRESHOLD,
+                precomputed_dense_vec=cached_dense_vector,
+            )
+        )
+
+        pending = {task_cache, task_faq}
+        cache_hit = None
+        faq_results = None
+
+        MAX_WAIT_TIME = 2  # Giây
+        start_time = asyncio.get_event_loop().time()
+
+        # Vòng lặp xử lý ngay khi có task hoàn thành đầu tiên
+        while pending:
+            # Tính toán thời gian còn lại
+            elapsed = asyncio.get_event_loop().time() - start_time
+            remaining = MAX_WAIT_TIME - elapsed
+
+            # Hết giờ -> Hủy các task đang treo và thoát vòng lặp
+            if remaining <= 0:
+                logger.warning(
+                    "TIMEOUT: Tra cứu Cache/FAQ vượt quá giới hạn thời gian. Đang bỏ qua..."
+                )
+                for p in pending:
+                    p.cancel()
+                break
+
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+
+            for task in done:
+                try:
+                    result = task.result()
+
+                    # 3. NẾU LÀ TASK CACHE
+                    if task == task_cache:
+                        cache_hit = result
+                        # PRIORITY 1: Cache hit -> Hủy task FAQ và return ngay
+                        if cache_hit and cache_hit.response_text:
+                            logger.info(
+                                "semantic_cache_hit mode=%s similarity=%.4f kb_version=%s key=%s",
+                                query_mode,
+                                cache_hit.similarity,
+                                kb_version,
+                                cache_hit.cache_key,
+                            )
+                            # Hủy task còn lại để giải phóng kết nối DB/CPU
+                            for p in pending:
+                                p.cancel()
+                            return cache_hit.response_text, cache_hit.artifacts
+
+                    # 4. NẾU LÀ TASK FAQ
+                    elif task == task_faq:
+                        faq_results = result
+                        # PRIORITY 2: FAQ EXACT MATCH -> Hủy task Cache và return ngay
+                        if faq_results and faq_results[0].score >= FAQ_EXACT_MATCH_THRESHOLD:
+                            best_faq = faq_results[0]
+                            faq_answer = best_faq.answer or best_faq.content
+                            faq_source = best_faq.faq_source or best_faq.metadata.get(
+                                "faq_source", "unknown"
+                            )
+                            logger.info(
+                                f"FAQ_EXACT_MATCH score={best_faq.score:.3f} source={faq_source} query={query[:50]}"
+                            )
+
+                            artifacts = [
+                                {
+                                    "doc_id": str(best_faq.doc_id)
+                                    if best_faq.doc_id
+                                    else str(best_faq.chunk_id),
+                                    "source_type": "Normal" if best_faq.doc_id else "FAQ",
+                                    "score": best_faq.score,
+                                    "is_faq": True,
+                                    "faq_source": faq_source,
+                                    **({"faq_id": best_faq.faq_id} if not best_faq.doc_id else {}),
+                                    "reference_url": best_faq.metadata.get("reference_url")
+                                    if best_faq.metadata
+                                    else None,
+                                }
+                            ]
+
+                            output_text = f"### CÂU HỎI THƯỜNG GẶP (FAQ):\n- [FAQ | Điểm: {best_faq.score:.2f}]: {faq_answer}"
+
+                            for p in pending:
+                                p.cancel()
+                            return output_text, artifacts
+
+                except Exception as e:
+                    logger.exception(
+                        f"Lỗi trong quá trình chạy song song (Task: {task.get_name()})"
+                    )
+
+        # Nếu vòng lặp while kết thúc, nghĩa là cả 2 task đều đã chạy xong
+        # nhưng KHÔNG có kết quả nào thỏa mãn điều kiện Early Return.
+        logger.info("semantic_cache_miss mode=%s kb_version=%s", query_mode, kb_version)
+        if faq_results:
+            logger.info(f"FAQ_SEARCH results={len(faq_results)} top_score={faq_results[0].score}")
+        #  -------------
+
+        # 5. PRIORITY 3: Cả cache và FAQ đều miss → CHẠY DOC + LIGHTRAG
         task_qdrant = retriever_service.search(
             query=query,
             collection_name=cache_namespace,
@@ -104,58 +206,109 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
             precomputed_query_vec=query_vector,
         )
         task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
-        
+
         qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
 
-        # 2. XỬ LÝ CHUNKS (GỘP & RERANK)
+        # 6. XỬ LÝ CHUNKS (GỘP & RERANK)
         unified_chunks: List[UnifiedDocument] = []
 
-        # Đưa Qdrant chunks vào pool
         for doc in qdrant_docs:
-            unified_chunks.append(UnifiedDocument(content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)))
-                
-        # Đưa LightRAG chunks vào pool
+            unified_chunks.append(
+                UnifiedDocument(content=doc.content, source_type="Normal", doc_id=str(doc.doc_id))
+            )
+
         for chunk in lightrag_result.chunks:
-            unified_chunks.append(UnifiedDocument(content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id))
+            unified_chunks.append(
+                UnifiedDocument(content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id)
+            )
 
         output_lines = []
         artifacts = []
 
-        # Rerank toàn bộ pool hỗn hợp
+        # 7. Thêm FAQ vào pool nếu có kết quả (không phải exact match)
+        if faq_results:
+            for faq in faq_results:
+                if faq.score >= FAQ_EXACT_MATCH_THRESHOLD:
+                    continue
+                unified_chunks.append(
+                    UnifiedDocument(
+                        content=f"[FAQ] {faq.content}\nAnswer: {faq.answer or ''}",
+                        source_type="FAQ",
+                        doc_id=str(faq.chunk_id),
+                    )
+                )
+
+        # 8. Rerank toàn bộ pool hỗn hợp (Documents)
         if unified_chunks:
-            # Lưu ý: Pass unified_chunks vào reranker_service của bạn. 
+            # Lưu ý: Pass unified_chunks vào reranker_service của bạn.
             # Đảm bảo reranker_service đọc được thuộc tính `content` từ object truyền vào.
-            reranked_docs = await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
-            
-            output_lines.append(f"### THÔNG TIN TỪ VĂN BẢN ({len(reranked_docs)} đoạn phù hợp nhất):")
+            reranked_docs = await reranker_service.rerank(
+                query=query, documents=unified_chunks, top_n=5
+            )
+
+            output_lines.append(
+                f"### THÔNG TIN TỪ VĂN BẢN ({len(reranked_docs)} đoạn phù hợp nhất):"
+            )
             for doc in reranked_docs:
-                output_lines.append(f"- [Nguồn: {doc.source_type} | Điểm: {doc.score:.2f}]: {doc.content}")
-                artifacts.append({
-                    "doc_id": doc.doc_id, # Hoặc chunk.chunk_id tuỳ cấu trúc của bạn
-                    "source_type": getattr(doc, 'source_type', 'Normal')
-                })
+                output_lines.append(
+                    f"- [Nguồn: {doc.source_type} | Điểm: {doc.score:.2f}]: {doc.content}"
+                )
+                artifacts.append(
+                    {
+                        "doc_id": doc.doc_id,  # Hoặc chunk.chunk_id tuỳ cấu trúc của bạn
+                        "source_type": getattr(doc, "source_type", "Normal"),
+                    }
+                )
 
         # 3. XỬ LÝ ĐỒ THỊ TRI THỨC (Chỉ áp dụng cho Mode Deep)
+        kg_source_ids: set[str] = set()
         if search_depth == "deep":
             entities = lightrag_result.entities
             relationships = lightrag_result.relationships
-            
+
             # Truncate bớt để tránh nổ Context Window của LLM (VD: chỉ lấy top 10 entities/relations)
             entities = entities[:10]
             relationships = relationships[:10]
 
+            # Thu thập source_ids từ entities và relationships để phục vụ citation
+            GRAPH_FIELD_SEP = "<SEP>"
+            for e in entities:
+                if e.source_id:
+                    for chunk_id in e.source_id.split(GRAPH_FIELD_SEP):
+                        if chunk_id := chunk_id.strip():
+                            kg_source_ids.add(chunk_id)
+
+            for r in relationships:
+                if r.source_id:
+                    for chunk_id in r.source_id.split(GRAPH_FIELD_SEP):
+                        if chunk_id := chunk_id.strip():
+                            kg_source_ids.add(chunk_id)
+
             if entities or relationships:
                 output_lines.append("\n### TÓM TẮT TỪ ĐỒ THỊ TRI THỨC (KNOWLEDGE GRAPH):")
-                
+
                 if entities:
                     output_lines.append("**Thực thể chính:**")
                     for e in entities:
                         output_lines.append(f"- {e.entity_name} ({e.entity_type}): {e.description}")
-                
+
                 if relationships:
                     output_lines.append("\n**Mối quan hệ:**")
                     for r in relationships:
                         output_lines.append(f"- {r.src_id} -> {r.tgt_id}: {r.description}")
+
+        # Thêm source_ids từ KG vào artifacts (deduplicate với artifacts hiện có)
+        existing_formal_ids: set[str] = {
+            a["doc_id"] for a in artifacts if a.get("source_type") == "Formal"
+        }
+        for chunk_id in kg_source_ids:
+            if chunk_id not in existing_formal_ids:
+                artifacts.append(
+                    {
+                        "doc_id": chunk_id,
+                        "source_type": "Formal",
+                    }
+                )
 
         if not output_lines:
             output_text = "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
@@ -170,7 +323,9 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                         kb_version=kb_version,
                         namespace=cache_namespace,
                     )
-                    logger.info("semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version)
+                    logger.info(
+                        "semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version
+                    )
                 except Exception:
                     logger.exception("semantic_cache_write_failed")
             return output_text
@@ -196,7 +351,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
     except Exception as e:
         logger.exception("Lỗi trong quá trình truy xuất dữ liệu")
         return f"Database Error: {str(e)}"
-    
+
+
 # OLD TOOL: NOT INTEGRATE WITH LIGHTRAG
 # @tool
 # async def lookup_hcmut_info(query: str, mode: str = "naive"):
@@ -214,25 +370,25 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 #         task_doc = retriever_service.search(
 #             query=query, collection_name=collection_doc, top_k=5, score_threshold=0.3
 #         )
-#         task_faq = retriever_service.search(
-#             query=query, collection_name=collection_faq, top_k=2, score_threshold=0.5
-#         )
-        
-#         initial_docs, faq_result = await asyncio.gather(task_doc, task_faq)
+# task_faq = retriever_service.search(
+#     query=query, collection_name=collection_faq, top_k=2, score_threshold=0.5
+# )
 
-#         # Xử lý kết quả trả về cho Agent đọc
-#         output_lines = []
+# initial_docs, faq_result = await asyncio.gather(task_doc, task_faq)
 
-#         # 1. Ưu tiên FAQ nếu điểm rất cao
-#         # CHECK: Tạm tắt do chất lượng hoạt động kém
-#         # if faq_result and faq_result[0].score > 0.98:
-#         #      return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
+# # Xử lý kết quả trả về cho Agent đọc
+# output_lines = []
+
+# # 1. Ưu tiên FAQ nếu điểm rất cao
+# # CHECK: Tạm tắt do chất lượng hoạt động kém
+# # if faq_result and faq_result[0].score > 0.98:
+# #      return f"FOUND_EXACT_MATCH (FAQ): {faq_result[0].answer}"
 
 #         # 2. Format Documents kèm Score
 #         if initial_docs:
 #             docs_result = await reranker_service.rerank(
-#                 query=query, 
-#                 documents=initial_docs, 
+#                 query=query,
+#                 documents=initial_docs,
 #                 top_n=5
 #             )
 
@@ -259,12 +415,13 @@ web_search_tool = TavilySearch(
     topic="general",
 )
 
+
 # --- Helper chạy ngầm lưu lại câu hỏi bị thiếu kiến thức---
 async def background_log_missing_knowledge(user_id: str, thread_id: str, query: str):
     """Mở một session DB độc lập để lưu log mà không chặn luồng chính."""
     from core.database import AsyncSessionLocal
     from repositories.missing_knowledge_repo import MissingKnowledgeRepository
-    
+
     async with AsyncSessionLocal() as db:
         repo = MissingKnowledgeRepository(db)
         await repo.log_missing_query(user_id=user_id, thread_id=thread_id, query=query)
@@ -276,21 +433,19 @@ async def background_log_missing_knowledge(user_id: str, thread_id: str, query: 
 async def tavily_search_results_json(query: str, config: RunnableConfig):
     """
     CÔNG CỤ TÌM KIẾM WEB DỰ PHÒNG (FALLBACK).
-    BẠN CHỈ ĐƯỢC PHÉP SỬ DỤNG CÔNG CỤ NÀY KHI VÀ CHỈ KHI: 
+    BẠN CHỈ ĐƯỢC PHÉP SỬ DỤNG CÔNG CỤ NÀY KHI VÀ CHỈ KHI:
     Bạn đã gọi tool 'lookup_hcmut_info' nhưng các tài liệu trả về KHÔNG LIÊN QUAN hoặc KHÔNG ĐỦ THÔNG TIN để trả lời câu hỏi.
     """
-    
+
     # 1. Trích xuất metadata từ config
     thread_id = config.get("configurable", {}).get("thread_id", "unknown_thread")
     user_id = config.get("configurable", {}).get("user_id", "unknown_user")
 
     # 2. FIRE-AND-FORGET: Đẩy việc ghi DB ra một task chạy ngầm
     # Agent sẽ đi tiếp ngay lập tức mà không cần đợi DB lưu xong
-    asyncio.create_task(background_log_missing_knowledge(
-        user_id=user_id, 
-        thread_id=thread_id, 
-        query=query
-    ))
+    asyncio.create_task(
+        background_log_missing_knowledge(user_id=user_id, thread_id=thread_id, query=query)
+    )
 
     # 3. Kích hoạt tool Web Search thật (Đã định nghĩa web_search_tool từ trước)
     try:
@@ -300,6 +455,7 @@ async def tavily_search_results_json(query: str, config: RunnableConfig):
         logger.exception("Web Search Tool Error")
         return "SYSTEM_ERROR: Không thể truy cập Internet lúc này."
 
+
 # Agent được nhìn thấy cả 2 tool
 tools = [lookup_hcmut_info, tavily_search_results_json]
 tool_node = ToolNode(tools)
@@ -308,14 +464,17 @@ tool_node = ToolNode(tools)
 # AGENT STATE & MODEL
 # ==============================================================================
 
+
 class AgentState(MessagesState):
     pass
+
 
 async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     m_with_tools = m.bind_tools(tools)
 
-    sys_msg = SystemMessage(content="""
+    sys_msg = SystemMessage(
+        content="""
     Bạn là trợ lý ảo AI của trường Đại học Bách Khoa TP.HCM (HCMUT).
 
     QUY TRÌNH SUY LUẬN (AGENTIC FLOW):
@@ -335,22 +494,24 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
 
     LƯU Ý QUAN TRỌNG:
     - KHÔNG BỊA ĐẶT thông tin.
-    """)
+    """
+    )
 
     # Đảm bảo System Message luôn ở đầu
     current_messages = list(state["messages"])
     if not isinstance(current_messages[0], SystemMessage):
         current_messages.insert(0, sys_msg)
     else:
-        current_messages[0] = sys_msg # Cập nhật prompt mới nhất
+        current_messages[0] = sys_msg  # Cập nhật prompt mới nhất
 
     response = await m_with_tools.ainvoke(current_messages, config)
 
-    # Add time to 
+    # Add time to
     current_time = datetime.now(timezone.utc).isoformat()
     response.additional_kwargs["timestamp"] = current_time
 
     return {"messages": [response]}
+
 
 async def handle_error(state: AgentState):
     last_message = state["messages"][-1]
@@ -363,22 +524,24 @@ async def handle_error(state: AgentState):
                 ToolMessage(
                     tool_call_id=tool_call["id"],
                     name=tool_call["name"],
-                    content="Lỗi: Luồng xử lý bị ngắt do vi phạm logic an toàn hoặc quá giới hạn lượt truy cập."
+                    content="Lỗi: Luồng xử lý bị ngắt do vi phạm logic an toàn hoặc quá giới hạn lượt truy cập.",
                 )
             )
-    
+
     # 2. Tạo câu trả lời lịch sự cho người dùng
     error_content = "Rất tiếc, tôi không thể tiếp tục tìm kiếm thêm thông tin cho câu hỏi này để đảm bảo độ chính xác. Bạn có thể thử đặt câu hỏi khác cụ thể hơn được không?"
-    
+
     # if len(state["messages"]) > MAX_TURNS * 2:
     #     error_content = "Cuộc hội thoại đã đạt giới hạn tối đa. Bạn vui lòng làm mới (reset) hoặc tóm tắt lại ý chính để mình hỗ trợ tiếp nhé!"
 
     # Trả về cả ToolMessages (để đóng tool call) và AIMessage (để trả lời user)
     return {"messages": tool_outputs + [AIMessage(content=error_content)]}
 
+
 # ==============================================================================
 # ROUTING LOGIC (GUARDRAILS / CIRCUIT BREAKER)
 # ==============================================================================
+
 
 def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
     """
@@ -407,15 +570,12 @@ def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
         if isinstance(messages[i], HumanMessage):
             last_human_index = i
             break
-            
+
     # Chỉ lấy các tin nhắn trong lượt hội thoại hiện tại (từ lúc user hỏi đến giờ)
     current_turn_messages = messages[last_human_index:]
 
     # Lấy danh sách tool ĐÃ từng gọi trong lượt này
-    past_tools_called = [
-        msg.name for msg in current_turn_messages 
-        if isinstance(msg, ToolMessage)
-    ]
+    past_tools_called = [msg.name for msg in current_turn_messages if isinstance(msg, ToolMessage)]
 
     # --- RULE 1: BLOCK LOOP WEB SEARCH ---
     # Nếu muốn gọi Tavily, mà trước đó đã gọi Tavily rồi -> CẤM
@@ -434,6 +594,7 @@ def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
 
     # Nếu hợp lệ -> Cho phép đi vào node Tools
     return "tools"
+
 
 # ==============================================================================
 # GRAPH DEFINITION
@@ -454,9 +615,9 @@ workflow.add_conditional_edges(
     route_tools,
     {
         "tools": "tools",
-        "handle_error": "handle_error", # Trỏ về node xử lý lỗi
-        "__end__": END
-    }
+        "handle_error": "handle_error",  # Trỏ về node xử lý lỗi
+        "__end__": END,
+    },
 )
 
 # Edge quay lại
@@ -520,19 +681,19 @@ kb_agent = workflow.compile()
 #         task_faq = retriever_service.search(
 #             query=query, collection_name=collection_faq, top_k=2, score_threshold=0.6
 #         )
-        
+
 #         docs_result, faq_result = await asyncio.gather(task_doc, task_faq)
 
 #         # 3. Logic ưu tiên FAQ
 #         best_faq = faq_result[0] if faq_result else None
-        
+
 #         # Nếu trúng FAQ điểm cao -> Trả về câu trả lời ngay
 #         if best_faq and best_faq.score >= FAQ_THRESHOLD:
 #             # Lấy câu trả lời từ metadata hoặc fallback
-#             final_answer = getattr(best_faq, "answer", None) 
-#             if not final_answer: 
+#             final_answer = getattr(best_faq, "answer", None)
+#             if not final_answer:
 #                  final_answer = best_faq.metadata.get("answer") or best_faq.content
-            
+
 #             return f"FOUND_IN_FAQ: {final_answer}"
 
 #         # 4. Nếu không trúng FAQ -> Trả về danh sách Documents
@@ -577,7 +738,7 @@ kb_agent = workflow.compile()
 
 # async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
 #     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    
+
 #     # Bind tools để model biết nó có quyền dùng
 #     m_with_tools = m.bind_tools(tools)
 
@@ -586,7 +747,7 @@ kb_agent = workflow.compile()
 #     Bạn là trợ lý ảo AI hỗ trợ cho sinh viên và phụ huynh trường Đại học Bách Khoa TP.HCM (HCMUT).
 
 #     QUY TRÌNH SUY LUẬN (THỰC HIỆN THEO THỨ TỰ):
-    
+
 #     1. **PHÂN LOẠI CÂU HỎI:**
 #        - Nếu là chào hỏi xã giao (Hi, Xin chào) -> Trả lời lịch sự ngay, KHÔNG dùng tool.
 #        - Nếu câu hỏi KHÔNG liên quan đến Bách Khoa TP.HCM (vd: nấu ăn, bóng đá, thời tiết) -> Từ chối lịch sự.
@@ -600,7 +761,7 @@ kb_agent = workflow.compile()
 
 #     3. **TÌM KIẾM WEB (Ưu tiên số 2 - Fallback):**
 #        - CHỈ KHI tool nội bộ trả về "không tìm thấy thông tin" HOẶC thông tin quá sơ sài, bạn mới được dùng tool `tavily_search_results_json`.
-    
+
 #     4. **CẢNH BÁO:**
 #        - Nếu bạn trả lời dựa trên kết quả từ `tavily_search_results_json`, CUỐI CÂU TRẢ LỜI PHẢI CÓ DÒNG SAU:
 #          "⚠️ *Lưu ý: Thông tin này được tìm kiếm từ internet để tham khảo, không phải thông tin từ cơ sở dữ liệu chính thống của trường.*"
@@ -669,9 +830,9 @@ kb_agent = workflow.compile()
 # # ==============================================================================
 # # CONFIGURATION
 # # ==============================================================================
-# # Ngưỡng tin cậy để quyết định dùng FAQ. 
+# # Ngưỡng tin cậy để quyết định dùng FAQ.
 # # Nếu FAQ score >= 0.80 -> Dùng FAQ. Thấp hơn -> Dùng Documents.
-# FAQ_THRESHOLD = 0.80 
+# FAQ_THRESHOLD = 0.80
 
 # # ==============================================================================
 # # STATE DEFINITION
@@ -715,12 +876,12 @@ kb_agent = workflow.compile()
 #         return {"retrieved_documents": [], "is_faq_hit": False}
 
 #     query = human_messages[-1].content
-    
+
 #     # 1. Xác định Collection Names
 #     collection_faq = "faqs" # Giả sử quy tắc đặt tên là faq_{id}
 #     kb_id = config.get("configurable", {}).get("kb_id")
 #     if not kb_id:
-#         collection_doc = "kb_1" 
+#         collection_doc = "kb_1"
 #         logger.warning("Không tìm thấy kb_id, dùng default: 'kb_1'")
 #     else:
 #         collection_doc = f"kb_{kb_id}"
@@ -732,7 +893,7 @@ kb_agent = workflow.compile()
 #         task_doc = retriever_service.search(
 #             query=query, collection_name=collection_doc, top_k=5, score_threshold=0.4
 #         )
-        
+
 #         # Task 2: Tìm trong FAQ (Chỉ cần top 1 hoặc 3 để check match)
 #         task_faq = retriever_service.search(
 #             query=query, collection_name=collection_faq, top_k=3, score_threshold=0.6
@@ -744,18 +905,18 @@ kb_agent = workflow.compile()
 #         # 3. Logic Quyết định: Ưu tiên FAQ
 #         # Kiểm tra xem có FAQ nào điểm cao vượt ngưỡng không
 #         best_faq = faq_result[0] if faq_result else None
-        
+
 #         if best_faq and best_faq.score >= FAQ_THRESHOLD:
 #             logger.info(f"FAQ HIT! Score: {best_faq.score} - Query: {query}")
-            
+
 #             # --- XỬ LÝ ĐẶC BIỆT CHO FAQ ---
 #             # Lấy câu trả lời gốc từ metadata
 #             final_answer = best_faq.answer
-            
+
 #             # QUAN TRỌNG: Tạo AIMessage ngay tại đây
 #             # Đây chính là hành động "không gen", mà lấy text có sẵn trả về luôn
 #             direct_response = AIMessage(content=final_answer)
-            
+
 #             return {
 #                 "messages": [direct_response], # Append tin nhắn này vào lịch sử
 #                 "is_faq_hit": True,            # Cờ để router biết đường đi
@@ -764,7 +925,7 @@ kb_agent = workflow.compile()
 
 #         # 4. Fallback: Nếu không trúng FAQ, dùng kết quả Documents
 #         logger.info(f"Using Documents. Retrieved {len(docs_result)} docs from {collection_doc}")
-        
+
 #         document_summaries = []
 #         for doc in docs_result:
 #             document_summaries.append({
@@ -775,7 +936,7 @@ kb_agent = workflow.compile()
 #                 "score": doc.score,
 #                 "metadata": doc.metadata
 #             })
-            
+
 #         return {
 #             "retrieved_documents": document_summaries,
 #             "is_faq_hit": False
@@ -810,14 +971,14 @@ kb_agent = workflow.compile()
 #     """Wrap the model with a system prompt dynamically based on context."""
 
 #     # def create_system_message(state):
-        
+
 #     #     # Base prompt chung
 #     #     base_prompt = "You are a helpful assistant."
 
 #     #     # Prompt suy luận cho Documents
 #     #     instructions = """
 #     #     You will receive retrieved documents from a knowledge base.
-        
+
 #     #     Guidelines:
 #     #     1. Base your answer primarily on the retrieved documents.
 #     #     2. If documents are insufficient, state that you don't have enough info.
@@ -842,10 +1003,10 @@ kb_agent = workflow.compile()
 #         # CẬP NHẬT LOGIC VỚI GUARDRAIL
 #         instructions = """
 #         You have access to a knowledge base (retrieved documents) and a web search tool.
-        
+
 #         INSTRUCTIONS:
 #         0. **SCOPE VALIDATION (CRITICAL):** - FIRST, evaluate if the user's question is related to "Trường Đại học Bách Khoa TP.HCM" (HCMUT), its academic programs, student life, regulations, or campus activities.
-#            - If the question is **completely unrelated** (e.g., "How to cook pasta", "Weather in Tokyo", "Who is Messi"), you must **REFUSE** to answer. 
+#            - If the question is **completely unrelated** (e.g., "How to cook pasta", "Weather in Tokyo", "Who is Messi"), you must **REFUSE** to answer.
 #            - In this case, reply politely: "Tôi chỉ có thể hỗ trợ các câu hỏi liên quan đến trường Đại học Bách Khoa TP.HCM." and **DO NOT use any tools**.
 
 #         1. **CHECK CONTEXT:** - If the question IS related to the university, check the "CONTEXT INFORMATION" below.
@@ -853,18 +1014,18 @@ kb_agent = workflow.compile()
 #            - Always cite sources if using CONTEXT INFORMATION.
 
 #         2. **WEB SEARCH FALLBACK:** - ONLY if the question is related to the university BUT the context is empty or insufficient, you MUST use the 'tavily_search_results_json' tool to find the answer.
-#            - 
+#            -
 #         3. **SYNTHESIS & DISCLAIMER:**
 #            - If you use the search tool, synthesize the answer based on the search results.
 #            - **IMPORTANT:** If the answer is derived from the search tool, you MUST end your response with the following disclaimer:
-             
+
 #              "⚠️ *Lưu ý: Thông tin này được tìm kiếm từ internet để tham khảo, không phải thông tin từ cơ sở dữ liệu chính thống của trường.*"
 #         """
 
 #         # Context injection
 #         # Nếu không có docs thì kb_documents là chuỗi rỗng
 #         document_prompt = f"\n\nCONTEXT INFORMATION:\n{state.get('kb_documents', 'No documents found.')}\n\nPlease answer the user."
-        
+
 #         full_content = base_prompt + instructions + document_prompt
 
 #         return [SystemMessage(content=full_content)] + state["messages"]
@@ -894,7 +1055,7 @@ kb_agent = workflow.compile()
 #     """
 #     if state.get("is_faq_hit"):
 #         return END
-    
+
 #     return "prepare_augmented_prompt"
 
 # # ==============================================================================
@@ -928,7 +1089,7 @@ kb_agent = workflow.compile()
 # # tools_condition là hàm có sẵn của LangGraph, nó check message cuối có tool_calls không
 # agent.add_conditional_edges(
 #     "model",
-#     tools_condition, 
+#     tools_condition,
 #     {
 #         "tools": "tools", # Nếu LLM gọi tool -> Sang node tools
 #         END: END          # Nếu LLM trả lời text thường -> End
@@ -1037,18 +1198,18 @@ kb_agent = workflow.compile()
 #         return {"retrieved_documents": []}
 
 #     query = human_messages[-1].content
-    
+
 #     # 2. Xác định Knowledge Base ID (Collection Name)
 #     # Trong môi trường Production, ID này thường đến từ config của phiên chat (user đang chat với bot nào?)
 #     # Config này được truyền vào khi invoke graph: app.invoke(..., config={"configurable": {"kb_id": "123"}})
-    
+
 #     kb_id = config.get("configurable", {}).get("kb_id")
-    
+
 #     # Fallback: Nếu không có kb_id, dùng ID mặc định hoặc hardcode (theo logic cũ của bạn)
 #     # Ví dụ: nếu storage_id của document upload lên là '1', thì collection là 'kb_1'
 #     if not kb_id:
 #         # TODO: Bạn hãy thay '1' bằng logic lấy ID thực tế của bạn
-#         collection_name = "kb_1" 
+#         collection_name = "kb_1"
 #         logger.warning("Không tìm thấy kb_id trong config, dùng default: 'kb_1'")
 #     else:
 #         collection_name = f"kb_{kb_id}"
@@ -1071,16 +1232,16 @@ kb_agent = workflow.compile()
 #                 "id": doc.chunk_id,
 #                 "doc_id": doc.doc_id, # ID file gốc để trích dẫn
 #                 "type": doc.source_type, # pdf/docx...
-                
+
 #                 # Content lấy trực tiếp từ Payload Qdrant (code cũ là lấy từ SQLite)
-#                 "content": doc.content, 
-                
+#                 "content": doc.content,
+
 #                 "score": doc.score,
 #                 "metadata": doc.metadata
 #             })
 
 #         logger.info(f"Retrieved {len(document_summaries)} docs from {collection_name}")
-        
+
 #         return {
 #             "retrieved_documents": document_summaries
 #         }
