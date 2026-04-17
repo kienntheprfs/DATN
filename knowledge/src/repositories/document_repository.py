@@ -44,12 +44,28 @@ class DocumentRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, document_id: int) -> Optional[Document]:
-        query = (
-            select(Document)
-            .where(Document.id == document_id)
-            .where(Document.status != DocumentStatus.DELETED)
-        )
+    async def get_by_id(
+        self,
+        document_id: int,
+        include_deleted: bool = False,
+    ) -> Optional[Document]:
+        """
+        Get document by ID.
+
+        Args:
+            document_id: ID of the document
+            include_deleted: If True, include DELETED documents.
+                            Default False (excludes DELETED).
+                            Note: DELETE_PENDING and DELETE_FAILED are always included
+                            since they're transitional states.
+        """
+        query = select(Document).where(Document.id == document_id)
+
+        if not include_deleted:
+            # Only exclude permanently deleted documents
+            # Keep DELETE_PENDING and DELETE_FAILED for status tracking
+            query = query.where(Document.status != DocumentStatus.DELETED)
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -58,10 +74,30 @@ class DocumentRepository:
         skip: int = 0,
         limit: int = 20,
         storage_id: Optional[int] = None,
+        include_deleted: bool = False,
+        include_delete_failed: bool = True,
     ) -> Sequence[Document]:
-        query = select(Document).where(Document.status != DocumentStatus.DELETED)
+        """
+        Get list of documents with optional filtering.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum records to return
+            storage_id: Filter by storage
+            include_deleted: Include permanently deleted documents
+            include_delete_failed: Include documents with delete failures
+        """
+        query = select(Document)
+
+        if not include_deleted:
+            query = query.where(Document.status != DocumentStatus.DELETED)
+
+        if not include_delete_failed:
+            query = query.where(Document.status != DocumentStatus.DELETE_FAILED)
+
         if storage_id:
             query = query.where(Document.storage_id == storage_id)
+
         query = query.order_by(desc(Document.updated_at)).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
@@ -82,6 +118,114 @@ class DocumentRepository:
             update(Document)
             .where(Document.id == document_id)
             .values(status=DocumentStatus.DELETED)
+        )
+        result = await self.db.execute(query)
+        return result.rowcount > 0
+
+    async def set_delete_pending(self, document_id: int) -> bool:
+        """
+        Set document status to DELETE_PENDING to indicate deletion in progress.
+
+        This method allows transition from:
+        - ACTIVE → DELETE_PENDING (initial deletion request)
+        - DELETE_FAILED → DELETE_PENDING (retry after failure)
+
+        Returns:
+            True if update succeeded, False if document not found or not in valid state.
+        """
+        query = (
+            update(Document)
+            .where(Document.id == document_id)
+            .where(
+                Document.status.in_(
+                    [
+                        DocumentStatus.ACTIVE,
+                        DocumentStatus.DELETE_FAILED,  # Allow retry from failed state
+                    ]
+                )
+            )
+            .values(
+                status=DocumentStatus.DELETE_PENDING,
+                deletion_started_at=func.now(),
+                deletion_error=None,  # Clear any previous error
+            )
+        )
+        result = await self.db.execute(query)
+        return result.rowcount > 0
+
+    async def set_delete_failed(
+        self,
+        document_id: int,
+        error_msg: str,
+    ) -> bool:
+        """
+        Set document status to DELETE_FAILED with error message.
+
+        Args:
+            document_id: ID of the document
+            error_msg: Error message describing what went wrong
+
+        Returns:
+            True if update succeeded, False if document not found.
+        """
+        query = (
+            update(Document)
+            .where(Document.id == document_id)
+            .where(
+                Document.status.in_(
+                    [
+                        DocumentStatus.DELETE_PENDING,
+                        DocumentStatus.DELETE_FAILED,
+                    ]
+                )
+            )
+            .values(
+                status=DocumentStatus.DELETE_FAILED,
+                deletion_error=error_msg[:1000] if error_msg else None,  # Truncate
+            )
+        )
+        result = await self.db.execute(query)
+        return result.rowcount > 0
+
+    async def set_deleted(self, document_id: int) -> bool:
+        """
+        Set document status to DELETED upon successful completion.
+
+        Returns:
+            True if update succeeded, False if document not found.
+        """
+        query = (
+            update(Document)
+            .where(Document.id == document_id)
+            .where(Document.status == DocumentStatus.DELETE_PENDING)
+            .values(
+                status=DocumentStatus.DELETED,
+                deletion_completed_at=func.now(),
+                deletion_error=None,  # Clear error on success
+            )
+        )
+        result = await self.db.execute(query)
+        return result.rowcount > 0
+
+    async def cancel_deletion(self, document_id: int) -> bool:
+        """
+        Cancel a pending deletion and restore document to ACTIVE status.
+
+        This is useful when:
+        - User wants to cancel deletion before it completes
+        - Need to retry deletion with fresh state
+
+        Returns:
+            True if cancellation succeeded, False if document not in DELETE_PENDING.
+        """
+        query = (
+            update(Document)
+            .where(Document.id == document_id)
+            .where(Document.status == DocumentStatus.DELETE_PENDING)
+            .values(
+                status=DocumentStatus.ACTIVE,
+                deletion_error=None,
+            )
         )
         result = await self.db.execute(query)
         return result.rowcount > 0
