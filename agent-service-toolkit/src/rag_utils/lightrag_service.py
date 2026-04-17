@@ -9,27 +9,34 @@ from core.settings import settings
 
 logger = logging.getLogger(__name__)
 
+
 # --- Các model Pydantic để hứng dữ liệu ---
 class LightRAGEntity(BaseModel):
     entity_name: str
     entity_type: str
     description: str
+    source_id: Optional[str] = None
+
 
 class LightRAGRelationship(BaseModel):
     src_id: str
     tgt_id: str
     description: str
+    source_id: Optional[str] = None
+
 
 class LightRAGChunk(BaseModel):
     chunk_id: str
     content: str
     file_path: Optional[str] = "Unknown"
-    score: float = 1.0 
+    score: float = 1.0
+
 
 class LightRAGResult(BaseModel):
     chunks: List[LightRAGChunk] = []
     entities: List[LightRAGEntity] = []
     relationships: List[LightRAGRelationship] = []
+
 
 class LightRAGService:
     def __init__(self):
@@ -44,10 +51,7 @@ class LightRAGService:
         return headers
 
     async def query_data(
-        self,
-        query: str,
-        mode: str = "hybrid", 
-        chunk_top_k: int = 5
+        self, query: str, mode: str = "hybrid", chunk_top_k: int = 5
     ) -> LightRAGResult:
         """Trả về toàn bộ Chunks, Entities và Relationships"""
         if not self.base_url:
@@ -58,17 +62,21 @@ class LightRAGService:
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload, headers=self._headers(), timeout=120.0)
+                response = await client.post(
+                    url, json=payload, headers=self._headers(), timeout=120.0
+                )
                 response.raise_for_status()
                 result_json = response.json()
 
                 if result_json.get("status") == "success":
                     data = result_json.get("data", {})
-                    
+
                     return LightRAGResult(
                         chunks=[LightRAGChunk(**c) for c in data.get("chunks", [])],
                         entities=[LightRAGEntity(**e) for e in data.get("entities", [])],
-                        relationships=[LightRAGRelationship(**r) for r in data.get("relationships", [])]
+                        relationships=[
+                            LightRAGRelationship(**r) for r in data.get("relationships", [])
+                        ],
                     )
                 return LightRAGResult()
             except Exception as e:
