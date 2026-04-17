@@ -32,7 +32,7 @@ def validate_upload_file(file: UploadFile) -> DocumentType:
         return ALLOWED_EXTENSIONS[ext]
 
     raise HTTPException(
-        status_code=400,
+        status_code=402,
         detail=(
             f"Unsupported file type. "
             f"filename={file.filename}, "

@@ -50,18 +50,30 @@ class ProcessingStatus(StrEnum):
 
 
 class DocumentStatus(StrEnum):
+    """
+    Document lifecycle status.
+
+    Flow:
+        ACTIVE → DELETE_PENDING → DELETED
+                            ↘ DELETE_FAILED (retry-able)
+    """
+
     ACTIVE = "active"
     ARCHIVED = "archived"
-    DELETED = "deleted"
+    DELETE_PENDING = "delete_pending"  # Deletion in progress (Celery task running)
+    DELETE_FAILED = "delete_failed"  # Deletion failed, can retry
+    DELETED = "deleted"  # Permanently deleted
 
 
 class FAQSource(StrEnum):
     """document = generated from ingestion; manual = curated in CMS / API."""
+
     DOCUMENT = "document"
     MANUAL = "manual"
 
 
 # --- Base & Mixins ---
+
 
 class Base(DeclarativeBase):
     metadata = MetaData(schema=settings.KNOWLEDGE_SCHEMA)
@@ -79,54 +91,21 @@ class TimestampMixin:
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-
-# --- Users & RBAC ---
-
-# Association Table cho User và Role
-user_roles = Table(
-    "user_roles",
-    Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-)
-
-
-class User(Base, TimestampMixin):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    full_name: Mapped[Optional[str]] = mapped_column(String(255))
-    is_active: Mapped[bool] = mapped_column(default=True)
-
-    roles: Mapped[List["Role"]] = relationship(
-        secondary=user_roles, back_populates="users"
-    )
-
-
-class Role(Base):
-    __tablename__ = "roles"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50), unique=True)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
-
-    users: Mapped[List["User"]] = relationship(
-        secondary=user_roles, back_populates="roles"
-    )
-    permissions: Mapped[List["RoleDocumentPermission"]] = relationship(
-        back_populates="role"
-    )
-
-
 # --- Tags ---
 
 # Association Table cho Document và Tag
 document_tags = Table(
     "document_tags",
     Base.metadata,
-    Column("document_id", Integer, ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True),
-    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "document_id",
+        Integer,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -143,6 +122,7 @@ class Tag(Base, TimestampMixin):
 
 
 # --- Documents ---
+
 
 class DocumentStorage(Base, TimestampMixin):
     __tablename__ = "document_storages"
@@ -189,6 +169,16 @@ class Document(Base, TimestampMixin):
     processing_completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True)
     )
+
+    # Deletion tracking fields
+    deletion_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deletion_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deletion_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     meta_data: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
     storage: Mapped["DocumentStorage"] = relationship(back_populates="documents")
@@ -196,9 +186,6 @@ class Document(Base, TimestampMixin):
         secondary=document_tags, back_populates="documents"
     )
     chunks: Mapped[List["Chunk"]] = relationship(
-        back_populates="document", cascade="all, delete-orphan"
-    )
-    role_permissions: Mapped[List["RoleDocumentPermission"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
 
@@ -212,8 +199,10 @@ class FormalDocument(Base, TimestampMixin):
     lightrag_track_id: Mapped[str] = mapped_column(String(255), index=True)
     lightrag_doc_id: Mapped[Optional[str]] = mapped_column(String(255), index=True)
 
+    meta_data: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
 # --- RAG Chunks ---
+
 
 class Chunk(Base, TimestampMixin):
     __tablename__ = "chunks"
@@ -236,12 +225,18 @@ class Chunk(Base, TimestampMixin):
 
 # --- FAQ & Permissions ---
 
+
 class FAQ(Base, TimestampMixin):
     __tablename__ = "faqs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[FAQSource] = mapped_column(
-        SAEnum(FAQSource, native_enum=False, length=20, values_callable=lambda obj: [e.value for e in obj]),
+        SAEnum(
+            FAQSource,
+            native_enum=False,
+            length=20,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         index=True,
     )
     document_id: Mapped[Optional[int]] = mapped_column(
@@ -270,27 +265,8 @@ class FAQQuestionVariant(Base):
     __tablename__ = "faq_question_variants"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    faq_id: Mapped[int] = mapped_column(
-        ForeignKey("faqs.id", ondelete="CASCADE")
-    )
+    faq_id: Mapped[int] = mapped_column(ForeignKey("faqs.id", ondelete="CASCADE"))
     question: Mapped[str] = mapped_column(Text)
     embedding_id: Mapped[str] = mapped_column(String(100), index=True)
 
     faq: Mapped["FAQ"] = relationship(back_populates="questions")
-
-
-class RoleDocumentPermission(Base, TimestampMixin):
-    __tablename__ = "role_document_permissions"
-
-    role_id: Mapped[int] = mapped_column(
-        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    )
-    document_id: Mapped[int] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
-    )
-
-    can_read: Mapped[bool] = mapped_column(default=True)
-    can_edit: Mapped[bool] = mapped_column(default=False)
-
-    role: Mapped["Role"] = relationship(back_populates="permissions")
-    document: Mapped["Document"] = relationship(back_populates="role_permissions")

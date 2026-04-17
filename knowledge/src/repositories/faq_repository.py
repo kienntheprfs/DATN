@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update, desc
+from sqlalchemy import select, delete, update, desc, func
 from sqlalchemy.orm import selectinload
 
 from src.models.models import FAQ, FAQQuestionVariant, FAQSource
@@ -9,6 +9,12 @@ from src.models.models import FAQ, FAQQuestionVariant, FAQSource
 class FAQRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def count_all(self) -> int:
+        """Get total count of all FAQs."""
+        stmt = select(func.count(FAQ.id))
+        result = await self.db.execute(stmt)
+        return result.scalar_one() or 0
 
     async def create_batch_faqs(
         self, document_id: int, faq_data_list: List[Dict]
@@ -87,19 +93,13 @@ class FAQRepository:
     async def get_by_id(
         self, faq_id: int, source: Optional[FAQSource] = None
     ) -> Optional[FAQ]:
-        stmt = (
-            select(FAQ)
-            .options(selectinload(FAQ.questions))
-            .where(FAQ.id == faq_id)
-        )
+        stmt = select(FAQ).options(selectinload(FAQ.questions)).where(FAQ.id == faq_id)
         if source is not None:
             stmt = stmt.where(FAQ.source == source)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_manual(
-        self, skip: int = 0, limit: int = 50
-    ) -> Sequence[FAQ]:
+    async def list_manual(self, skip: int = 0, limit: int = 50) -> Sequence[FAQ]:
         stmt = (
             select(FAQ)
             .options(selectinload(FAQ.questions))
@@ -162,9 +162,7 @@ class FAQRepository:
         await self.db.flush()
 
     async def delete_manual(self, faq_id: int) -> bool:
-        stmt = (
-            delete(FAQ).where(FAQ.id == faq_id).where(FAQ.source == FAQSource.MANUAL)
-        )
+        stmt = delete(FAQ).where(FAQ.id == faq_id).where(FAQ.source == FAQSource.MANUAL)
         result = await self.db.execute(stmt)
         return result.rowcount > 0
 

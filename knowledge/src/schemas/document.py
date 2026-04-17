@@ -13,10 +13,16 @@ class DocumentResponse(BaseModel):
     file_path: str
     file_size: int
     checksum: str
+    
     processing_status: ProcessingStatus
     processing_error: Optional[str] = None
     processing_started_at: Optional[datetime] = None
     processing_completed_at: Optional[datetime] = None
+
+    deletion_error: Optional[str] = None
+    deletion_started_at: Optional[datetime] = None
+    deletion_completed_at: Optional[datetime] = None
+
     meta_data: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
