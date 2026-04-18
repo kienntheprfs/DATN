@@ -15,7 +15,11 @@ from src.core.sql_db_setup import get_db
 from src.services.document_service import DocumentService
 from ..schemas.document import DocumentDetailResponse, DocumentResponse, DocumentUpdate
 from ..schemas.formal_document import FormalDocumentResponse, FormalDocumentUpdate
-from src.workers.celery_tasks import trigger_ingestion_pipeline
+from src.workers.celery_tasks import (
+    trigger_ingestion_pipeline,
+    trigger_document_deletion,
+    trigger_formal_document_deletion,
+)
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -168,7 +172,7 @@ async def update_document(
     return await service.update_document(document_id, payload)
 
 
-@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{document_id}", status_code=status.HTTP_202_ACCEPTED)
 async def delete_document(
     document_id: int = Path(..., title="The ID of the document to delete"),
     is_formal_doc: Optional[bool] = Query(
@@ -177,27 +181,204 @@ async def delete_document(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Soft delete a document (change status to DELETED).
+    Delete a document asynchronously via Celery task.
+
+    This endpoint:
+    1. Sets document status to DELETE_PENDING (immediate)
+    2. Triggers Celery task for background deletion
+    3. Returns immediately with task ID for tracking
+
+    Document status flow:
+    - ACTIVE → DELETE_PENDING (when API called)
+    - DELETE_PENDING → DELETED (on success)
+    - DELETE_PENDING → DELETE_FAILED (on failure, can retry)
+
+    Deletion includes:
+    - Deleting vectors from Qdrant
+    - Deleting chunk metadata from PostgreSQL
+    - Soft-deleting the document record
+    - Deleting the file from storage (if applicable)
+    - Invalidating semantic cache
+
+    To check deletion status:
+    - GET /documents/{id} - Check status field and deletion_error field
+    - Status "delete_pending" = deletion in progress
+    - Status "deleted" = deletion completed
+    - Status "delete_failed" = deletion failed (see deletion_error for details)
+
+    To retry a failed deletion:
+    - Call DELETE /documents/{id} again
+
+    Returns:
+        202 Accepted with document_id and task_id for tracking
     """
     service = DocumentService(db)
-    if is_formal_doc is True:
-        await service.delete_formal_document(document_id)
-        return
-    if is_formal_doc is False:
-        await service.delete_document(document_id)
-        return
 
+    # Import here to avoid circular import
+    from src.models.models import DocumentStatus
+
+    # Detect document type if not explicitly specified
+    if is_formal_doc is True:
+        # Explicit formal document deletion
+        formal_doc = await service.formal_doc_repo.get_by_id(document_id)
+        if not formal_doc:
+            raise HTTPException(status_code=404, detail="Formal document not found")
+
+        # Sync from LightRAG to get latest status
+        try:
+            await service._sync_formal_doc_from_lightrag(formal_doc)
+        except Exception:
+            pass  # Proceed with deletion even if sync fails
+
+        task = trigger_formal_document_deletion(
+            document_id=document_id,
+            lightrag_doc_id=formal_doc.lightrag_doc_id,
+            storage_id=formal_doc.storage_id,
+            storage_path=formal_doc.file_path,
+        )
+
+        return {
+            "status": "queued",
+            "message": "Formal document deletion queued",
+            "document_id": document_id,
+            "task_id": task.id,
+        }
+
+    if is_formal_doc is False:
+        # Explicit normal document deletion
+        normal_doc = await service.doc_repo.get_by_id(document_id)
+        if not normal_doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Check current status
+        if normal_doc.status == DocumentStatus.DELETED:
+            raise HTTPException(
+                status_code=400, detail="Document has already been deleted"
+            )
+
+        if normal_doc.status == DocumentStatus.DELETE_PENDING:
+            raise HTTPException(
+                status_code=409,
+                detail="Document deletion is already in progress. "
+                "Please wait or check the current status.",
+            )
+
+        # Prepare message based on previous status
+        is_retry = normal_doc.status == DocumentStatus.DELETE_FAILED
+        previous_error = normal_doc.deletion_error if is_retry else None
+
+        # Set status to DELETE_PENDING before triggering task
+        collection_name = f"kb_{normal_doc.storage_id}"
+        updated = await service.doc_repo.set_delete_pending(document_id)
+
+        if not updated:
+            # Document may have been modified concurrently
+            raise HTTPException(
+                status_code=409, detail="Document status changed. Please retry."
+            )
+
+        # Commit the status change immediately
+        await db.commit()
+
+        task = trigger_document_deletion(
+            document_id=document_id,
+            collection_name=collection_name,
+            storage_id=normal_doc.storage_id,
+            storage_path=normal_doc.file_path,
+        )
+
+        response = {
+            "status": "queued",
+            "message": "Document deletion queued",
+            "document_id": document_id,
+            "task_id": task.id,
+            "current_status": "delete_pending",
+        }
+
+        if is_retry:
+            response["message"] = (
+                "Document deletion queued (retry after previous failure)"
+            )
+            response["previous_error"] = previous_error
+
+        return response
+
+    # Auto-detect: check both tables
     normal_doc = await service.doc_repo.get_by_id(document_id)
     formal_doc = await service.formal_doc_repo.get_by_id(document_id)
+
     if normal_doc and formal_doc:
         raise HTTPException(
             status_code=409,
             detail="Ambiguous document id. Please set is_formal_doc=true/false explicitly.",
         )
     if formal_doc:
-        await service.delete_formal_document(document_id)
+        # Sync from LightRAG to get latest status
+        try:
+            await service._sync_formal_doc_from_lightrag(formal_doc)
+        except Exception:
+            pass
+
+        task = trigger_formal_document_deletion(
+            document_id=document_id,
+            lightrag_doc_id=formal_doc.lightrag_doc_id,
+            storage_id=formal_doc.storage_id,
+            storage_path=formal_doc.file_path,
+        )
+
+        return {
+            "status": "queued",
+            "message": "Formal document deletion queued (auto-detected)",
+            "document_id": document_id,
+            "task_id": task.id,
+        }
     elif normal_doc:
-        await service.delete_document(document_id)
+        # Same logic as explicit normal doc deletion
+        if normal_doc.status == DocumentStatus.DELETED:
+            raise HTTPException(
+                status_code=400, detail="Document has already been deleted"
+            )
+
+        if normal_doc.status == DocumentStatus.DELETE_PENDING:
+            raise HTTPException(
+                status_code=409, detail="Document deletion is already in progress."
+            )
+
+        # Check if this is a retry after previous failure
+        is_retry = normal_doc.status == DocumentStatus.DELETE_FAILED
+        previous_error = normal_doc.deletion_error if is_retry else None
+
+        collection_name = f"kb_{normal_doc.storage_id}"
+        updated = await service.doc_repo.set_delete_pending(document_id)
+
+        if not updated:
+            raise HTTPException(
+                status_code=409, detail="Document status changed. Please retry."
+            )
+
+        await db.commit()
+
+        task = trigger_document_deletion(
+            document_id=document_id,
+            collection_name=collection_name,
+            storage_id=normal_doc.storage_id,
+            storage_path=normal_doc.file_path,
+        )
+
+        response = {
+            "status": "queued",
+            "message": "Document deletion queued (auto-detected)",
+            "document_id": document_id,
+            "task_id": task.id,
+            "current_status": "delete_pending",
+        }
+
+        if is_retry:
+            response["message"] = (
+                "Document deletion queued (retry after previous failure)"
+            )
+            response["previous_error"] = previous_error
+
+        return response
     else:
         raise HTTPException(status_code=404, detail="Document not found")
-    return  # 204 No Content returns nothing
