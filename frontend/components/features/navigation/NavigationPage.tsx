@@ -479,7 +479,7 @@ export default function NavigationPage() {
     if (!isDragging) return;
     const dx = e.clientX - lastMousePos.current.x;
     const dy = e.clientY - lastMousePos.current.y;
-    setPosition((p) => ({ x: p.x + dx, y: p.y + dy }));
+    setPosition((p) => p ? { x: p.x + dx, y: p.y + dy } : null);
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   };
 
