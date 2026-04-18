@@ -9,9 +9,10 @@ import { RouteResponse, MapData, MapNode, MapEdge, Building, Instruction } from 
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { LocationSearch } from './LocationSearch';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Navigation, RefreshCw} from 'lucide-react';
+import { ArrowUpDown, Navigation, RefreshCw, Map as MapIcon } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const ACTION_ICONS: Record<string, string> = {
   start: 'trip_origin',
@@ -55,6 +56,7 @@ interface FloorSegment {
 export default function NavigationPage() {
   const buildings = useBuildingStore((state) => state.buildings);
   const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
+  const isMobile = useIsMobile();
   
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null);
   const [floorMaps, setFloorMaps] = useState<FloorMap[]>([]);
@@ -75,9 +77,10 @@ export default function NavigationPage() {
   const [loading, setLoading] = useState(false);
   const [mapLoading, setMapLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [floorChangeNotice, setFloorChangeNotice] = useState<{ show: boolean; text: string }>({ show: false, text: '' });
   const [highlightedCoord, setHighlightedCoord] = useState<{ x: number; y: number } | null>(null);
@@ -163,14 +166,28 @@ export default function NavigationPage() {
   }, [currentFloorIndex]);
 
   useEffect(() => {
-    if (currentMap && svgRef.current) {
+    if (svgRef.current && position === null) {
       const rect = svgRef.current.getBoundingClientRect();
       setPosition({
         x: (rect.width - MAP_WIDTH) / 2,
         y: (rect.height - MAP_HEIGHT) / 2,
       });
     }
-  }, [currentMap]);
+  }, [currentMap, position]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setPosition({
+          x: (rect.width - MAP_WIDTH) / 2,
+          y: (rect.height - MAP_HEIGHT) / 2,
+        });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleRefreshCache = async () => {
     try {
@@ -501,198 +518,317 @@ export default function NavigationPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-border bg-card px-6 py-3 z-20 shadow-sm">
-        <div className="flex items-center gap-4">
+      <header className="flex items-center justify-between whitespace-nowrap border-b border-border bg-card px-4 py-3 z-20 shadow-sm">
+        <div className="flex items-center gap-3">
           <div className="size-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary-foreground">map</span>
+            <MapIcon className="size-5 text-primary-foreground" />
           </div>
-          <h2 className="text-card-foreground text-lg font-bold leading-tight">
+          <h2 className="text-card-foreground text-base sm:text-lg font-bold leading-tight truncate max-w-[150px] sm:max-w-none">
             {currentMap?.name || 'Campus Pathfinding'}
           </h2>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-[420px] border-r border-border flex flex-col bg-card overflow-y-visible z-10 shadow-lg relative">
-          <div className="p-4 space-y-4">
-            {/* Search */}
-            <div className="flex flex-col gap-2">
-              <LocationSearch
-                value={startLocation}
-                onChange={(val, nodeId) => {
-                  setStartLocation(val);
-                  setStartNodeId(nodeId);
-                }}
-                placeholder="Start location..."
-                icon="origin"
-              />
-              
-              <div className="flex justify-center -my-2 relative z-10">
-                <Button
-                  size="icon"
-                  onClick={handleSwap}
-                  className="rounded-full"
-                >
-                  <ArrowUpDown className="size-5" />
-                </Button>
-              </div>
-              
-              <LocationSearch
-                value={endLocation}
-                onChange={(val, nodeId) => {
-                  setEndLocation(val);
-                  setEndNodeId(nodeId);
-                }}
-                placeholder="Destination..."
-                icon="destination"
-              />
-            </div>
-
-            {/* Find Route Button */}
-            <Button
-              onClick={handleFindRoute}
-              disabled={loading || !startNodeId || !endNodeId}
-              className="w-full"
-              size="lg"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="size-4 animate-spin" />
-                  Finding route...
-                </>
-              ) : (
-                <>
-                  <Navigation className="size-4" />
-                  Find Route
-                </>
-              )}
-            </Button>
-
-            {/* Refresh Cache Button */}
-            <Button
-              variant="secondary"
-              onClick={handleRefreshCache}
-              className="w-full"
-            >
-              <RefreshCw className="size-4" />
-              Refresh Map Cache
-            </Button>
-
-            {error && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <Separator />
-
-            {/* Directions */}
-            {route && (
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between px-2 pb-4">
-                  <h3 className="text-card-foreground text-lg font-bold leading-tight">Hướng dẫn</h3>
-                  <span className="text-xs text-muted-foreground">~{Math.ceil(route.total_distance_m / 80)} phút • {Math.round(route.total_distance_m)}m</span>
+        {/* Desktop Sidebar - Only show on desktop */}
+        {!isMobile && (
+          <aside className="w-[320px] lg:w-[420px] border-r border-border flex flex-col bg-card overflow-y-visible z-10 shadow-lg relative">
+            <div className="p-4 space-y-4">
+              {/* Search */}
+              <div className="flex flex-col gap-2">
+                <LocationSearch
+                  value={startLocation}
+                  onChange={(val, nodeId) => {
+                    setStartLocation(val);
+                    setStartNodeId(nodeId);
+                  }}
+                  placeholder="Start location..."
+                  icon="origin"
+                />
+                
+                <div className="flex justify-center -my-2 relative z-10">
+                  <Button
+                    size="icon"
+                    onClick={handleSwap}
+                    className="rounded-full"
+                  >
+                    <ArrowUpDown className="size-5" />
+                  </Button>
                 </div>
+                
+                <LocationSearch
+                  value={endLocation}
+                  onChange={(val, nodeId) => {
+                    setEndLocation(val);
+                    setEndNodeId(nodeId);
+                  }}
+                  placeholder="Destination..."
+                  icon="destination"
+                />
+              </div>
 
-                {/* Floor Change Notice */}
-                {floorSegments.length > 1 && (
-                  <div className="mb-3 p-3 bg-accent border border-border rounded-lg">
-                    <div className="flex items-center gap-2 text-accent-foreground">
-                      <span className="material-symbols-outlined">layers</span>
-                      <span className="text-sm font-medium">
-                        Đường đi qua {floorSegments.length} tầng • Click mũi tên ⬅️ ➡️ để xem từng tầng
-                      </span>
-                    </div>
-                  </div>
+              {/* Find Route Button */}
+              <Button
+                onClick={handleFindRoute}
+                disabled={loading || !startNodeId || !endNodeId}
+                className="w-full"
+                size="lg"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="size-4 animate-spin" />
+                    Finding route...
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="size-4" />
+                    Find Route
+                  </>
                 )}
+              </Button>
 
-                <div className="space-y-1 overflow-y-auto max-h-96 pr-2 custom-scrollbar">
-                  {route.instructions.map((instruction, idx) => {
-                    const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
-                    
-                    return (
-                    <div 
-                      key={idx}
-                      onClick={() => handleInstructionClick(instruction.coordinate)}
-                      className={`flex gap-4 p-3 rounded-lg cursor-pointer ${
-                        instruction.action === 'start' || instruction.action === 'arrive'
-                          ? 'bg-primary/10 border-l-4 border-primary'
-                          : isFloorChange
-                            ? 'bg-accent border-l-4 border-primary'
-                            : 'hover:bg-muted border-l-4 border-transparent'
-                      } transition-colors`}
-                    >
-                      <div className="flex flex-col items-center">
-                        <div className={`p-2 rounded-full ${
-                          instruction.action === 'start' || instruction.action === 'arrive'
-                            ? 'bg-primary/10'
-                            : isFloorChange
-                              ? 'bg-primary/10'
-                              : 'bg-muted'
-                        }`}>
-                          <span className={`material-symbols-outlined ${
-                            instruction.action === 'start' || instruction.action === 'arrive'
-                              ? 'text-primary'
-                              : isFloorChange
-                                ? 'text-primary'
-                                : 'text-muted-foreground'
-                          }`}>
-                            {ACTION_ICONS[instruction.action] || 'straight'}
-                          </span>
-                        </div>
-                        {idx < route.instructions.length - 1 && (
-                          <div className="w-0.5 h-full bg-border my-1"></div>
-                        )}
-                      </div>
-                      <div className="flex flex-col justify-center flex-1">
-                        <p className="text-sm font-medium text-foreground">{instruction.text}</p>
-                        {instruction.distance_m > 0 && (
-                          <p className="text-muted-foreground text-xs">{instruction.distance_m}m</p>
-                        )}
-                      </div>
-                      <div className="flex items-center">
-                        <span className="material-symbols-outlined text-muted-foreground text-sm">near_me</span>
+              <Button
+                variant="secondary"
+                onClick={handleRefreshCache}
+                className="w-full"
+              >
+                <RefreshCw className="size-4" />
+                Refresh Map Cache
+              </Button>
+
+              {error && (
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Directions */}
+              {route && (
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between px-2 pb-4">
+                    <h3 className="text-card-foreground text-lg font-bold leading-tight">Hướng dẫn</h3>
+                    <span className="text-xs text-muted-foreground">~{Math.ceil(route.total_distance_m / 80)} phút • {Math.round(route.total_distance_m)}m</span>
+                  </div>
+
+                  {floorSegments.length > 1 && (
+                    <div className="mb-3 p-3 bg-accent border border-border rounded-lg">
+                      <div className="flex items-center gap-2 text-accent-foreground">
+                        <span className="material-symbols-outlined">layers</span>
+                        <span className="text-sm font-medium">
+                          Đường đi qua {floorSegments.length} tầng
+                        </span>
                       </div>
                     </div>
-                  )})}
-                </div>
-              </div>
-            )}
+                  )}
 
-            {!route && !loading && !error && (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <span className="material-symbols-outlined text-muted-foreground text-6xl mb-4">directions</span>
-                <p className="text-muted-foreground text-sm">Enter start and destination to find a route</p>
-              </div>
-            )}
-          </div>
-        </aside>
+                  <div className="space-y-1 overflow-y-auto max-h-96 pr-2 custom-scrollbar">
+                    {route.instructions.map((instruction, idx) => {
+                      const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
+                      return (
+                      <div 
+                        key={idx}
+                        onClick={() => handleInstructionClick(instruction.coordinate)}
+                        className={`flex gap-4 p-3 rounded-lg cursor-pointer ${
+                          instruction.action === 'start' || instruction.action === 'arrive'
+                            ? 'bg-primary/10 border-l-4 border-primary'
+                            : isFloorChange
+                              ? 'bg-accent border-l-4 border-primary'
+                              : 'hover:bg-muted border-l-4 border-transparent'
+                        } transition-colors`}
+                      >
+                        <div className="flex flex-col items-center">
+                          <div className={`p-2 rounded-full ${
+                            instruction.action === 'start' || instruction.action === 'arrive'
+                              ? 'bg-primary/10'
+                              : isFloorChange
+                                ? 'bg-primary/10'
+                                : 'bg-muted'
+                          }`}>
+                            <span className={`material-symbols-outlined ${
+                              instruction.action === 'start' || instruction.action === 'arrive'
+                                ? 'text-primary'
+                                : isFloorChange
+                                  ? 'text-primary'
+                                  : 'text-muted-foreground'
+                            }`}>
+                              {ACTION_ICONS[instruction.action] || 'straight'}
+                            </span>
+                          </div>
+                          {idx < route.instructions.length - 1 && (
+                            <div className="w-0.5 h-full bg-border my-1"></div>
+                          )}
+                        </div>
+                        <div className="flex flex-col justify-center flex-1">
+                          <p className="text-sm font-medium text-foreground">{instruction.text}</p>
+                          {instruction.distance_m > 0 && (
+                            <p className="text-muted-foreground text-xs">{instruction.distance_m}m</p>
+                          )}
+                        </div>
+                        <div className="flex items-center">
+                          <span className="material-symbols-outlined text-muted-foreground text-sm">near_me</span>
+                        </div>
+                      </div>
+                    )})}
+                  </div>
+                </div>
+              )}
+
+              {!route && !loading && !error && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="material-symbols-outlined text-muted-foreground text-6xl mb-4">directions</span>
+                  <p className="text-muted-foreground text-sm">Enter start and destination to find a route</p>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
 
         {/* Main Map Area */}
-        <main className="flex-1 relative bg-muted">
-          {/* Floor Tabs */}
-          {floorMaps.length > 0 && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex gap-1 bg-card rounded-lg shadow-lg p-1">
-              {floorMaps.map((fm, idx) => {
-                const isActive = idx === currentFloorIndex;
-                const floorLabel = fm.isCampus 
-                  ? 'Campus' 
-                  : fm.map.name;
-                return (
+        <main className="flex-1 relative bg-muted flex flex-col">
+          {/* Mobile Search Form */}
+          {isMobile && (
+            <div className="bg-card border-b border-border p-3 space-y-2 shadow-sm">
+              <div className="flex flex-col gap-2">
+                <LocationSearch
+                  value={startLocation}
+                  onChange={(val, nodeId) => {
+                    setStartLocation(val);
+                    setStartNodeId(nodeId);
+                  }}
+                  placeholder="Điểm bắt đầu..."
+                  icon="origin"
+                />
+                
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <LocationSearch
+                      value={endLocation}
+                      onChange={(val, nodeId) => {
+                        setEndLocation(val);
+                        setEndNodeId(nodeId);
+                      }}
+                      placeholder="Điểm đến..."
+                      icon="destination"
+                    />
+                  </div>
                   <Button
-                    key={fm.map.id}
-                    variant={isActive ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => {
-                      setHighlightedCoord(null);
-                      setCurrentFloorIndex(idx);
-                    }}
+                    onClick={handleSwap}
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
                   >
-                    {floorLabel}
+                    <ArrowUpDown className="size-4" />
                   </Button>
-                );
-              })}
+                </div>
+              </div>
+              
+              <Button
+                onClick={handleFindRoute}
+                disabled={loading || !startNodeId || !endNodeId}
+                className="w-full"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="size-4 animate-spin" />
+                    Đang tìm...
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="size-4" />
+                    Tìm đường
+                  </>
+                )}
+              </Button>
+
+              {error && (
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-3 py-2 rounded-lg text-xs">
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Map Container */}
+          <div className="flex-1 relative">
+            {/* Floor Tabs */}
+            {floorMaps.length > 0 && (
+              <div className="absolute top-3 left-1/2 transform -translate-x-1/2 z-10 flex gap-1 bg-card rounded-lg shadow-lg p-1 max-w-[90vw] overflow-x-auto">
+                {floorMaps.map((fm, idx) => {
+                  const isActive = idx === currentFloorIndex;
+                  const floorLabel = fm.isCampus 
+                    ? 'Campus' 
+                    : fm.map.name;
+                  return (
+                    <Button
+                      key={fm.map.id}
+                      variant={isActive ? "default" : "ghost"}
+                      size="sm"
+                      className="flex-shrink-0 text-xs px-2"
+                      onClick={() => {
+                        setHighlightedCoord(null);
+                        setCurrentFloorIndex(idx);
+                      }}
+                    >
+                      {floorLabel}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+
+          {/* Map Controls - adjusted for mobile */}
+          <div className={`absolute flex flex-col gap-1 ${isMobile ? 'bottom-4 right-4' : 'bottom-6 right-6'}`}>
+            <Button
+              variant="outline"
+              size="icon"
+              className={isMobile ? 'size-9' : 'size-10'}
+              onClick={() => setScale((s) => Math.min(s * 1.2, 3))}
+            >
+              <span className="material-symbols-outlined text-lg">add</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className={isMobile ? 'size-9' : 'size-10'}
+              onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
+            >
+              <span className="material-symbols-outlined text-lg">remove</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className={isMobile ? 'size-9' : 'size-10'}
+              onClick={() => {
+                setScale(1);
+                if (svgRef.current) {
+                  const rect = svgRef.current.getBoundingClientRect();
+                  setPosition({ x: (rect.width - MAP_WIDTH) / 2, y: (rect.height - MAP_HEIGHT) / 2 });
+                }
+              }}
+            >
+              <span className="material-symbols-outlined text-lg">fit_screen</span>
+            </Button>
+          </div>
+
+          {/* Legend - desktop only */}
+          {!isMobile && (
+            <div className="absolute top-6 left-6 flex items-center gap-3 bg-card/90 backdrop-blur px-4 py-2 rounded-lg border border-border shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-primary rounded-full"></div>
+                <span className="text-xs text-muted-foreground">Route</span>
+              </div>
+              <div className="w-px h-4 bg-border"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-muted-foreground rounded-full"></div>
+                <span className="text-xs text-muted-foreground">Path</span>
+              </div>
+              <div className="w-px h-4 bg-border"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                <span className="text-xs text-muted-foreground">Stairs</span>
+              </div>
             </div>
           )}
 
@@ -720,7 +856,7 @@ export default function NavigationPage() {
             >
               <g
                 style={{
-                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transform: `translate(${position?.x ?? 0}px, ${position?.y ?? 0}px) scale(${scale})`,
                   transformOrigin: '0 0',
                 }}
               >
@@ -968,61 +1104,128 @@ export default function NavigationPage() {
           {/* Floor Change Notice Overlay */}
           {floorChangeNotice.show && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30">
-              <div className="bg-primary text-primary-foreground px-8 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
+              <div className="bg-primary text-primary-foreground px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
                 <span className="material-symbols-outlined text-2xl">floor</span>
                 <span className="text-lg font-semibold">{floorChangeNotice.text}</span>
               </div>
             </div>
           )}
 
-          {/* Map Controls */}
-          <div className="absolute bottom-6 right-6 flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setScale((s) => Math.min(s * 1.2, 3))}
-            >
-              <span className="material-symbols-outlined">add</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
-            >
-              <span className="material-symbols-outlined">remove</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="mt-2"
-              onClick={() => {
-                setScale(1);
-                if (svgRef.current) {
-                  const rect = svgRef.current.getBoundingClientRect();
-                  setPosition({ x: (rect.width - MAP_WIDTH) / 2, y: (rect.height - MAP_HEIGHT) / 2 });
-                }
-              }}
-            >
-              <span className="material-symbols-outlined">fit_screen</span>
-            </Button>
-          </div>
+          {/* Mobile Bottom Sheet Directions */}
+          {isMobile && route && (
+            <div className="absolute bottom-0 left-0 right-0 z-20 bg-card rounded-t-2xl shadow-2xl max-h-[50vh] flex flex-col">
+              {/* Handle */}
+              <div className="flex justify-center py-2">
+                <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
+              </div>
+              
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pb-2">
+                <div className="flex items-center gap-2">
+                  <Navigation className="size-5 text-primary" />
+                  <span className="font-semibold">Hướng dẫn</span>
+                  <span className="text-xs text-muted-foreground">• ~{Math.ceil(route.total_distance_m / 80)} phút</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+                  {isSidebarOpen ? 'Thu gọn' : 'Mở rộng'}
+                </Button>
+              </div>
 
-          {/* Legend */}
-          <div className="absolute top-6 left-6 flex items-center gap-3 bg-card/90 backdrop-blur px-4 py-2 rounded-lg border border-border shadow-md">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-primary rounded-full"></div>
-              <span className="text-xs text-muted-foreground">Route</span>
+              {/* Floor indicator */}
+              {floorSegments.length > 1 && (
+                <div className="px-4 pb-2">
+                  <div className="flex items-center gap-2 text-xs bg-accent px-3 py-1.5 rounded-full w-fit">
+                    <span className="material-symbols-outlined text-sm">layers</span>
+                    <span>Qua {floorSegments.length} tầng</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Instructions list */}
+              <div className="overflow-y-auto px-2 pb-4 flex-1 custom-scrollbar">
+                {isSidebarOpen ? (
+                  <div className="space-y-1 px-2">
+                    {route.instructions.map((instruction, idx) => {
+                      const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => handleInstructionClick(instruction.coordinate)}
+                          className={`flex gap-3 p-2.5 rounded-lg cursor-pointer ${
+                            instruction.action === 'start' || instruction.action === 'arrive'
+                              ? 'bg-primary/10'
+                              : isFloorChange
+                                ? 'bg-accent'
+                                : 'hover:bg-muted'
+                          } transition-colors`}
+                        >
+                          <div className="flex flex-col items-center">
+                            <div className={`p-1.5 rounded-full ${
+                              instruction.action === 'start' || instruction.action === 'arrive'
+                                ? 'bg-primary/20'
+                                : isFloorChange
+                                  ? 'bg-primary/20'
+                                  : 'bg-muted'
+                            }`}>
+                              <span className={`material-symbols-outlined ${
+                                instruction.action === 'start' || instruction.action === 'arrive'
+                                  ? 'text-primary'
+                                  : isFloorChange
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground'
+                              }`} style={{ fontSize: '18px' }}>
+                                {ACTION_ICONS[instruction.action] || 'straight'}
+                              </span>
+                            </div>
+                            {idx < route.instructions.length - 1 && (
+                              <div className="w-0.5 flex-1 min-h-[20px] bg-border my-1" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 pt-1">
+                            <p className="text-sm font-medium text-foreground leading-tight">{instruction.text}</p>
+                            {instruction.distance_m > 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{instruction.distance_m}m</p>
+                            )}
+                          </div>
+                          <div className="flex items-center pt-1">
+                            <span className="material-symbols-outlined text-muted-foreground" style={{ fontSize: '16px' }}>near_me</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 px-2 overflow-x-auto pb-2 custom-scrollbar">
+                    {route.instructions.slice(0, 5).map((instruction, idx) => (
+                      <div 
+                        key={idx}
+                        onClick={() => {
+                          handleInstructionClick(instruction.coordinate);
+                          setIsSidebarOpen(true);
+                        }}
+                        className={`flex-shrink-0 flex items-center gap-2 p-2 rounded-lg cursor-pointer ${
+                          instruction.action === 'start' || instruction.action === 'arrive'
+                            ? 'bg-primary/10'
+                            : instruction.action === 'use_stairs' || instruction.action === 'use_elevator'
+                              ? 'bg-accent'
+                              : 'bg-muted hover:bg-muted/80'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">trip_origin</span>
+                        <span className="text-xs font-medium truncate max-w-[120px]">{instruction.text}</span>
+                      </div>
+                    ))}
+                    {route.instructions.length > 5 && (
+                      <div className="flex-shrink-0 flex items-center gap-1 p-2 rounded-lg bg-muted text-muted-foreground">
+                        <span className="text-xs">+{route.instructions.length - 5}</span>
+                        <span className="material-symbols-outlined text-sm">more_horiz</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="w-px h-4 bg-border"></div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-muted-foreground rounded-full"></div>
-              <span className="text-xs text-muted-foreground">Path</span>
-            </div>
-            <div className="w-px h-4 bg-border"></div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-              <span className="text-xs text-muted-foreground">Stairs</span>
-            </div>
+          )}
           </div>
         </main>
       </div>
