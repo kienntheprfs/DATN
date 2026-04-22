@@ -8,8 +8,8 @@ services:
     environment:
       AUTH_SERVICE_URL: http://host.docker.internal:8008
       AUTH_UPSTREAM_ADDR: host.docker.internal:8008
-      AGENT_UPSTREAM_ADDR: host.docker.internal:8080
-      KNOWLEDGE_UPSTREAM_ADDR: host.docker.internal:8000
+      AGENT_UPSTREAM_ADDR: host.docker.internal:8001
+      KNOWLEDGE_UPSTREAM_ADDR: host.docker.internal:8003
       WAYFINDER_UPSTREAM_ADDR: host.docker.internal:8004
       DASHBOARD_UPSTREAM_ADDR: host.docker.internal:8007
       VOICE_UPSTREAM_ADDR: host.docker.internal:7860

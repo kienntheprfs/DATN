@@ -24,7 +24,7 @@ interface ToolCall {
 interface RouteMapData {
 	map: MapData;
 	nodes: MapNode[];
-	edges: any[];
+	edges: unknown[];
 }
 
 interface RouteData {
@@ -60,6 +60,7 @@ interface ChatWindowProps {
 	lastRunId?: string;
 	voiceThreadId?: string;
 	voiceState?: string;
+	readOnly?: boolean;
 	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview: string; source_type: string }) => void;
 }
 
@@ -346,7 +347,7 @@ interface GroupedMessages {
 	routeData?: RouteData;
 }
 
-export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState }: ChatWindowProps) {
+export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState, readOnly = false }: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	
@@ -463,7 +464,12 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 	};
 
 	return (
-		<div className="flex-1 overflow-y-auto p-4 md:p-8 mb-28" role="log" aria-live="polite" aria-label="Chat messages">
+		<div
+			className={`flex-1 min-h-0 h-full overflow-y-auto p-4 md:p-8 ${readOnly ? "mb-0" : "mb-28"}`}
+			role="log"
+			aria-live="polite"
+			aria-label="Chat messages"
+		>
 			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
@@ -476,7 +482,7 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					const isThinkingMessage = isMessageActive && !combinedContent && !isVoiceMode && currentTools.length === 0;
 					const showToolsForThisGroup = isLastGroup && currentTools.length > 0;
 					const ratingId = groupRunId || groupId;
-					const showRating = ratingId && threadId && group.role === "assistant" && combinedContent;
+					const showRating = !readOnly && ratingId && threadId && group.role === "assistant" && combinedContent;
 					const citations = group.messages.find(m => m.citations)?.citations;
 					const displayRouteData = isLastGroup && routeDataForDisplay ? routeDataForDisplay : group.routeData;
 

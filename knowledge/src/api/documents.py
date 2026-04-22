@@ -9,11 +9,22 @@ from fastapi import (
     status,
     HTTPException,
 )
+import asyncio
+import json
+import re
+import unicodedata
+from urllib.parse import quote
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from src.core.sql_db_setup import get_db
 from src.services.document_service import DocumentService
-from ..schemas.document import DocumentDetailResponse, DocumentResponse, DocumentUpdate
+from ..schemas.document import (
+    AdminDocumentListResponse,
+    DocumentDetailResponse,
+    DocumentResponse,
+    DocumentUpdate,
+)
 from ..schemas.formal_document import FormalDocumentResponse, FormalDocumentUpdate
 from src.workers.celery_tasks import (
     trigger_ingestion_pipeline,
@@ -32,13 +43,24 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     auto_generate_faq: bool = Form(False),
     is_formal_doc: bool = Form(False),
+    meta_data_json: Optional[str] = Form(None),
 ):
     service = DocumentService(db)
+    meta_data: Optional[dict] = None
+    if meta_data_json:
+        try:
+            parsed = json.loads(meta_data_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid meta_data_json") from exc
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=400, detail="meta_data_json must be a JSON object")
+        meta_data = parsed
 
     if not is_formal_doc:
         document = await service.upload_normal_document(
             file=file,
             storage_id=storage_id,
+            meta_data=meta_data,
         )
 
         task_result = trigger_ingestion_pipeline(document.id, auto_generate_faq)
@@ -47,10 +69,13 @@ async def upload_document(
             "status": "queued",
             "document_id": document.id,
             "task_id": task_result.id,
+            "is_formal_doc": False,
         }
     else:
         formal_doc, sync_task_id = await service.upload_formal_document(
-            file=file, storage_id=storage_id
+            file=file,
+            storage_id=storage_id,
+            meta_data=meta_data,
         )
         return {
             "status": "queued",
@@ -58,6 +83,8 @@ async def upload_document(
             "track_id": formal_doc.lightrag_track_id,
             "lightrag_doc_id": formal_doc.lightrag_doc_id,
             "sync_task_id": sync_task_id,
+            "is_formal_doc": True,
+            "meta_data": formal_doc.meta_data,
         }
 
 
@@ -144,6 +171,74 @@ async def list_documents(
     """
     service = DocumentService(db)
     return await service.list_documents(skip=skip, limit=limit, storage_id=storage_id)
+
+
+@router.get("/admin/list", response_model=AdminDocumentListResponse)
+async def list_admin_documents(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    year: Optional[int] = Query(None, ge=1900, le=3000),
+    unit: Optional[str] = Query(None),
+    document_type: Optional[str] = Query(None),
+    document_kind: Optional[str] = Query(
+        None,
+        description="Deprecated alias for document_type",
+    ),
+    is_formal_doc: Optional[bool] = Query(None),
+    storage_id: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+    return await service.list_admin_documents(
+        page=page,
+        page_size=page_size,
+        search=search,
+        year=year,
+        unit=unit,
+        document_type=document_type or document_kind,
+        is_formal_doc=is_formal_doc,
+        storage_id=storage_id,
+    )
+
+
+@router.get("/{document_id}/file")
+async def stream_document_file(
+    document_id: int = Path(..., title="The ID of the document file to stream"),
+    is_formal_doc: Optional[bool] = Query(
+        None,
+        description="If null, auto-detect by ID",
+    ),
+    download: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DocumentService(db)
+    file_key, file_name, media_type, _ = await service.resolve_document_file(
+        document_id=document_id,
+        is_formal_doc=is_formal_doc,
+    )
+
+    async def iter_file():
+        async with service.storage.download_stream(file_key) as file_obj:
+            while True:
+                chunk = await asyncio.to_thread(file_obj.read, 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    disposition_type = "attachment" if download else "inline"
+    normalized_name = unicodedata.normalize("NFKD", file_name)
+    ascii_name = normalized_name.encode("ascii", "ignore").decode("ascii")
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", ascii_name).strip("._")
+    if not ascii_name:
+        ascii_name = f"document-{document_id}"
+
+    encoded_name = quote(file_name, safe="")
+    content_disposition = (
+        f"{disposition_type}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+    )
+    headers = {"Content-Disposition": content_disposition}
+    return StreamingResponse(iter_file(), media_type=media_type, headers=headers)
 
 
 @router.get("/{document_id}", response_model=DocumentDetailResponse)

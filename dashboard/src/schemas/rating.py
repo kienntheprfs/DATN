@@ -1,6 +1,6 @@
 """Schemas for answer rating APIs."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -63,3 +63,43 @@ class RatingStats(BaseModel):
     like_count: int
     dislike_count: int
     like_percentage: float
+
+
+class RatingAdminListParams(BaseModel):
+    """Query params used by admin list endpoint."""
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=10, ge=1, le=100)
+    search: Optional[str] = Field(default=None, max_length=255)
+    rating: Optional[RatingValue] = None
+    from_date: Optional[date] = None
+    to_date: Optional[date] = None
+    sort_by: str = Field(default="created_desc")
+
+
+class RatingAdminListItem(BaseModel):
+    """A single rating item for the admin table."""
+
+    id: UUID
+    user_id: str
+    user_name: Optional[str] = None
+    run_id: str
+    thread_id: str
+    thread_name: Optional[str] = None
+    agent_id: Optional[str]
+    rating: RatingValue
+    comment: Optional[str]
+    question: str
+    answer: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RatingAdminListResponse(BaseModel):
+    """Paginated response for admin rating list."""
+
+    items: list[RatingAdminListItem]
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int

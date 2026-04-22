@@ -8,7 +8,7 @@ type MissingInMapHeaderProps = {
 export function MissingInMapHeader({ activeTab, onTabChange }: MissingInMapHeaderProps) {
   return (
     <>
-      <div className="mb-5 flex items-center gap-1 text-[13px] font-medium">
+      {/* <div className="mb-5 flex items-center gap-1 text-[13px] font-medium">
         <button
           type="button"
           className={`border-b-2 py-2 transition-colors ${
@@ -34,19 +34,19 @@ export function MissingInMapHeader({ activeTab, onTabChange }: MissingInMapHeade
         >
           Tuyến đường
         </button>
-      </div>
+      </div> */}
 
-      <nav className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+      {/* <nav className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
         <span>Admin</span>
         <span className="material-symbols-outlined text-[14px]">chevron_right</span>
         <span>Map Data</span>
         <span className="material-symbols-outlined text-[14px]">chevron_right</span>
         <span className="text-primary">Missing Locations &amp; Routes</span>
-      </nav>
+      </nav> */}
 
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-[28px] leading-tight font-extrabold tracking-tight text-text-main">Quản lý Dữ liệu Bản đồ Thiếu</h1>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Quản lý Dữ liệu Bản đồ Thiếu</h1>
           <p className="mt-1 text-sm text-slate-500">
             Hệ thống quản lý và xử lý các điểm mù địa điểm và tuyến đường trong khuôn viên đại học.
           </p>

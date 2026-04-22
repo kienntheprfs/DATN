@@ -133,7 +133,7 @@ export function TopicListPanel({
             <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
             Chạy Pipeline Topic Modeling
           </button>
-          <div className="flex w-full items-center justify-between px-2">
+          {/* <div className="flex w-full items-center justify-between px-2">
             <button
               type="button"
               className="rounded-sm border border-border-color p-1 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -153,7 +153,7 @@ export function TopicListPanel({
             >
               <span className="material-symbols-outlined text-sm">chevron_right</span>
             </button>
-          </div>
+          </div> */}
         </div>
       </div>
     </section>

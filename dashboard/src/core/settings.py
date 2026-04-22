@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     api_gateway_port: int = 8002
     
     # Downstream Services
-    agent_service_url: str = "http://localhost:8080"
+    agent_service_url: str = "http://localhost:8001"
     knowledge_service_url: str = "http://localhost:8000"
     wayfinder_service_url: str = "http://localhost:8001"
     

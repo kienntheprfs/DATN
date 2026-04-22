@@ -14,10 +14,10 @@ export function AdminHeader() {
       ? "Quản lý Chủ đề Phổ biến"
     : pathname.startsWith("/admin/missing-in-map")
       ? "Quản lý Dữ liệu Bản đồ Thiếu"
-    : pathname.startsWith("/admin/pinned_post")
+    : pathname.startsWith("/admin/pinned-post")
       ? "Quản lý Bài ghim"
     : pathname.startsWith("/admin/knowledge")
-      ? "Thư viện & Lịch sử"
+      ? "Cơ sở tri thức"
       : "Trang quản trị";
 
   return (

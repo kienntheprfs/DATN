@@ -1,5 +1,6 @@
 import { AdminSidebar } from "@/components/admin/sidebar";
 import { AdminHeader } from "@/components/admin/header";
+import { Toaster } from "@/components/ui/sonner";
 import "@/app/globals.css";
 
 export default function AdminLayout({
@@ -24,6 +25,7 @@ export default function AdminLayout({
             {children}
           </div>
         </main>
+        <Toaster />
       </body>
     </html>
   );

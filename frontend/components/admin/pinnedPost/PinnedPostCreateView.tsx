@@ -9,6 +9,7 @@ interface PinnedPostCreateViewProps {
   onCancel: () => void;
   onSave: () => void;
   isSaving: boolean;
+  isEditing?: boolean;
 }
 
 export function PinnedPostCreateView({
@@ -17,11 +18,12 @@ export function PinnedPostCreateView({
   onCancel,
   onSave,
   isSaving,
+  isEditing = false,
 }: PinnedPostCreateViewProps) {
   return (
     <div className="max-w-400 mx-auto w-full">
       <section className="mb-8">
-        <h1 className="font-heading mb-1 text-xl font-bold text-text-main">Tạo Bài Ghim Mới</h1>
+        <h1 className="font-heading mb-1 text-xl font-bold text-text-main">{isEditing ? "Chỉnh sửa bài ghim" : "Tạo Bài Ghim Mới"}</h1>
         <p className="text-sm text-text-secondary">Cấu hình nội dung ghim nổi bật cho bảng điều khiển giảng viên.</p>
       </section>
 
@@ -51,6 +53,25 @@ export function PinnedPostCreateView({
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
+              <label className="mb-2 block text-[12px] font-bold tracking-wider text-text-main uppercase">Danh mục</label>
+              <div className="relative">
+                <select
+                  value={form.category}
+                  onChange={(event) => onChange("category", event.target.value)}
+                  className="h-10 w-full appearance-none rounded-sm border border-border-color bg-white px-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+                >
+                  <option value="Quy chế Đào tạo">Quy chế Đào tạo</option>
+                  <option value="Công tác Sinh viên">Công tác Sinh viên</option>
+                  <option value="Nghiên cứu Khoa học">Nghiên cứu Khoa học</option>
+                  <option value="Sau Đại học">Sau Đại học</option>
+                </select>
+                <span className="material-symbols-outlined pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-slate-400">
+                  expand_more
+                </span>
+              </div>
+            </div>
+
+            <div>
               <label className="mb-2 block text-[12px] font-bold tracking-wider text-text-main uppercase">Loại văn bản</label>
               <div className="relative">
                 <select
@@ -67,6 +88,19 @@ export function PinnedPostCreateView({
                   expand_more
                 </span>
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-[12px] font-bold tracking-wider text-text-main uppercase">Thẻ (tags)</label>
+              <input
+                type="text"
+                value={form.tags}
+                onChange={(event) => onChange("tags", event.target.value)}
+                placeholder="DAOTAO, PINNED"
+                className="h-10 w-full rounded-sm border border-border-color bg-white px-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+              />
             </div>
 
             <div>
@@ -101,7 +135,7 @@ export function PinnedPostCreateView({
               onClick={onSave}
               disabled={isSaving || !form.title.trim() || !form.summary.trim()}
             >
-              {isSaving ? "Đang lưu..." : "Lưu Bài Ghim"}
+              {isSaving ? "Đang lưu..." : isEditing ? "Cập nhật bài ghim" : "Lưu Bài Ghim"}
             </button>
           </div>
         </div>
@@ -147,9 +181,17 @@ export function PinnedPostCreateView({
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-            <span className="bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">#DAOTAO</span>
-            <span className="bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">#QUYDINH2024</span>
-            <span className="bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">#HCMUT_OFFICIAL</span>
+            {(form.tags.trim() ? form.tags.split(",") : ["DAOTAO", "PINNED", "HCMUT_OFFICIAL"]).map((tag) => {
+              const normalizedTag = tag.trim();
+              if (!normalizedTag) {
+                return null;
+              }
+              return (
+                <span key={normalizedTag} className="bg-slate-50 px-2 py-1 font-mono text-[10px] text-slate-500">
+                  #{normalizedTag.toUpperCase()}
+                </span>
+              );
+            })}
           </div>
         </article>
       </section>

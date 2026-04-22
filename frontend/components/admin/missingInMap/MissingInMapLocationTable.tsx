@@ -4,18 +4,60 @@ import type { LocationRow } from "./MissingInMapTypes";
 type MissingInMapLocationTableProps = {
   rows: LocationRow[];
   isSubmitting: boolean;
-  pendingActionId: string | null;
-  onAddLocation: (id: string) => void;
-  onRemove: (id: string) => void;
+  pendingActionId: number | null;
+  isLoading?: boolean;
+  onAddLocation: (row: LocationRow) => void;
+  onRemove: (row: LocationRow) => void;
 };
 
 export function MissingInMapLocationTable({
   rows,
   isSubmitting,
   pendingActionId,
+  isLoading = false,
   onAddLocation,
   onRemove,
 }: MissingInMapLocationTableProps) {
+  if (isLoading) {
+    return (
+      <table className="w-full min-w-270 border-collapse text-left">
+        <thead>
+          <tr className="border-b border-slate-200 bg-white">
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">ID</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Name</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Building Name</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Floor</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Requested By</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Status</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Admin Note</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Created At</th>
+            <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <tr key={index} className="animate-pulse">
+              <td className="px-6 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-32 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-28 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-14 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-28 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-5 w-20 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-40 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4 text-right">
+                <div className="flex justify-end gap-2">
+                  <div className="h-8 w-24 rounded bg-slate-100" />
+                  <div className="h-8 w-16 rounded bg-slate-100" />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
   return (
     <table className="w-full min-w-270 border-collapse text-left">
       <thead>
@@ -40,7 +82,7 @@ export function MissingInMapLocationTable({
           </tr>
         )}
         {rows.map((data) => {
-          const rowBusy = isSubmitting && pendingActionId === data.id;
+          const rowBusy = isSubmitting && pendingActionId === data.rowId;
 
           return (
             <tr key={data.id} className="transition-colors hover:bg-slate-50/80">
@@ -85,7 +127,7 @@ export function MissingInMapLocationTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onAddLocation(data.id)}
+                      onClick={() => onAddLocation(data)}
                       className="bg-primary px-3 py-1.5 text-[10px] font-bold text-white uppercase shadow-sm transition-all hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
                       title="Thêm địa điểm vào bản đồ"
                     >
@@ -94,7 +136,7 @@ export function MissingInMapLocationTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onRemove(data.id)}
+                      onClick={() => onRemove(data)}
                       className="border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Loại bỏ yêu cầu"
                     >

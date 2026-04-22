@@ -1,13 +1,16 @@
-import { STATUS_FILTER_OPTIONS } from "./MissingInMapData";
-import type { Status, TabKey } from "./MissingInMapTypes";
+import type { Status, StatusFilterOption, TabKey } from "./MissingInMapTypes";
 
 type MissingInMapControlsProps = {
   activeTab: TabKey;
+  locationTotal: number;
+  routeTotal: number;
   search: string;
   statusFilter: "ALL" | Status;
+  statusOptions: StatusFilterOption[];
   rangeStart: number;
   rangeEnd: number;
   totalResults: number;
+  isLoading?: boolean;
   onTabChange: (tab: TabKey) => void;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: "ALL" | Status) => void;
@@ -15,15 +18,22 @@ type MissingInMapControlsProps = {
 
 export function MissingInMapControls({
   activeTab,
+  locationTotal,
+  routeTotal,
   search,
   statusFilter,
+  statusOptions,
   rangeStart,
   rangeEnd,
   totalResults,
+  isLoading = false,
   onTabChange,
   onSearchChange,
   onStatusFilterChange,
 }: MissingInMapControlsProps) {
+  const rangeLabel = isLoading ? "--" : `${rangeStart}-${rangeEnd}`;
+  const totalLabel = isLoading ? "--" : totalResults;
+
   return (
     <>
       <div className="flex gap-2 overflow-x-auto border-b border-slate-200 px-3 md:gap-8 md:px-6">
@@ -39,7 +49,7 @@ export function MissingInMapControls({
         >
           <span className="material-symbols-outlined text-lg">location_on</span>
           <span>Địa điểm</span>
-          <span className="ml-1 rounded-sm bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-primary">42</span>
+          <span className="ml-1 rounded-sm bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-primary">{isLoading ? "--" : locationTotal}</span>
         </button>
         <button
           type="button"
@@ -53,6 +63,7 @@ export function MissingInMapControls({
         >
           <span className="material-symbols-outlined text-lg">conversion_path</span>
           <span>Tuyến đường</span>
+          <span className="ml-1 rounded-sm bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-primary">{isLoading ? "--" : routeTotal}</span>
         </button>
       </div>
 
@@ -76,7 +87,7 @@ export function MissingInMapControls({
             onChange={(event) => onStatusFilterChange(event.target.value as "ALL" | Status)}
             className="border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:outline-none"
           >
-            {STATUS_FILTER_OPTIONS.map((option) => (
+            {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -85,8 +96,8 @@ export function MissingInMapControls({
         </div>
 
         <div className="text-[12px] font-medium text-slate-500">
-          Hiển thị <span className="font-mono font-bold text-text-main">{rangeStart}-{rangeEnd}</span> trong{" "}
-          <span className="font-mono font-bold text-text-main">{totalResults}</span> kết quả
+          Hiển thị <span className="font-mono font-bold text-text-main">{rangeLabel}</span> trong{" "}
+          <span className="font-mono font-bold text-text-main">{totalLabel}</span> kết quả
         </div>
       </div>
     </>

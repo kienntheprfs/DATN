@@ -170,3 +170,54 @@ async def test_get_thread_requires_user_header(client: AsyncClient) -> None:
 async def test_get_agent_stats_requires_user_header(client: AsyncClient) -> None:
     response = await client.get("/ratings/stats/agent/agent-auth-required")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_admin_ratings_requires_admin_role_and_supports_filters(client: AsyncClient) -> None:
+    thread_id = "thread-admin"
+    first_run_id = str(uuid4())
+    second_run_id = str(uuid4())
+
+    await client.post(
+        "/ratings",
+        json={
+            "run_id": first_run_id,
+            "rating": "LIKE",
+            "comment": None,
+            "thread_id": thread_id,
+            "agent_id": "agent-a",
+        },
+        headers={"X-User-Id": "user-a", "X-User-Roles": "user"},
+    )
+    await client.post(
+        "/ratings",
+        json={
+            "run_id": second_run_id,
+            "rating": "DISLIKE",
+            "comment": "not good",
+            "thread_id": thread_id,
+            "agent_id": "agent-b",
+        },
+        headers={"X-User-Id": "user-b", "X-User-Roles": "user"},
+    )
+
+    forbidden = await client.get(
+        "/ratings/admin",
+        headers={"X-User-Id": "user-a", "X-User-Roles": "user"},
+    )
+    assert forbidden.status_code == 403
+
+    admin_response = await client.get(
+        "/ratings/admin",
+        params={"page": 1, "page_size": 10, "rating": "DISLIKE", "search": "not good"},
+        headers={"X-User-Id": "admin-1", "X-User-Roles": "admin"},
+    )
+    assert admin_response.status_code == 200
+    payload = admin_response.json()
+    assert payload["total_items"] == 1
+    assert payload["total_pages"] == 1
+    assert payload["page"] == 1
+    assert payload["page_size"] == 10
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["rating"] == "DISLIKE"
+    assert payload["items"][0]["comment"] == "not good"

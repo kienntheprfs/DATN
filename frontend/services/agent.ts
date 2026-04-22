@@ -23,7 +23,7 @@ export interface ChatMessage {
 	}>;
 }
 
-interface BackendChatMessage {
+export interface BackendChatMessage {
 	id?: string;
 	type: "human" | "ai" | "tool";
 	content: string;

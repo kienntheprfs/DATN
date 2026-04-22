@@ -18,6 +18,18 @@ def is_admin_only_route(method: str, path: str) -> bool:
     if path.startswith("/dashboard/ratings/stats/agent/"):
         return True
 
+    if path == "/dashboard/pinned-posts/reorder":
+        return True
+
+    if path.startswith("/dashboard/pinned-posts/admin"):
+        return True
+
+    if path == "/dashboard/pinned-posts" and method == "POST":
+        return True
+
+    if path.startswith("/dashboard/pinned-posts/") and method in {"PUT", "DELETE", "PATCH"}:
+        return True
+
     if path in {"/auth/revoke", "/auth/revoke-all"}:
         return True
 

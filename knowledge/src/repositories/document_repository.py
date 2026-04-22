@@ -20,6 +20,7 @@ class DocumentRepository:
         file_path: str,
         file_size: int,
         checksum: str,
+        meta_data: Optional[dict] = None,
     ) -> Document:
         document = Document(
             title=title,
@@ -29,6 +30,7 @@ class DocumentRepository:
             file_size=file_size,
             checksum=checksum,
             processing_status=ProcessingStatus.PENDING,
+            meta_data=meta_data or {},
         )
         self.db.add(document)
         await self.db.flush()

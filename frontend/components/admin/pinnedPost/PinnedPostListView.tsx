@@ -2,13 +2,23 @@
 
 import React from "react";
 import type { PinnedCategory, PinnedPost, PinnedSortMode } from "./PinnedPostTypes";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface PinnedPostListViewProps {
   items: PinnedPost[];
+  overallTotalPins: number;
   totalItems: number;
+  pageStartIndex: number;
+  pageEndIndex: number;
+  activeSlots: number;
+  maxSlots: number;
   activeSlotsText: string;
   topCategoryText: string;
+  topCategoryShareText: string;
   lastUpdateText: string;
+  lastUpdateRelativeText: string;
+  isLoading?: boolean;
+  isError?: boolean;
   search: string;
   category: "all" | PinnedCategory;
   sortMode: PinnedSortMode;
@@ -22,6 +32,16 @@ interface PinnedPostListViewProps {
   onAddNewPin: () => void;
   onEditPin: (item: PinnedPost) => void;
   onRequestDelete: (item: PinnedPost) => void;
+  onDragStart: (item: PinnedPost) => void;
+  onDragEnd: () => void;
+  onDragOverRow: (item: PinnedPost, position: "before" | "after") => void;
+  onDropRow: (item: PinnedPost, position: "before" | "after") => void;
+  draggingItemId: string | null;
+  dragOverItemId: string | null;
+  dragOverPosition: "before" | "after" | null;
+  canReorder: boolean;
+  isReordering: boolean;
+  onRetry: () => void;
 }
 
 const CATEGORY_BADGE: Record<PinnedCategory, string> = {
@@ -33,10 +53,19 @@ const CATEGORY_BADGE: Record<PinnedCategory, string> = {
 
 export function PinnedPostListView({
   items,
+  overallTotalPins,
   totalItems,
+  pageStartIndex,
+  pageEndIndex,
+  activeSlots,
+  maxSlots,
   activeSlotsText,
   topCategoryText,
+  topCategoryShareText,
   lastUpdateText,
+  lastUpdateRelativeText,
+  isLoading = false,
+  isError = false,
   search,
   category,
   sortMode,
@@ -50,18 +79,30 @@ export function PinnedPostListView({
   onAddNewPin,
   onEditPin,
   onRequestDelete,
+  onDragStart,
+  onDragEnd,
+  onDragOverRow,
+  onDropRow,
+  draggingItemId,
+  dragOverItemId,
+  dragOverPosition,
+  canReorder,
+  isReordering,
+  onRetry,
 }: PinnedPostListViewProps) {
+  const activeSlotsWidth = Math.max(0, Math.min(100, (activeSlots / Math.max(maxSlots, 1)) * 100));
+
   return (
     <div className="max-w-400 mx-auto w-full">
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <nav className="mb-2 flex gap-2 font-mono text-[11px] uppercase tracking-widest text-slate-500">
+          {/* <nav className="mb-2 flex gap-2 font-mono text-[11px] uppercase tracking-widest text-slate-500">
             <span>ADMIN</span>
             <span>/</span>
             <span>CONTENT</span>
             <span>/</span>
             <span className="font-bold text-primary">PINNED TOPICS</span>
-          </nav>
+          </nav> */}
           <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Pinned Topics Management</h1>
           <p className="mt-1 text-sm text-slate-500">
             Manage prioritized regulations and announcements displayed on the faculty home screen.
@@ -80,28 +121,28 @@ export function PinnedPostListView({
       <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <article className="border border-border-color bg-white p-4">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pins</div>
-          <div className="font-heading text-2xl font-bold text-slate-900">{totalItems}</div>
-          <div className="mt-2 flex items-center gap-1 font-mono text-[11px] text-green-600">
+          <div className="font-heading text-2xl font-bold text-slate-900">{overallTotalPins}</div>
+          {/* <div className="mt-2 flex items-center gap-1 font-mono text-[11px] text-green-600">
             <span className="material-symbols-outlined text-[14px]">trending_up</span>
             +2 THIS MONTH
-          </div>
+          </div> */}
         </article>
         <article className="border border-border-color bg-white p-4">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Slots</div>
           <div className="font-heading text-2xl font-bold text-slate-900">{activeSlotsText}</div>
           <div className="mt-4 h-1 w-full bg-slate-100">
-            <div className="h-1 bg-primary" style={{ width: "80%" }} />
+            <div className="h-1 bg-primary" style={{ width: `${activeSlotsWidth}%` }} />
           </div>
         </article>
         <article className="border border-border-color bg-white p-4">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Top Category</div>
           <div className="font-heading truncate text-lg font-bold text-slate-900">{topCategoryText}</div>
-          <div className="mt-2 font-mono text-[11px] text-slate-500">42% OF ALL PINS</div>
+          <div className="mt-2 font-mono text-[11px] text-slate-500">{topCategoryShareText}</div>
         </article>
         <article className="border border-border-color bg-white p-4">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Last Update</div>
           <div className="font-heading text-lg font-bold text-slate-900">{lastUpdateText}</div>
-          <div className="mt-2 font-mono text-[11px] text-slate-500">14:32:05 GMT+7</div>
+          <div className="mt-2 font-mono text-[11px] text-slate-500">{lastUpdateRelativeText}</div>
         </article>
       </section>
 
@@ -143,78 +184,163 @@ export function PinnedPostListView({
       </section>
 
       <section className="overflow-x-auto border border-border-color bg-white">
-        <table className="w-full min-w-260 text-left text-sm">
-          <thead>
-            <tr className="border-b border-border-color bg-slate-50">
-              <th className="w-16 px-4 py-3 text-center text-[11px] font-bold tracking-widest text-slate-600 uppercase">Order</th>
-              <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Topic Title</th>
-              <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Category</th>
-              <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Pinned Date</th>
-              <th className="px-6 py-3 text-right text-[11px] font-bold tracking-widest text-slate-600 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-color">
-            {items.map((item) => (
-              <tr key={item.id} className="group transition-colors hover:bg-slate-50">
-                <td className="px-4 py-4 text-center">
-                  <button
-                    type="button"
-                    className="cursor-grab text-slate-400 transition-colors hover:text-primary active:cursor-grabbing"
-                    title="Drag to reorder"
-                  >
-                    <span className="material-symbols-outlined">drag_indicator</span>
-                  </button>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    <span className="font-bold text-slate-900 transition-colors group-hover:text-primary">{item.title}</span>
-                    <span className="mt-0.5 font-mono text-[11px] text-slate-500">ID: {item.refId}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span
-                    className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${CATEGORY_BADGE[item.category]}`}
-                  >
-                    {item.category}
-                  </span>
-                </td>
-                <td className="px-6 py-4 font-mono text-xs text-slate-600">{item.pinnedDate}</td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-primary"
-                      title="Edit"
-                      onClick={() => onEditPin(item)}
-                    >
-                      <span className="material-symbols-outlined text-lg">edit_note</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                      title="Remove Pin"
-                      onClick={() => onRequestDelete(item)}
-                    >
-                      <span className="material-symbols-outlined text-lg">delete</span>
-                    </button>
-                  </div>
-                </td>
+        {isError ? (
+          <div className="mx-4 my-4 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            Không thể tải danh sách bài ghim. Vui lòng thử lại.
+            <button
+              type="button"
+              onClick={onRetry}
+              className="ml-3 font-semibold underline decoration-red-400 underline-offset-2"
+            >
+              Tải lại
+            </button>
+          </div>
+        ) : null}
+
+        <TooltipProvider delayDuration={250}>
+          <table className="w-full min-w-260 text-left text-sm">
+            <thead>
+              <tr className="border-b border-border-color bg-slate-50">
+                <th className="w-16 px-4 py-3 text-center text-[11px] font-bold tracking-widest text-slate-600 uppercase">Order</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Topic Title</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Category</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Pinned Date</th>
+                <th className="px-6 py-3 text-right text-[11px] font-bold tracking-widest text-slate-600 uppercase">Actions</th>
               </tr>
-            ))}
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">
-                  Không có bài ghim phù hợp với bộ lọc hiện tại.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border-color">
+              {isLoading ? (
+                <tr className="animate-pulse">
+                  <td className="px-4 py-4"><div className="h-5 w-8 rounded bg-slate-200" /></td>
+                  <td className="px-6 py-4">
+                    <div className="h-5 w-2/3 rounded bg-slate-200" />
+                    <div className="mt-2 h-3 w-1/3 rounded bg-slate-100" />
+                  </td>
+                  <td className="px-6 py-4"><div className="h-5 w-32 rounded bg-slate-200" /></td>
+                  <td className="px-6 py-4"><div className="h-4 w-20 rounded bg-slate-200" /></td>
+                  <td className="px-6 py-4"><div className="ml-auto h-5 w-14 rounded bg-slate-200" /></td>
+                </tr>
+              ) : null}
+
+              {!isLoading && items.map((item) => (
+                <React.Fragment key={item.id}>
+                  {dragOverItemId === item.id && dragOverPosition === "before" ? (
+                    <tr aria-hidden>
+                      <td colSpan={5} className="p-0">
+                        <div className="h-1.5 bg-amber-300" />
+                      </td>
+                    </tr>
+                  ) : null}
+
+                  <tr
+                    className={`group transition-colors hover:bg-slate-50 ${draggingItemId === item.id ? "opacity-60" : ""}`}
+                    draggable={canReorder && !isReordering}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
+                      onDragStart(item);
+                    }}
+                    onDragEnd={onDragEnd}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      const rowRect = (event.currentTarget as HTMLTableRowElement).getBoundingClientRect();
+                      const isBefore = event.clientY < rowRect.top + rowRect.height / 2;
+                      onDragOverRow(item, isBefore ? "before" : "after");
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const rowRect = (event.currentTarget as HTMLTableRowElement).getBoundingClientRect();
+                      const isBefore = event.clientY < rowRect.top + rowRect.height / 2;
+                      onDropRow(item, isBefore ? "before" : "after");
+                    }}
+                  >
+                  <td className="px-4 py-4 text-center">
+                    <span
+                      className={`material-symbols-outlined ${canReorder && !isReordering ? "cursor-grab text-slate-400 hover:text-primary active:cursor-grabbing" : "text-slate-300"}`}
+                      title={canReorder ? "Drag to reorder" : "Switch to manual sort and clear filters to reorder"}
+                    >
+                      drag_indicator
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="line-clamp-1 font-bold text-slate-900 transition-colors group-hover:text-primary">{item.title}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>{item.title}</TooltipContent>
+                      </Tooltip>
+                      <span className="mt-0.5 font-mono text-[11px] text-slate-500">ID: {item.refId}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${CATEGORY_BADGE[item.category]}`}
+                    >
+                      {item.category}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-mono text-xs text-slate-600">{item.pinnedDate}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="rounded p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-primary"
+                            title="Edit"
+                            onClick={() => onEditPin(item)}
+                          >
+                            <span className="material-symbols-outlined text-lg">edit_note</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Chỉnh sửa</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="rounded p-1.5 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                            title="Remove Pin"
+                            onClick={() => onRequestDelete(item)}
+                          >
+                            <span className="material-symbols-outlined text-lg">delete</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Xóa bài ghim</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </td>
+                  </tr>
+
+                  {dragOverItemId === item.id && dragOverPosition === "after" ? (
+                    <tr aria-hidden>
+                      <td colSpan={5} className="p-0">
+                        <div className="h-1.5 bg-amber-300" />
+                      </td>
+                    </tr>
+                  ) : null}
+
+                </React.Fragment>
+              ))}
+
+              {!isLoading && items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">
+                    Không có bài ghim phù hợp với bộ lọc hiện tại.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </TooltipProvider>
       </section>
 
       <section className="mt-4 flex flex-col items-start justify-between gap-4 font-mono text-xs text-slate-500 md:flex-row md:items-center">
         <div>
-          SHOWING {items.length} OF {totalItems} PINNED TOPICS
+          SHOWING {pageStartIndex}-{pageEndIndex} OF {totalItems} MATCHED TOPICS ({overallTotalPins} TOTAL)
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -237,7 +363,7 @@ export function PinnedPostListView({
         </div>
       </section>
 
-      <section className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-3">
+      {/* <section className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <h3 className="mb-4 flex items-center gap-2 text-sm font-bold tracking-widest text-slate-900 uppercase">
             <span className="material-symbols-outlined text-sm text-primary">history</span>
@@ -300,7 +426,7 @@ export function PinnedPostListView({
             </div>
           </article>
         </div>
-      </section>
+      </section> */}
     </div>
   );
 }

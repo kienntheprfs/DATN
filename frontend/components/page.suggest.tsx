@@ -41,7 +41,7 @@ export default function SuggestionSection() {
         </div>
 
         {/* Skeleton thẻ thường */}
-        <div className="mt-3 grid w-full grid-cols-1 gap-3 md:grid-cols-2">
+        {/* <div className="mt-3 grid w-full grid-cols-1 gap-3 md:grid-cols-2">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex h-24 w-full items-center gap-4 border border-border p-4">
               <Skeleton className="size-12 shrink-0" />
@@ -51,7 +51,7 @@ export default function SuggestionSection() {
               </div>
             </div>
           ))}
-        </div>
+        </div> */}
       </div>
     );
   }
@@ -127,6 +127,15 @@ export default function SuggestionSection() {
           );
         })}
       </ItemGroup>
+
+      <div className="mt-4 flex w-full justify-center">
+        <Link
+          href="/pinned-post"
+          className="rounded-sm border border-border px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-muted"
+        >
+          Xem thêm
+        </Link>
+      </div>
 
     </div>
   );

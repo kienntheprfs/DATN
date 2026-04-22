@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import "@/app/globals.css";
 import { AppHeader } from "@/components/app.header";
 import { AgentProvider } from "@/contexts/agent-context";
+import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 
 const inter = Inter({ 
   subsets: ["latin", "vietnamese"],
@@ -22,25 +23,27 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans">
         <TooltipProvider>
-          <AgentProvider>
-            <SidebarProvider>
-              
-              <AppSidebar />
-              
-              <main className="flex flex-col flex-1 w-full min-w-0">
+          <ReactQueryProvider>
+            <AgentProvider>
+              <SidebarProvider>
                 
-                <AppHeader />
+                <AppSidebar />
                 
-                <div className="flex flex-1 overflow-hidden">
-                  {children}
-                </div>
-                
-              </main>
+                <main className="flex flex-col flex-1 w-full min-w-0">
+                  
+                  <AppHeader />
+                  
+                  <div className="flex flex-1 overflow-hidden">
+                    {children}
+                  </div>
+                  
+                </main>
 
-              <Toaster />
+                <Toaster />
 
-            </SidebarProvider>
-          </AgentProvider>
+              </SidebarProvider>
+            </AgentProvider>
+          </ReactQueryProvider>
         </TooltipProvider>
       </body>
     </html>

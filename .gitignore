@@ -13,7 +13,7 @@ checkpoints.db-*
 .langgraph_api/
 
 .claude
-convention.md
+
 
 # VSCode
 .vscode

@@ -7,12 +7,12 @@ export interface RatingFilters {
   toDate: string;
   search: string;
   rating: "all" | "positive" | "negative";
+  sortBy: "created_desc" | "created_asc" | "updated_desc" | "updated_asc" | "rating_desc" | "rating_asc";
 }
 
 interface RatingFilterPanelProps {
   filters: RatingFilters;
   onFiltersChange: (filters: RatingFilters) => void;
-  onApply: () => void;
   onExport: () => void;
   onPrint: () => void;
 }
@@ -20,7 +20,6 @@ interface RatingFilterPanelProps {
 export function RatingFilterPanel({
   filters,
   onFiltersChange,
-  onApply,
   onExport,
   onPrint,
 }: RatingFilterPanelProps) {
@@ -81,14 +80,29 @@ export function RatingFilterPanel({
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={onApply}
-          className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary h-9.5 transition-colors"
-        >
-          Lọc
-        </button>
+        <div className="w-full sm:w-48">
+          <label className="block text-xs font-semibold text-text-secondary uppercase mb-1.5 ml-1">Sắp xếp</label>
+          <select
+            value={filters.sortBy}
+            onChange={(event) =>
+              onFiltersChange({
+                ...filters,
+                sortBy: event.target.value as RatingFilters["sortBy"],
+              })
+            }
+            className="block w-full pl-3 pr-8 py-2 text-base border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm rounded-md bg-white h-9.5"
+          >
+            <option value="created_desc">Mới nhất</option>
+            <option value="created_asc">Cũ nhất</option>
+            <option value="updated_desc">Cập nhật gần đây</option>
+            <option value="updated_asc">Cập nhật xa nhất</option>
+            <option value="rating_desc">Đánh giá LIKE trước</option>
+            <option value="rating_asc">Đánh giá DISLIKE trước</option>
+          </select>
+        </div>
       </div>
+
+      {/* <p className="text-xs text-text-secondary">Bộ lọc tự động áp dụng sau một khoảng trễ ngắn để tối ưu truy vấn.</p> */}
 
       <div className="flex flex-wrap gap-3 pt-1">
         <button

@@ -17,6 +17,8 @@ export interface PinnedPost {
   sourceUrl: string;
   documentType: string;
   tags: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PinnedFormData {
@@ -24,4 +26,14 @@ export interface PinnedFormData {
   summary: string;
   documentType: string;
   sourceUrl: string;
+  category: PinnedCategory;
+  tags: string;
+}
+
+export interface PinnedPostStats {
+  totalPins: number;
+  activeSlots: number;
+  maxSlots: number;
+  topCategory: PinnedCategory | null;
+  lastUpdatedDate: string | null;
 }

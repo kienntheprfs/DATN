@@ -20,6 +20,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	const urlThreadId = searchParams.get("thread_id");
 	const urlMessage = searchParams.get("message");
 	const urlQueryMode = searchParams.get("query_mode") as QueryMode | null;
+	const isReadOnly = searchParams.get("readonly") === "1";
 	const shouldStartVoice = searchParams.get("voice") === "true";
 	const hasAppended = useRef(false);
 	const voiceStarted = useRef(false);
@@ -52,7 +53,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		model: model || "gpt-5-nano",
 		agent: agent || "chatbot",
 		threadId: urlThreadId || undefined,
-		initialMessage: urlMessage || undefined,
+		initialMessage: isReadOnly ? undefined : urlMessage || undefined,
 		initialQueryMode: urlQueryMode || undefined,
 		key: chatKey,
 	});
@@ -104,6 +105,10 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	}, [sendMessage]);
 
 	useEffect(() => {
+		if (isReadOnly) {
+			return;
+		}
+
 		if (urlMessage && !hasAppended.current && model && agent && threadId) {
 			hasAppended.current = true;
 			sendMessageRef.current?.(urlMessage, urlQueryMode || undefined);
@@ -112,7 +117,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 				router.replace(`/chat?thread_id=${urlThreadId}`);
 			}, 100);
 		}
-	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router]);
+	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router, isReadOnly]);
 
 	
 
@@ -174,15 +179,24 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	}, [voice.state]);
 
 	useEffect(() => {
+		if (isReadOnly) {
+			return;
+		}
+
 		if (shouldStartVoice && !voiceStarted.current && voice.state === "idle") {
 			voiceStarted.current = true;
 			voice.startConversation();
 		}
-	}, [shouldStartVoice, voice.state]);
+	}, [shouldStartVoice, voice.state, isReadOnly]);
 
 	return (
 		<>
 			<div className="h-[calc(100vh-100px)] w-screen overflow-hidden">
+				{isReadOnly && (
+					<div className="mx-auto mt-3 w-full max-w-4xl rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+						Đang xem lại hội thoại ở chế độ chỉ đọc.
+					</div>
+				)}
 				<ResizablePanelGroup orientation="horizontal" className="h-full w-full">
 					{state === "collapsed" ? null : (
 						<>
@@ -210,6 +224,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 										lastRunId={voice.lastRunId || undefined}
 										voiceThreadId={voice.threadId || undefined}
 										voiceState={voice.state}
+										readOnly={isReadOnly}
 									/>
 								</div>
 							</div>
@@ -225,26 +240,28 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 					)}
 				</ResizablePanelGroup>
 			</div>
-			<div
-				className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
-			>
-				<div className="mx-auto w-full max-w-4xl">
-					<ChatInput
-						isLoading={isLoading}
-						onSubmitMessage={handleSendMessage}
-						voiceAgentId={agent || "chatbot"}
-						voiceModel={model}
-						voiceState={voice.state}
-						isListening={voice.isListening}
-						isSpeaking={voice.isSpeaking}
-						isMuted={voice.isMuted}
-						onVoiceToggle={handleVoiceStateChange}
-						onVoiceMute={voice.toggleMute}
-						showDocumentButton={true}
-						onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
-					/>
+			{!isReadOnly && (
+				<div
+					className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
+				>
+					<div className="mx-auto w-full max-w-4xl">
+						<ChatInput
+							isLoading={isLoading}
+							onSubmitMessage={handleSendMessage}
+							voiceAgentId={agent || "chatbot"}
+							voiceModel={model}
+							voiceState={voice.state}
+							isListening={voice.isListening}
+							isSpeaking={voice.isSpeaking}
+							isMuted={voice.isMuted}
+							onVoiceToggle={handleVoiceStateChange}
+							onVoiceMute={voice.toggleMute}
+							showDocumentButton={true}
+							onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
+						/>
+					</div>
 				</div>
-			</div>{" "}
+			)}
 		</>
 	);
 }

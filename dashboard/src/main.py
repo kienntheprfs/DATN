@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from src.routes.pinned_posts import router as pinned_posts_router
 from src.routes.ratings import router as ratings_router
 
 
@@ -18,3 +19,4 @@ async def health_check() -> dict[str, str]:
 
 
 app.include_router(ratings_router)
+app.include_router(pinned_posts_router)

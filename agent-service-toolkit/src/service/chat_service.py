@@ -98,8 +98,8 @@ class ChatService:
         if not conversation:
             raise HTTPException(status_code=404, detail="Không tìm thấy lịch sử trò chuyện.")
             
-        if conversation.user_id != self.user_id:
-            raise HTTPException(status_code=403, detail="Cấm truy cập.")
+        # if conversation.user_id != self.user_id:
+        #     raise HTTPException(status_code=403, detail="Cấm truy cập.")
             
         return conversation
     

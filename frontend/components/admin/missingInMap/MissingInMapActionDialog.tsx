@@ -37,7 +37,7 @@ export function MissingInMapActionDialog({
         </DialogHeader>
 
         <div className="border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-          {pendingAction?.id}
+          {pendingAction?.displayId}
         </div>
 
         <DialogFooter className="mt-2 gap-2 border-0 bg-transparent p-0 pt-2 sm:justify-end">
