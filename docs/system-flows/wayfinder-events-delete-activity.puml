@@ -1,0 +1,32 @@
+@startuml Wayfinder Events Delete Activity
+
+|Người dùng|
+start
+:Xem danh sách sự kiện;
+:Click nút Delete trên sự kiện;
+
+|Frontend|
+:Hiển thị confirm dialog;
+:"Bạn có chắc muốn xóa sự kiện này?";
+
+|Người dùng|
+:Xác nhận xóa;
+:Click "Xóa";
+
+|Frontend|
+:Gọi DELETE /events/{event_id};
+
+|Wayfinder Backend|
+:Nhận request;
+:Tìm Event theo ID;
+:Xóa khỏi database;
+:Return success message;
+
+|Frontend|
+:Reload danh sách;
+:Hiển thị thông báo thành công;
+
+|Người dùng|
+:Xem danh sách đã cập nhật;
+stop
+@enduml

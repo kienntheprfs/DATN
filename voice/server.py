@@ -97,6 +97,29 @@ async def serve_index():
     return FileResponse("index.html")
 
 
+@app.post("/api/chat/text")
+async def chat_text(req: Request):
+    """Simple text chat endpoint for Expo Go testing."""
+    try:
+        body = await req.json()
+    except Exception as e:
+        logger.error(f"Failed to parse request: {e}")
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    message = body.get("message", "")
+    agent_id = body.get("agent_id", "chatbot")
+    user_id = body.get("user_id", "guest")
+
+    logger.info(f"Text chat: agent_id={agent_id}, user_id={user_id}, message={message[:100]}")
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "message": f"Test response: Tôi nhận được tin nhắn '{message}'. Đây là endpoint test cho Expo Go.",
+        }
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield  # Run app

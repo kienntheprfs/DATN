@@ -1,0 +1,34 @@
+@startuml Wayfinder Events Edit Activity
+
+|Người dùng|
+start
+:Xem danh sách sự kiện;
+:Click nút Edit trên sự kiện;
+
+|Frontend|
+:Mở dialog Edit;
+:Populate form với data cũ;
+:Hiển thị NodeSelector (nếu có node_id);
+
+|Người dùng|
+:Sửa thông tin cần thiết;
+:Click "Lưu thay đổi";
+
+|Frontend|
+:Gọi PATCH /events/{event_id};
+
+|Wayfinder Backend|
+:Nhận request;
+:Tìm Event theo ID;
+:Cập nhật các field;
+:Return EventOut;
+
+|Frontend|
+:Đóng dialog;
+:Reload danh sách;
+:Hiển thị thông báo thành công;
+
+|Người dùng|
+:Xem danh sách đã cập nhật;
+stop
+@enduml
