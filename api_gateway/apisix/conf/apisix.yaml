@@ -1,0 +1,293 @@
+routes:
+  - id: system-health
+    priority: 130
+    methods: ["GET"]
+    uri: /health
+    plugins:
+      serverless-pre-function:
+        phase: rewrite
+        functions:
+          - >-
+            return function(conf, ctx)
+              local core = require("apisix.core")
+              core.response.set_header("Content-Type", "application/json")
+              core.response.exit(200, '{"status":"healthy","service":"api-gateway","version":"0.1.0","database":"connected"}')
+            end
+
+  - id: system-root
+    priority: 130
+    methods: ["GET"]
+    uri: /
+    plugins:
+      serverless-pre-function:
+        phase: rewrite
+        functions:
+          - >-
+            return function(conf, ctx)
+              local core = require("apisix.core")
+              core.response.set_header("Content-Type", "application/json")
+              core.response.exit(200, '{"service":"API Gateway","version":"0.1.0","architecture":"APISIX standalone + FastAPI auth service on host","endpoints":{"docs":"/docs","health":"/health","auth":"/auth","threads":"/threads","forward-auth":"/auth/forward-auth"}}')
+            end
+
+  - id: auth-public
+    priority: 100
+    methods: ["GET", "POST", "PATCH", "DELETE", "PUT"]
+    uris:
+      - /auth/register
+      - /auth/login
+      - /auth/google
+      - /auth/refresh
+      - /auth/forward-auth
+    upstream_id: u-auth
+
+  - id: docs-public
+    priority: 100
+    uri: /docs*
+    upstream_id: u-auth
+
+  - id: redoc-public
+    priority: 100
+    uri: /redoc*
+    upstream_id: u-auth
+
+  - id: openapi-public
+    priority: 100
+    uri: /openapi.json
+    upstream_id: u-auth
+
+  - id: auth-protected
+    priority: 90
+    methods: ["GET", "POST"]
+    uris:
+      - /auth/me
+      - /auth/logout
+      - /auth/logout-all
+      - /auth/revoke
+      - /auth/revoke-all
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+    upstream_id: u-auth
+
+  - id: threads-protected
+    priority: 90
+    methods: ["GET", "POST", "PATCH", "DELETE"]
+    uri: /threads*
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+    upstream_id: u-auth
+
+  - id: agent-invoke-public
+    priority: 110
+    methods: ["POST"]
+    uri: /agent/invoke
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-agent
+
+  - id: agent-stream-sse-public
+    priority: 110
+    methods: ["POST"]
+    uri: /agent/stream
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+      proxy-buffering:
+        disable_proxy_buffering: true
+        
+    upstream_id: u-agent-stream
+
+  - id: agent-info-public
+    priority: 110
+    methods: ["GET"]
+    uri: /agent/info
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+    upstream_id: u-agent
+    
+
+  - id: agent-protected
+    priority: 60
+    methods: ["GET", "POST", "PATCH", "DELETE", "PUT"]
+    uri: /agent/*
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-agent
+
+  - id: kb-protected
+    priority: 70
+    methods: ["GET", "POST", "PATCH", "DELETE", "PUT"]
+    uri: /kb/*
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+      proxy-rewrite:
+        regex_uri: ["^/kb/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-knowledge
+
+  - id: wayfinder-post-public
+    priority: 120
+    methods: ["POST"]
+    uris:
+      - /wayfinder/api/missing-locations
+      - /wayfinder/api/missing-routes
+      - /wayfinder/api/refresh-cache
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/wayfinder/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-wayfinder
+
+  - id: wayfinder-get-public
+    priority: 80
+    methods: ["GET"]
+    uri: /wayfinder/*
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/wayfinder/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-wayfinder
+
+  - id: wayfinder-protected
+    priority: 40
+    methods: ["POST", "PATCH", "DELETE", "PUT"]
+    uri: /wayfinder/*
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+      proxy-rewrite:
+        regex_uri: ["^/wayfinder/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-wayfinder
+
+  - id: dashboard-protected
+    priority: 70
+    methods: ["GET", "POST", "PATCH", "DELETE", "PUT"]
+    uri: /dashboard/*
+    plugins:
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
+      proxy-rewrite:
+        regex_uri: ["^/dashboard/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-dashboard
+
+  - id: voice-offer-public
+    priority: 100
+    methods: ["POST", "PATCH"]
+    uri: /voice/offer
+    plugins:
+      proxy-rewrite:
+        uri: /api/offer
+    upstream_id: u-voice
+
+  - id: voice-health-public
+    priority: 100
+    methods: ["GET"]
+    uri: /voice/health
+    plugins:
+      proxy-rewrite:
+        uri: /health
+    upstream_id: u-voice
+
+upstreams:
+  - id: u-auth
+    type: roundrobin
+    scheme: http
+    nodes:
+      "${{AUTH_UPSTREAM_ADDR}}": 1
+
+  - id: u-agent
+    type: roundrobin
+    scheme: http
+    timeout:
+      connect: 5
+      send: 60
+      read: 300
+    nodes:
+      "${{AGENT_UPSTREAM_ADDR}}": 1
+
+  - id: u-agent-stream
+    type: roundrobin
+    scheme: http
+    timeout:
+      connect: 5
+      send: 60
+      read: 3600
+    nodes:
+      "${{AGENT_UPSTREAM_ADDR}}": 1
+
+  - id: u-knowledge
+    type: roundrobin
+    scheme: http
+    nodes:
+      "${{KNOWLEDGE_UPSTREAM_ADDR}}": 1
+
+  - id: u-wayfinder
+    type: roundrobin
+    scheme: http
+    nodes:
+      "${{WAYFINDER_UPSTREAM_ADDR}}": 1
+
+  - id: u-dashboard
+    type: roundrobin
+    scheme: http
+    nodes:
+      "${{DASHBOARD_UPSTREAM_ADDR}}": 1
+
+  - id: u-voice
+    type: roundrobin
+    scheme: http
+    nodes:
+      "${{VOICE_UPSTREAM_ADDR}}": 1
+#END

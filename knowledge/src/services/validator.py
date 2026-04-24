@@ -8,6 +8,8 @@ ALLOWED_CONTENT_TYPES = {
     "text/plain": DocumentType.TXT,
     "text/markdown": DocumentType.MD,
     "text/x-markdown": DocumentType.MD,
+    "application/msword": DocumentType.DOCX,  # .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": DocumentType.DOCX,  # .docx
 }
 
 ALLOWED_EXTENSIONS = {
@@ -15,6 +17,8 @@ ALLOWED_EXTENSIONS = {
     ".txt": DocumentType.TXT,
     ".md": DocumentType.MD,
     ".markdown": DocumentType.MD,
+    ".doc": DocumentType.DOCX,
+    ".docx": DocumentType.DOCX,
 }
 
 def validate_upload_file(file: UploadFile) -> DocumentType:
@@ -28,7 +32,7 @@ def validate_upload_file(file: UploadFile) -> DocumentType:
         return ALLOWED_EXTENSIONS[ext]
 
     raise HTTPException(
-        status_code=400,
+        status_code=402,
         detail=(
             f"Unsupported file type. "
             f"filename={file.filename}, "

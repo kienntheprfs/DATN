@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from schema.conversation import Conversation
 
 class ChatRepository:
@@ -18,3 +18,52 @@ class ChatRepository:
         self.db.add(conversation)
         await self.db.commit()
         return conversation
+    
+    async def get_all_thread_by_user_id(
+        self,
+        user_id: str,
+        offset: int = 0,
+        limit: int = 20
+    ) -> list[Conversation]:
+
+        query = (
+            select(Conversation)
+            .where(
+                Conversation.user_id == user_id,
+                Conversation.is_archived == False
+            )
+            .order_by(Conversation.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        result = await self.db.execute(query)
+
+        return result.scalars().all()
+    
+    async def update_thread_title(self, thread_id: str, new_title: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.id == thread_id)
+            .values(title=new_title)
+        )
+        await self.db.execute(query)
+        await self.db.commit()
+
+    async def delete_all_threads_by_user(self, user_id: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.user_id == user_id)
+            .values(is_archived=True)
+        )
+        await self.db.execute(query)
+        await self.db.commit()
+
+    async def delete_thread(self, thread_id: str) -> None:
+        query = (
+            update(Conversation)
+            .where(Conversation.id == thread_id)
+            .values(is_archived=True)
+        )
+        await self.db.execute(query)
+        await self.db.commit()

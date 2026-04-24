@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Agent</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        #status-container {
+            margin-bottom: 20px;
+        }
+
+        #status {
+            font-weight: bold;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-disconnected {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .status-connecting {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .status-connected {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        #chat-log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg {
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            font-size: 0.95rem;
+        }
+
+        .user-msg {
+            background: var(--primary-color);
+            color: white;
+            align-self: flex-end;
+        }
+
+        .bot-msg {
+            background: #e5e7eb;
+            color: var(--text-color);
+            align-self: flex-start;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            width: 100%;
+        }
+
+        .btn-connect {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-disconnect {
+            background: #ef4444;
+            color: white;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>AI Voice Agent</h1>
+        <div id="status-container">
+            Trạng thái: <span id="status" class="status-disconnected">Mất kết nối</span>
+        </div>
+
+        <div id="chat-log">
+            <div class="msg bot-msg">Chào bạn! Nhấn nút bên dưới để bắt đầu nói chuyện nhé.</div>
+        </div>
+
+        <button id="connect-btn" class="btn-connect">Kết nối ngay</button>
+        <audio id="audio-el" autoplay style="display:none"></audio>
+    </div>
+
+    <!-- RTVI Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@pipecat-ai/client-js@0.0.22/dist/pipecat.js"></script>
+
+    <script>
+        const statusEl = document.getElementById("status")
+        const buttonEl = document.getElementById("connect-btn")
+        const audioEl = document.getElementById("audio-el")
+        const chatLog = document.getElementById("chat-log");
+
+        let connected = false
+        let peerConnection = null
+
+        // Debounce mechanism to prevent duplicate messages
+        let lastMessageTime = 0;
+        const MESSAGE_DEBOUNCE_TIME = 500; // 500ms
+
+        // Store recent messages to prevent duplicates
+        const recentMessages = new Set();
+
+        // Hàm hiển thị tin nhắn lên UI
+        function addMessage(text, role) {
+            const currentTime = Date.now();
+            const messageKey = `${role}:${text}`;
+
+            // Debounce check - prevent same message within debounce time
+            if (currentTime - lastMessageTime < MESSAGE_DEBOUNCE_TIME) {
+                return;
+            }
+
+            // Check if this message was recently added
+            if (recentMessages.has(messageKey)) {
+                return; // Skip adding duplicate message
+            }
+
+            // Check if this message already exists in DOM
+            const existingMessages = chatLog.querySelectorAll(`.${role}-msg`);
+            for (let existingMsg of existingMessages) {
+                if (existingMsg.textContent === text) {
+                    return; // Skip adding duplicate message
+                }
+            }
+
+            lastMessageTime = currentTime;
+            recentMessages.add(messageKey);
+
+            // Clean up old messages from set (keep last 50)
+            if (recentMessages.size > 50) {
+                const entries = Array.from(recentMessages);
+                recentMessages.clear();
+                entries.slice(-25).forEach(entry => recentMessages.add(entry));
+            }
+
+            const msgDiv = document.createElement("div");
+            msgDiv.className = `msg ${role}-msg`;
+            msgDiv.textContent = text;
+            chatLog.appendChild(msgDiv);
+            chatLog.scrollTop = chatLog.scrollHeight; // Tự động cuộn xuống
+        }
+
+        const printSelectedIceCandidate = async (pc) => {
+            const stats = await pc.getStats(null)
+            stats.forEach(report => {
+                if (
+                    report.type === "transport" &&
+                    report.selectedCandidatePairId
+                ) {
+                    const candidatePair = stats.get(report.selectedCandidatePairId);
+                    const localCandidate = stats.get(candidatePair.localCandidateId);
+                    const remoteCandidate = stats.get(candidatePair.remoteCandidateId);
+
+                    console.log("Selected local candidate:", localCandidate);
+                    console.log("Selected remote candidate:", remoteCandidate);
+                }
+            });
+        }
+
+        const sendIceCandidate = async (pc, candidate) => {
+            await fetch('/api/offer', {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    pc_id: pc.pc_id,
+                    candidates: [{
+                        candidate: candidate.candidate,
+                        sdp_mid: candidate.sdpMid,
+                        sdp_mline_index: candidate.sdpMLineIndex
+                    }]
+                })
+            });
+        };
+
+        const createSmallWebRTCConnection = async (audioTrack) => {
+            // TODO: need to configure a TURN server if using inside Docker on Mac.
+            const config = {
+                iceServers: [
+                    {
+                        urls: "stun:stun.l.google.com:19302",
+                    }
+                ]
+            };
+            const pc = new RTCPeerConnection(config)
+
+            const dc = pc.createDataChannel("pipecat");
+            dc.onmessage = (e) => {
+                try {
+                    const message = JSON.parse(e.data);
+                    // Handle RTVI messages
+                    if (message.label === "rtvi-ai") {
+                        switch (message.type) {
+                            case "user-transcription":
+                                if (message.data.final) {
+                                    addMessage(message.data.text, "user");
+                                }
+                                break;
+                            case "bot-output":
+                                // Only add bot message when spoken flag is true
+                                if (message.data.spoken) {
+                                    addMessage(message.data.text, "bot");
+                                }
+                                break;
+                            // Remove bot-transcription to prevent duplicates
+                        }
+                    }
+                } catch (err) {
+                    console.error("RTVI message error:", err);
+                }
+            };
+
+            // Queue to store ICE candidates until we have received the answer and have a session in progress
+            pc.pendingIceCandidates = []
+            pc.canSendIceCandidates = false
+
+            addPeerConnectionEventListeners(pc)
+            pc.ontrack = e => audioEl.srcObject = e.streams[0]
+            // SmallWebRTCTransport expects to receive both transceivers
+            pc.addTransceiver(audioTrack, { direction: 'sendrecv' })
+            pc.addTransceiver('video', { direction: 'sendrecv' })
+            await pc.setLocalDescription(await pc.createOffer())
+            const offer = pc.localDescription
+            const response = await fetch('/api/offer', {
+                body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
+                headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+            });
+            const answer = await response.json()
+            pc.pc_id = answer.pc_id
+            await pc.setRemoteDescription(answer)
+
+            // Now we can send ICE candidates
+            pc.canSendIceCandidates = true
+
+            // Send any queued ICE candidates
+            for (const candidate of pc.pendingIceCandidates) {
+                await sendIceCandidate(pc, candidate)
+            }
+            pc.pendingIceCandidates = []
+
+            return pc
+        }
+
+        const connect = async () => {
+            _onConnecting()
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            peerConnection = await createSmallWebRTCConnection(audioStream.getAudioTracks()[0])
+        }
+
+        const addPeerConnectionEventListeners = (pc) => {
+            pc.oniceconnectionstatechange = () => {
+                console.log("oniceconnectionstatechange", pc?.iceConnectionState)
+            }
+            pc.onconnectionstatechange = () => {
+                console.log("onconnectionstatechange", pc?.connectionState)
+                let connectionState = pc?.connectionState
+                if (connectionState === 'connected') {
+                    _onConnected()
+                } else if (connectionState === 'disconnected') {
+                    _onDisconnected()
+                }
+            }
+            pc.onicecandidate = async (event) => {
+                if (event.candidate) {
+                    console.log("New ICE candidate:", event.candidate);
+                    // Check if we can send ICE candidates (we have received the answer with pc_id)
+                    if (pc.canSendIceCandidates && pc.pc_id) {
+                        // Send immediately
+                        await sendIceCandidate(pc, event.candidate)
+                    } else {
+                        // Queue the candidate until we have pc_id
+                        pc.pendingIceCandidates.push(event.candidate)
+                    }
+                } else {
+                    console.log("All ICE candidates have been sent.");
+                }
+            };
+        }
+
+        // Cập nhật trạng thái UI
+        const _onConnecting = () => {
+            statusEl.textContent = "Đang kết nối...";
+            statusEl.className = "status-connecting";
+            buttonEl.textContent = "Hủy kết nối";
+            buttonEl.className = "btn-disconnect";
+            connected = true;
+        }
+
+        const _onConnected = () => {
+            statusEl.textContent = "Đã kết nối";
+            statusEl.className = "status-connected";
+            addMessage("Đã sẵn sàng! Hãy nói gì đó đi...", "bot");
+        }
+
+        const _onDisconnected = () => {
+            statusEl.textContent = "Mất kết nối";
+            statusEl.className = "status-disconnected";
+            buttonEl.textContent = "Kết nối ngay";
+            buttonEl.className = "btn-connect";
+            connected = false;
+        }
+
+        const disconnect = () => {
+            if (!peerConnection) {
+                return
+            }
+            peerConnection.close()
+            peerConnection = null
+            _onDisconnected()
+        }
+
+        buttonEl.addEventListener("click", async () => {
+            if (!connected) {
+                await connect()
+            } else {
+                disconnect()
+            }
+        });
+    </script>
+</body>
+
+</html>

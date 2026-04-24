@@ -1,0 +1,49 @@
+@startuml
+title Voice Conversation Flow
+
+|User|
+start
+:Click Voice Button;
+
+|Frontend|
+:Set state = connecting;
+:getUserMedia audio;
+
+if (Permission?) then (yes)
+  :Create RTCPeerConnection;
+  :POST /api/voice/offer;
+  
+  |Backend|
+  :Return SDP answer;
+  
+  |Frontend|
+  :Set state = connected;
+  
+  |User|
+  :Speak;
+  
+  |Frontend|
+  :Send audio via WebRTC;
+  
+  |Backend|
+  :STT, AI, TTS;
+  :Send audio back;
+  
+  |Frontend|
+  :Play audio;
+  
+  |User|
+  :Click end call;
+  
+  |Frontend|
+  :Cleanup;
+  :state = disconnected;
+  stop
+  
+else (denied)
+  :state = error;
+  :Show error;
+  stop
+endif
+
+@enduml

@@ -1,0 +1,62 @@
+@startuml Wayfinder Events Activity
+
+|Người dùng|
+start
+:Truy cập trang Events;
+
+|Frontend|
+:Gọi GET /events/all;
+
+|Wayfinder Backend|
+:Nhận request;
+:SELECT Event (is_active filter);
+:JOIN Node để lấy location;
+:Join Map và Building;
+:Return List[EventWithLocation];
+
+|Frontend|
+:Render danh sách sự kiện;
+:Hiển thị filter/search;
+
+|Người dùng|
+:Nhập từ khóa tìm kiếm;
+:Chọn category;
+:Click "Tìm kiếm";
+
+|Frontend|
+:Filter client-side;
+:Hiển thị kết quả;
+
+|Người dùng|
+:Click "Tạo sự kiện mới";
+
+|Frontend|
+:Hiển thị form tạo;
+:Mở NodeSelector;
+:Gọi GET /locations;
+
+|Wayfinder Backend|
+:Return List[Location];
+
+|Frontend|
+:User chọn node trên bản đồ;
+:Nhập thông tin sự kiện;
+:Click "Tạo sự kiện";
+
+|Frontend|
+:Gọi POST /events;
+
+|Wayfinder Backend|
+:Nhận request;
+:Tạo Event record;
+:Return EventOut;
+
+|Frontend|
+:Đóng dialog;
+:Reload danh sách;
+:Hiển thị thông báo thành công;
+
+|Người dùng|
+:Xem danh sách mới;
+stop
+@enduml

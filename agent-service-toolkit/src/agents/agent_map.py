@@ -10,7 +10,12 @@ from langgraph.prebuilt import ToolNode
 
 from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 from agents.tool_map import map_tools
+from agents.tool_event import event_tools
 from core import get_model, settings
+
+
+# Combine all tools
+all_tools = map_tools + event_tools
 
 
 class AgentState(MessagesState, total=False):
@@ -25,23 +30,25 @@ class AgentState(MessagesState, total=False):
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
-    You are a helpful map navigation assistant with expertise in finding routes and locations.
-    Today's date is {current_date}.
+    Bạn là trợ lý AI hữu ích, có thể giúp người dùng về:
+    1. Chỉ đường trong khuôn viên trường (indoor wayfinding)
+    2. Tra cứu thông tin về sự kiện, hội thảo, hoạt động
+    3. Kết hợp cả hai: chỉ đường đến địa điểm diễn ra sự kiện
+    
+    Hôm nay là ngày: {current_date}
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
-
-    A few things to remember:
-    - Always use mapID = 1 if the user doesn't specify which map they want to use
-    - When searching for routes, provide clear step-by-step directions
-    - If the user mentions their current location, use it as the starting point for routes
-    - For distance calculations, provide meter measurements
-    - Be helpful and provide alternative suggestions if a route cannot be found
-    - Use Vietnamese language when responding to users, as the interface is in Vietnamese
+    HƯỚNG DẪN QUAN TRỌNG:
+    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), PHẢI HỎI và XÁC NHẬN đủ 2 thông tin: vị trí hiện tại của người dùng và điểm đến. CHỈ GỌI FindRoute khi đã có đủ cả hai.
+    - Nếu người dùng chỉ cung cấp một trong hai (ví dụ: "đi từ phòng 101" hoặc "đến thư viện"), hỏi lấy thông tin còn thiếu.
+    - Khi người dùng hỏi về sự kiện (ví dụ: "có sự kiện gì", "tìm hội thảo...", "sự kiện nào"), sử dụng SearchEvents hoặc GetUpcomingEvents
+    - Khi có nhiều địa điểm trùng tên, hỏi người dùng xác nhận bằng TÊN cụ thể (tòa nhà, tầng nếu biết)
+    - Nếu sự kiện có vị trí trên bản đồ, đề xuất chỉ đường đến đó
+    - Trả lời bằng tiếng Việt, rõ ràng và thân thiện
     """
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    bound_model = model.bind_tools(map_tools)
+    bound_model = model.bind_tools(all_tools)
     preprocessor = RunnableLambda(
         lambda state: [SystemMessage(content=instructions)] + state["messages"],
         name="StateModifier",
@@ -50,7 +57,9 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 
 def format_safety_message(safety: LlamaGuardOutput) -> AIMessage:
-    content = f"This conversation was flagged for unsafe content: {', '.join(safety.unsafe_categories)}"
+    content = (
+        f"This conversation was flagged for unsafe content: {', '.join(safety.unsafe_categories)}"
+    )
     return AIMessage(content=content)
 
 
@@ -92,7 +101,7 @@ async def block_unsafe_content(state: AgentState, config: RunnableConfig) -> Age
 # Define the graph
 agent = StateGraph(AgentState)
 agent.add_node("model", acall_model)
-agent.add_node("tools", ToolNode(map_tools))
+agent.add_node("tools", ToolNode(all_tools))
 agent.add_node("guard_input", llama_guard_input)
 agent.add_node("block_unsafe_content", block_unsafe_content)
 agent.set_entry_point("guard_input")
@@ -108,7 +117,9 @@ def check_safety(state: AgentState) -> Literal["unsafe", "safe"]:
             return "safe"
 
 
-agent.add_conditional_edges("guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "model"})
+agent.add_conditional_edges(
+    "guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "model"}
+)
 
 # Always END after blocking unsafe content
 agent.add_edge("block_unsafe_content", END)

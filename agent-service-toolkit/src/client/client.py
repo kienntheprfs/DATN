@@ -211,6 +211,8 @@ class AgentClient:
                 case "token":
                     # Yield the str token directly
                     return parsed["content"]
+                case "citations_ready":
+                    return {"type": "citations_ready", "data": parsed["content"]}
                 case "error":
                     error_msg = "Error: " + parsed["content"]
                     return ChatMessage(type="ai", content=error_msg)

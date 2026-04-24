@@ -1,0 +1,101 @@
+@startuml usecase-user
+' --- Cấu hình chung ---
+left to right direction
+skinparam shadowing true
+skinparam roundcorner 20
+scale 2
+
+' Bỏ linetype ortho để đường nối các use case mềm mại và tự nhiên hơn
+
+' --- Font chữ & Kích thước ---
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 14
+skinparam defaultFontColor #333333
+
+' --- Bảng màu Modern Blue ---
+!define DARK_BLUE #1565C0
+!define LIGHT_BLUE #E3F2FD
+!define ACCENT_ORANGE #EF6C00
+!define TEXT_COLOR #263238
+!define LINE_COLOR #455A64
+
+' --- Style cho Actor ---
+skinparam actor {
+    BorderColor DARK_BLUE
+    BackgroundColor LIGHT_BLUE
+    FontSize 16
+    FontStyle bold
+    FontColor Black
+}
+
+' --- Style cho Use Case ---
+skinparam usecase {
+    BackgroundColor White
+    BorderColor DARK_BLUE
+    BorderThickness 2
+    FontSize 15
+    FontColor DARK_BLUE
+    ArrowColor LINE_COLOR
+    ArrowThickness 1.5
+}
+
+' --- Style cho Khung hệ thống (Rectangle) ---
+skinparam rectangle {
+    BackgroundColor #FAFAFA
+    BorderColor #B0BEC5
+    BorderThickness 1
+}
+
+' --- Tùy chỉnh mũi tên Extend/Include ---
+skinparam arrow {
+    MessageAlign center
+    FontColor ACCENT_ORANGE
+    FontSize 13
+    FontStyle bold
+}
+
+' === NỘI DUNG SƠ ĐỒ ===
+actor "Người dùng\nvãng lai" as User
+actor "Người dùng\nđã đăng nhập" as AuthUser
+
+' Kế thừa Actor
+AuthUser -up-|> User
+
+rectangle "Hệ thống BK-TBOT" {
+    
+    package "Xác thực" {
+        usecase "Đăng ký tài khoản" as Register
+        usecase "Đăng nhập" as Login
+    }
+    
+    package "Hội thoại" {
+        usecase "Hỏi đáp thông tin" as Chat
+        usecase "Hỏi đường" as Nav
+        usecase "Đánh giá\ncâu trả lời" as Rate
+        usecase "Hỏi đáp chuyên sâu" as DeepChat
+    }
+
+    package "Quản lý" {
+        usecase "Quản lý\nlịch sử hội thoại" as HistoryMgmt
+    }
+}
+
+' --- KẾT NỐI ACTOR VỚI USE CASE ---
+' Người dùng vãng lai
+User --> Register
+User --> Login
+User --> Chat
+User --> Nav
+
+' Người dùng đã đăng nhập (Được thừa hưởng các quyền trên)
+AuthUser --> HistoryMgmt
+AuthUser --> DeepChat
+AuthUser --> Rate
+
+' --- KẾT NỐI GIỮA CÁC USE CASE (EXTEND) ---
+' Mũi tên trỏ từ tính năng mở rộng về tính năng gốc
+Nav .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
+Rate .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
+DeepChat .up.> Chat : <color:ACCENT_ORANGE><<extend>></color>
+
+@enduml

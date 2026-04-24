@@ -1,5 +1,9 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from core.settings import settings
+from sqlalchemy.orm import declarative_base
+import ssl
+
+Base = declarative_base()
 
 # Sử dụng lại đúng các biến cấu hình mà postgres.py đang dùng
 # Lưu ý: Cần cài đặt asyncpg bằng lệnh `pip install asyncpg` nếu chưa có
@@ -10,7 +14,23 @@ DATABASE_URL = (
     f"{settings.POSTGRES_DB}"
 )
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+connect_args = {}
+
+if getattr(settings, "POSTGRES_SSL_MODE", "disable") == "require":
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False  # Bỏ qua check hostname (tương đương rejectUnauthorized: false)
+    ssl_context.verify_mode = ssl.CERT_NONE  # Bỏ qua check chứng chỉ
+    connect_args["ssl"] = ssl_context
+
+# Azure/gateway often closes idle TCP sessions; without pre-ping/recycle the pool
+# hands out dead asyncpg connections → InterfaceError: connection is closed.
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args=connect_args,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=280,
+)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )

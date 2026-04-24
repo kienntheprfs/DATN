@@ -2,6 +2,7 @@ from typing import Any, Literal, NotRequired
 
 from pydantic import BaseModel, Field, SerializeAsAny
 from typing_extensions import TypedDict
+from typing import Optional
 
 from schema.models import AllModelEnum, AnthropicModelName, OpenAIModelName
 
@@ -65,6 +66,11 @@ class UserInput(BaseModel):
         default={},
         examples=[{"spicy_level": 0.8}],
     )
+    query_mode: str | None = Field(
+        description="Mode for query: normal or deep",
+        default="normal",
+        examples=["normal", "deep"],
+    )
 
 
 class StreamInput(UserInput):
@@ -121,6 +127,9 @@ class ChatMessage(BaseModel):
         description="Custom message data.",
         default={},
     )
+    timestamp: Optional[str] = None
+
+    citations: list[dict[str, Any]] | None = Field(default=None)
 
     def pretty_repr(self) -> str:
         """Get a pretty representation of the message."""
@@ -173,3 +182,26 @@ class ChatHistoryInput(BaseModel):
 
 class ChatHistory(BaseModel):
     messages: list[ChatMessage]
+
+from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime
+class ConversationResponse(BaseModel):
+    id: str
+    user_id: str
+    title: str | None
+    is_archived: bool
+    created_at: datetime | None
+    updated_at: datetime | None
+
+    # Cấu hình để Pydantic có thể đọc trực tiếp dữ liệu từ SQLAlchemy Object (ORM Mode)
+    model_config = ConfigDict(from_attributes=True)
+
+# Schema cho response tổng của API (có phân trang cơ bản)
+class ThreadListResponse(BaseModel):
+    items: list[ConversationResponse]
+    limit: int
+    offset: int
+
+# Định nghĩa payload nhận vào khi update title
+class UpdateTitleRequest(BaseModel):
+    new_title: str = Field(..., min_length=1, description="Tiêu đề mới của hội thoại")

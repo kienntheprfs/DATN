@@ -9,6 +9,8 @@ from schema.schema import (
     ServiceMetadata,
     StreamInput,
     UserInput,
+    ThreadListResponse,
+    UpdateTitleRequest
 )
 
 __all__ = [

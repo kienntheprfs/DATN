@@ -6,9 +6,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID, uuid4
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -34,20 +34,24 @@ from schema import (
     ServiceMetadata,
     StreamInput,
     UserInput,
+    ThreadListResponse,
+    UpdateTitleRequest,
 )
 from service.utils import (
     convert_message_content_to_string,
     langchain_to_chat_message,
     remove_tool_calls,
 )
-from service.chat_service import ChatService
 from repositories.chat_repo import ChatRepository
+from service.chat_service import ChatService
 from service.dependencies import get_chat_service
-from core.database import engine
+from rag_utils.reference import reference_service
+from core.database import AsyncSessionLocal
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=settings.LOG_LEVEL.to_logging_level())
+
 
 def custom_generate_unique_id(route: APIRoute) -> str:
     """Generate idiomatic operation IDs for OpenAPI client generation."""
@@ -74,6 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     and agents with async loading - for example for starting up MCP clients.
     """
     try:
+        from core.database import Base, engine
+        import schema.missing_knowledge  # noqa: F401 — đăng ký MissingKnowledgeLog trên Base.metadata trước create_all
+
+        async with engine.begin() as conn:
+            # Lệnh này sẽ quét các model kế thừa từ Base và tạo bảng nếu chưa có
+            await conn.run_sync(Base.metadata.create_all)
+
         # Initialize both checkpointer (for short-term memory) and store (for long-term memory)
         async with initialize_database() as saver, initialize_store() as store:
             # Set up both components
@@ -124,11 +135,8 @@ async def info() -> ServiceMetadata:
 
 
 async def _handle_input(
-        user_input: UserInput, 
-        agent: AgentGraph, 
-        user_id: str,
-        thread_id: str
-        ) -> tuple[dict[str, Any], UUID]:
+    user_input: UserInput, agent: AgentGraph, user_id: str, thread_id: str
+) -> tuple[dict[str, Any], UUID]:
     """
     Parse user input and handle any required interrupt resumption.
     Returns kwargs for agent invocation and the run_id.
@@ -140,6 +148,10 @@ async def _handle_input(
     configurable = {"thread_id": thread_id, "user_id": user_id}
     if user_input.model is not None:
         configurable["model"] = user_input.model
+
+    # Config query mode
+    if getattr(user_input, "query_mode", None) is not None:
+        configurable["query_mode"] = user_input.query_mode
 
     callbacks: list[Any] = []
     if settings.LANGFUSE_TRACING:
@@ -175,7 +187,15 @@ async def _handle_input(
         # assume user input is response to resume agent execution from interrupt
         input = Command(resume=user_input.message)
     else:
-        input = {"messages": [HumanMessage(content=user_input.message)]}
+        current_time = datetime.now(timezone.utc).isoformat()
+        input = {
+            "messages": [
+                HumanMessage(
+                    content=user_input.message,
+                    additional_kwargs={"timestamp": current_time, "run_id": str(run_id)},
+                )
+            ]
+        }
 
     kwargs = {
         "input": input,
@@ -188,10 +208,11 @@ async def _handle_input(
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
 async def invoke(
-    user_input: UserInput, 
+    user_input: UserInput,
+    background_tasks: BackgroundTasks,
     agent_id: str = DEFAULT_AGENT,
-    chat_service: ChatService = Depends(get_chat_service),           
-    ) -> ChatMessage:
+    chat_service: ChatService = Depends(get_chat_service),
+) -> ChatMessage:
     """
     Invoke an agent with user input to retrieve a final response.
 
@@ -207,7 +228,11 @@ async def invoke(
     # in that case.
     agent: AgentGraph = get_agent(agent_id)
 
-    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
+    valid_thread_id = await chat_service.get_or_create_thread(
+        thread_id=user_input.thread_id,
+        user_query=user_input.message,
+        background_tasks=background_tasks,
+    )
 
     kwargs, run_id = await _handle_input(user_input, agent, chat_service.user_id, valid_thread_id)
 
@@ -233,9 +258,30 @@ async def invoke(
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 
+import asyncio
+
+
+# Hàm chạy ngầm xử lý việc lấy URL S3 và đẩy vào Queue
+async def background_s3_task(artifacts: list, queue: asyncio.Queue):
+    try:
+        from rag_utils.reference import reference_service
+        from core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            resolved_citations = await reference_service.resolve_citations(artifacts, db)
+            if resolved_citations:
+                sse_data = {"type": "citations_ready", "content": resolved_citations}
+                await queue.put(f"data: {json.dumps(sse_data, ensure_ascii=False)}\n\n")
+    except Exception as e:
+        logger.error(f"Lỗi khi xử lý link S3: {e}")
+
+
+# =========================================================================
+
+
 async def message_generator(
-    user_input: StreamInput, 
-    user_id: str,    
+    user_input: StreamInput,
+    user_id: str,
     thread_id: str,
     agent_id: str = DEFAULT_AGENT,
 ) -> AsyncGenerator[str, None]:
@@ -247,106 +293,314 @@ async def message_generator(
     agent: AgentGraph = get_agent(agent_id)
     kwargs, run_id = await _handle_input(user_input, agent, user_id, thread_id)
 
-    try:
-        # Process streamed events from the graph and yield messages over the SSE stream.
-        async for stream_event in agent.astream(
-            **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
-        ):
-            if not isinstance(stream_event, tuple):
-                continue
-            # Handle different stream event structures based on subgraphs
-            if len(stream_event) == 3:
-                # With subgraphs=True: (node_path, stream_mode, event)
-                _, stream_mode, event = stream_event
-            else:
-                # Without subgraphs: (stream_mode, event)
-                stream_mode, event = stream_event
-            new_messages = []
-            if stream_mode == "updates":
-                for node, updates in event.items():
-                    # A simple approach to handle agent interrupts.
-                    # In a more sophisticated implementation, we could add
-                    # some structured ChatMessage type to return the interrupt value.
-                    if node == "__interrupt__":
-                        interrupt: Interrupt
-                        for interrupt in updates:
-                            new_messages.append(AIMessage(content=interrupt.value))
-                        continue
-                    updates = updates or {}
-                    update_messages = updates.get("messages", [])
-                    # special cases for using langgraph-supervisor library
-                    if "supervisor" in node or "sub-agent" in node:
-                        # the only tools that come from the actual agent are the handoff and handback tools
-                        if isinstance(update_messages[-1], ToolMessage):
-                            if "sub-agent" in node and len(update_messages) > 1:
-                                # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
-                                update_messages = update_messages[-2:]
-                            else:
-                                # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
-                                update_messages = [update_messages[-1]]
-                        else:
-                            update_messages = []
-                    new_messages.extend(update_messages)
+    # THÊM MỚI: Khởi tạo hàng đợi trung chuyển và tập hợp quản lý task ngầm
+    queue = asyncio.Queue()
+    background_tasks = set()
 
-            if stream_mode == "custom":
-                new_messages = [event]
-
-            # LangGraph streaming may emit tuples: (field_name, field_value)
-            # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
-            # We accumulate only supported fields into `parts` and skip unsupported metadata.
-            # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
-            processed_messages = []
-            current_message: dict[str, Any] = {}
-            for message in new_messages:
-                if isinstance(message, tuple):
-                    key, value = message
-                    # Store parts in temporary dict
-                    current_message[key] = value
+    # THÊM MỚI: Bọc toàn bộ logic LangGraph gốc vào một hàm bất đồng bộ
+    async def _run_graph():
+        try:
+            # Process streamed events from the graph and yield messages over the SSE stream.
+            async for stream_event in agent.astream(
+                **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
+            ):
+                if not isinstance(stream_event, tuple):
+                    continue
+                # Handle different stream event structures based on subgraphs
+                if len(stream_event) == 3:
+                    # With subgraphs=True: (node_path, stream_mode, event)
+                    _, stream_mode, event = stream_event
                 else:
-                    # Add complete message if we have one in progress
-                    if current_message:
-                        processed_messages.append(_create_ai_message(current_message))
-                        current_message = {}
-                    processed_messages.append(message)
+                    # Without subgraphs: (stream_mode, event)
+                    stream_mode, event = stream_event
+                new_messages = []
+                if stream_mode == "updates":
+                    for node, updates in event.items():
+                        # A simple approach to handle agent interrupts.
+                        # In a more sophisticated implementation, we could add
+                        # some structured ChatMessage type to return the interrupt value.
+                        if node == "__interrupt__":
+                            interrupt: Interrupt
+                            for interrupt in updates:
+                                new_messages.append(AIMessage(content=interrupt.value))
+                            continue
+                        updates = updates or {}
+                        update_messages = updates.get("messages", [])
+                        # special cases for using langgraph-supervisor library
+                        if "supervisor" in node or "sub-agent" in node:
+                            # the only tools that come from the actual agent are the handoff and handback tools
+                            if isinstance(update_messages[-1], ToolMessage):
+                                if "sub-agent" in node and len(update_messages) > 1:
+                                    # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
+                                    update_messages = update_messages[-2:]
+                                else:
+                                    # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
+                                    update_messages = [update_messages[-1]]
+                            else:
+                                update_messages = []
+                        new_messages.extend(update_messages)
 
-            # Add any remaining message parts
-            if current_message:
-                processed_messages.append(_create_ai_message(current_message))
+                if stream_mode == "custom":
+                    new_messages = [event]
 
-            for message in processed_messages:
-                try:
-                    chat_message = langchain_to_chat_message(message)
-                    chat_message.run_id = str(run_id)
-                except Exception as e:
-                    logger.error(f"Error parsing message: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
-                    continue
-                # LangGraph re-sends the input message, which feels weird, so drop it
-                if chat_message.type == "human" and chat_message.content == user_input.message:
-                    continue
-                yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+                # THÊM MỚI: Quét qua các tin nhắn mới, nếu là Tool RAG thì kích hoạt background task
+                for msg in new_messages:
+                    # Log message type and attributes for debugging
+                    if isinstance(msg, ToolMessage):
+                        tool_name = getattr(msg, "name", "NO_NAME")
+                        artifacts = getattr(msg, "artifact", None)
+                        logger.info(
+                            f"ToolMessage detected - name={tool_name}, has_artifact={artifacts is not None}, content_len={len(str(msg.content))}"
+                        )
+                        if tool_name == "lookup_hcmut_info":
+                            if artifacts:
+                                logger.info(f"FAQ artifacts found on ToolMessage: {artifacts}")
+                                task = asyncio.create_task(background_s3_task(artifacts, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
+                            else:
+                                logger.warning("lookup_hcmut_info ToolMessage has NO artifacts!")
+                    elif isinstance(msg, tuple) and len(msg) == 2:
+                        key, value = msg
+                        if key == "artifact":
+                            logger.info(f"Found artifact in tuple format: {value}")
+                            if value:
+                                task = asyncio.create_task(background_s3_task(value, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
+                    elif isinstance(msg, tuple) and len(msg) == 2:
+                        key, value = msg
+                        if key == "artifact":
+                            logger.info(f"Found artifact in tuple format: {value}")
+                            if value:
+                                task = asyncio.create_task(background_s3_task(value, queue))
+                                background_tasks.add(task)
+                                task.add_done_callback(background_tasks.discard)
 
-            if stream_mode == "messages":
-                if not user_input.stream_tokens:
-                    continue
-                msg, metadata = event
-                if "skip_stream" in metadata.get("tags", []):
-                    continue
-                # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
-                # Drop them.
-                if not isinstance(msg, AIMessageChunk):
-                    continue
-                content = remove_tool_calls(msg.content)
-                if content:
-                    # Empty content in the context of OpenAI usually means
-                    # that the model is asking for a tool to be invoked.
-                    # So we only print non-empty content.
-                    yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
-    except Exception as e:
-        logger.error(f"Error in message generator: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
-    finally:
-        yield "data: [DONE]\n\n"
+                # LangGraph streaming may emit tuples: (field_name, field_value)
+                # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
+                # We accumulate only supported fields into `parts` and skip unsupported metadata.
+                # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
+                processed_messages = []
+                current_message: dict[str, Any] = {}
+                current_artifact: list | None = None
+                for message in new_messages:
+                    if isinstance(message, tuple):
+                        key, value = message
+                        # Store parts in temporary dict
+                        current_message[key] = value
+                        # Capture artifact if it comes as a tuple
+                        if key == "artifact" and isinstance(value, list):
+                            current_artifact = value
+                            logger.info(f"Captured artifact from tuple: {value}")
+                    else:
+                        # Add complete message if we have one in progress
+                        if current_message:
+                            processed_messages.append(_create_ai_message(current_message))
+                            current_message = {}
+                        processed_messages.append(message)
+
+                # Add any remaining message parts
+                if current_message:
+                    processed_messages.append(_create_ai_message(current_message))
+
+                for message in processed_messages:
+                    try:
+                        chat_message = langchain_to_chat_message(message)
+                        chat_message.run_id = str(run_id)
+                    except Exception as e:
+                        logger.error(f"Error parsing message: {e}")
+                        # SỬA ĐỔI: yield -> await queue.put
+                        await queue.put(
+                            f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
+                        )
+                        continue
+                    # LangGraph re-sends the input message, which feels weird, so drop it
+                    if chat_message.type == "human" and chat_message.content == user_input.message:
+                        continue
+
+                    # SỬA ĐỔI: yield -> await queue.put
+                    await queue.put(
+                        f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+                    )
+
+                if stream_mode == "messages":
+                    if not user_input.stream_tokens:
+                        continue
+                    msg, metadata = event
+                    if "skip_stream" in metadata.get("tags", []):
+                        continue
+                    # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
+                    # Drop them.
+                    if not isinstance(msg, AIMessageChunk):
+                        continue
+                    content = remove_tool_calls(msg.content)
+                    if content:
+                        # Empty content in the context of OpenAI usually means
+                        # that the model is asking for a tool to be invoked.
+                        # So we only print non-empty content.
+
+                        # SỬA ĐỔI: yield -> await queue.put
+                        await queue.put(
+                            f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+                        )
+
+        except Exception as e:
+            logger.error(f"Error in message generator: {e}")
+            # SỬA ĐỔI: yield -> await queue.put
+            await queue.put(
+                f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
+            )
+        finally:
+            # THÊM MỚI: Đợi các task lấy link S3 hoàn tất (nếu có) trước khi đóng stream
+            if background_tasks:
+                await asyncio.gather(*background_tasks, return_exceptions=True)
+
+            # SỬA ĐỔI: yield -> await queue.put
+            await queue.put("data: [DONE]\n\n")
+
+            # THÊM MỚI: Gửi Sentinel value (None) để báo hiệu vòng lặp chính kết thúc
+            await queue.put(None)
+
+    # THÊM MỚI: Kích hoạt _run_graph() chạy ngầm
+    asyncio.create_task(_run_graph())
+
+    # THÊM MỚI: Vòng lặp chính liên tục rút dữ liệu từ queue và yield ra Client
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        yield item
+
+
+# ---------------
+# import asyncio
+# async def background_s3_task(artifacts: list, queue: asyncio.Queue):
+#     """ Mở kết nối DB, dùng Reference Service giải mã path và đẩy vào Queue """
+#     try:
+#         # Tạo session độc lập không chặn luồng chính
+#         async with AsyncSessionLocal() as db:
+#             resolved_citations = await reference_service.resolve_citations(artifacts, db)
+
+#             # Đẩy vào stream cho Client
+#             await queue.put(f"data: {json.dumps({'type': 'citations_ready', 'content': resolved_citations})}\n\n")
+#     except Exception as e:
+#         logger.error(f"Lỗi khi resolve S3 citations: {e}")
+
+# async def message_generator(
+#     user_input: StreamInput,
+#     user_id: str,
+#     thread_id: str,
+#     agent_id: str = DEFAULT_AGENT,
+# ) -> AsyncGenerator[str, None]:
+#     """
+#     Generate a stream of messages from the agent.
+
+#     This is the workhorse method for the /stream endpoint.
+#     """
+#     agent: AgentGraph = get_agent(agent_id)
+#     kwargs, run_id = await _handle_input(user_input, agent, user_id, thread_id)
+
+#     try:
+#         # Process streamed events from the graph and yield messages over the SSE stream.
+#         async for stream_event in agent.astream(
+#             **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
+#         ):
+#             if not isinstance(stream_event, tuple):
+#                 continue
+#             # Handle different stream event structures based on subgraphs
+#             if len(stream_event) == 3:
+#                 # With subgraphs=True: (node_path, stream_mode, event)
+#                 _, stream_mode, event = stream_event
+#             else:
+#                 # Without subgraphs: (stream_mode, event)
+#                 stream_mode, event = stream_event
+#             new_messages = []
+#             if stream_mode == "updates":
+#                 for node, updates in event.items():
+#                     # A simple approach to handle agent interrupts.
+#                     # In a more sophisticated implementation, we could add
+#                     # some structured ChatMessage type to return the interrupt value.
+#                     if node == "__interrupt__":
+#                         interrupt: Interrupt
+#                         for interrupt in updates:
+#                             new_messages.append(AIMessage(content=interrupt.value))
+#                         continue
+#                     updates = updates or {}
+#                     update_messages = updates.get("messages", [])
+#                     # special cases for using langgraph-supervisor library
+#                     if "supervisor" in node or "sub-agent" in node:
+#                         # the only tools that come from the actual agent are the handoff and handback tools
+#                         if isinstance(update_messages[-1], ToolMessage):
+#                             if "sub-agent" in node and len(update_messages) > 1:
+#                                 # If this is a sub-agent, we want to keep the last 2 messages - the handback tool, and it's result
+#                                 update_messages = update_messages[-2:]
+#                             else:
+#                                 # If this is a supervisor, we want to keep the last message only - the handoff result. The tool comes from the 'agent' node.
+#                                 update_messages = [update_messages[-1]]
+#                         else:
+#                             update_messages = []
+#                     new_messages.extend(update_messages)
+
+#             if stream_mode == "custom":
+#                 new_messages = [event]
+
+#             # LangGraph streaming may emit tuples: (field_name, field_value)
+#             # e.g. ('content', <str>), ('tool_calls', [ToolCall,...]), ('additional_kwargs', {...}), etc.
+#             # We accumulate only supported fields into `parts` and skip unsupported metadata.
+#             # More info at: https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_messages/
+#             processed_messages = []
+#             current_message: dict[str, Any] = {}
+#             for message in new_messages:
+#                 if isinstance(message, tuple):
+#                     key, value = message
+#                     # Store parts in temporary dict
+#                     current_message[key] = value
+#                 else:
+#                     # Add complete message if we have one in progress
+#                     if current_message:
+#                         processed_messages.append(_create_ai_message(current_message))
+#                         current_message = {}
+#                     processed_messages.append(message)
+
+#             # Add any remaining message parts
+#             if current_message:
+#                 processed_messages.append(_create_ai_message(current_message))
+
+#             for message in processed_messages:
+#                 try:
+#                     chat_message = langchain_to_chat_message(message)
+#                     chat_message.run_id = str(run_id)
+#                 except Exception as e:
+#                     logger.error(f"Error parsing message: {e}")
+#                     yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
+#                     continue
+#                 # LangGraph re-sends the input message, which feels weird, so drop it
+#                 if chat_message.type == "human" and chat_message.content == user_input.message:
+#                     continue
+#                 yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
+
+#             if stream_mode == "messages":
+#                 if not user_input.stream_tokens:
+#                     continue
+#                 msg, metadata = event
+#                 if "skip_stream" in metadata.get("tags", []):
+#                     continue
+#                 # For some reason, astream("messages") causes non-LLM nodes to send extra messages.
+#                 # Drop them.
+#                 if not isinstance(msg, AIMessageChunk):
+#                     continue
+#                 content = remove_tool_calls(msg.content)
+#                 if content:
+#                     # Empty content in the context of OpenAI usually means
+#                     # that the model is asking for a tool to be invoked.
+#                     # So we only print non-empty content.
+#                     yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+#     except Exception as e:
+#         logger.error(f"Error in message generator: {e}")
+#         yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
+#     finally:
+#         yield "data: [DONE]\n\n"
 
 
 def _create_ai_message(parts: dict) -> AIMessage:
@@ -378,10 +632,11 @@ def _sse_response_example() -> dict[int | str, Any]:
 )
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
-    user_input: StreamInput, 
+    user_input: StreamInput,
+    background_tasks: BackgroundTasks,
     chat_service: ChatService = Depends(get_chat_service),
-    agent_id: str = DEFAULT_AGENT
-    ) -> StreamingResponse:
+    agent_id: str = DEFAULT_AGENT,
+) -> StreamingResponse:
     """
     Stream an agent's response to a user input, including intermediate messages and tokens.
 
@@ -392,8 +647,11 @@ async def stream(
 
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
-    valid_thread_id = await chat_service.get_or_create_thread(user_input.thread_id)
-
+    valid_thread_id = await chat_service.get_or_create_thread(
+        thread_id=user_input.thread_id,
+        user_query=user_input.message,
+        background_tasks=background_tasks,
+    )
     return StreamingResponse(
         message_generator(user_input, chat_service.user_id, valid_thread_id, agent_id),
         media_type="text/event-stream",
@@ -419,11 +677,11 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
     )
     return FeedbackResponse()
 
+
 # TODO: cải thiện bảo mật, hiện giờ đưa thread_id cái là được coi
 @router.post("/history")
 async def history(
-    input: ChatHistoryInput,
-    chat_service: ChatService = Depends(get_chat_service)
+    input: ChatHistoryInput, chat_service: ChatService = Depends(get_chat_service)
 ) -> ChatHistory:
     """
     Get chat history.
@@ -438,11 +696,113 @@ async def history(
             config=RunnableConfig(configurable={"thread_id": input.thread_id})
         )
         messages: list[AnyMessage] = state_snapshot.values.get("messages", [])
-        chat_messages: list[ChatMessage] = [langchain_to_chat_message(m) for m in messages]
+
+        chat_messages: list[ChatMessage] = []
+        current_run_id = None
+
+        for m in messages:
+            # 1. Nếu là tin nhắn của user, rút run_id từ additional_kwargs ra
+            if isinstance(m, HumanMessage) and "run_id" in m.additional_kwargs:
+                current_run_id = m.additional_kwargs["run_id"]
+
+            chat_msg = langchain_to_chat_message(m)
+
+            # 2. Gán run_id cho tin nhắn.
+            # Dùng current_run_id gốc của bạn, nếu không có thì fallback sang m.id (phòng hờ cho các đoạn chat cũ trong DB)
+            if current_run_id:
+                chat_msg.run_id = current_run_id
+            elif hasattr(m, "id") and m.id:
+                chat_msg.run_id = str(m.id)
+
+            chat_messages.append(chat_msg)
+
         return ChatHistory(messages=chat_messages)
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error")
+
+
+@router.get(
+    "/threads",
+    response_model=ThreadListResponse,
+    summary="Lấy danh sách lịch sử hội thoại",
+    description="Lấy tất cả các threads đang hoạt động của user hiện tại, có hỗ trợ phân trang.",
+)
+async def get_history_threads(
+    chat_service: ChatService = Depends(get_chat_service),
+    limit: int = Query(20, ge=1, le=100, description="Limit (1-100)"),
+    offset: int = Query(0, ge=0, description="Offset (pagination)"),
+):
+    try:
+        threads = await chat_service.get_all_threads(offset=offset, limit=limit)
+
+        # Trả về theo format của ThreadListResponse
+        return ThreadListResponse(items=threads, limit=limit, offset=offset)
+
+    except Exception as e:
+        logger.error(f"An exception occurred while fetching threads: {e}")
+        # Không nên throw chi tiết lỗi hệ thống ra cho client, chỉ trả về 500
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.patch(
+    "/threads/{thread_id}/title",
+    summary="Cập nhật tiêu đề hội thoại",
+    description="Đổi tên (title) của một hội thoại theo thread_id của user hiện tại.",
+)
+async def update_thread_title(
+    thread_id: str,
+    payload: UpdateTitleRequest,
+    status_code=status.HTTP_204_NO_CONTENT,
+    chat_service: ChatService = Depends(get_chat_service),
+):
+    try:
+        await chat_service.update_thread_title(thread_id, payload.new_title)
+        return {
+            "message": "Cập nhật tiêu đề hội thoại thành công.",
+            "thread_id": thread_id,
+            "new_title": payload.new_title,
+        }
+    except HTTPException as he:
+        # Bắt và trả về nguyên trạng các lỗi 400, 403, 404 từ tầng chat_service
+        raise he
+    except Exception as e:
+        logger.error(f"Lỗi khi cập nhật tiêu đề thread {thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete(
+    "/threads/{thread_id}",
+    summary="Xóa một lịch sử hội thoại",
+    description="Thực hiện xóa (soft delete) một hội thoại theo thread_id của user hiện tại.",
+)
+async def delete_thread(thread_id: str, chat_service: ChatService = Depends(get_chat_service)):
+    try:
+        await chat_service.delete_thread(thread_id)
+        return {"message": "Đã xóa hội thoại thành công.", "thread_id": thread_id}
+    except HTTPException as he:
+        # Cho phép các lỗi 403, 404 từ get_thread_strictly bay thẳng ra client
+        raise he
+    except Exception as e:
+        logger.error(f"An exception occurred while deleting thread {thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# THÊM MỚI: API Xóa tất cả thread của user
+@router.delete(
+    "/threads",
+    summary="Xóa toàn bộ lịch sử hội thoại",
+    description="Thực hiện xóa (soft delete) tất cả các hội thoại của user hiện tại.",
+)
+async def delete_all_threads(chat_service: ChatService = Depends(get_chat_service)):
+    try:
+        await chat_service.delete_all_threads()
+        return {"message": "Đã xóa tất cả lịch sử hội thoại thành công."}
+    except Exception as e:
+        logger.error(
+            f"An exception occurred while deleting all threads for user {chat_service.user_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/health")

@@ -1,0 +1,39 @@
+@startuml Wayfinder Editor Update Node
+
+|Nguoi dung|
+start
+:Click node;
+:Click Edit;
+
+|Frontend|
+:Set isEditing = true;
+:Hien thi form;
+
+|Nguoi dung|
+:Sua thong tin;
+:Click Luu;
+
+|Frontend|
+:Goi PATCH /nodes/{id};
+
+|Wayfinder Backend|
+:Kiem tra node ton tai?;
+if (ton tai) then (yes)
+  :Cap nhat fields;
+  :Xu li linked_node_ids 2 chieu;
+  :Rebuild aliases;
+  :Return NodeOut;
+  
+  |Frontend|
+  :Cap nhat state;
+  :Hien thi toast;
+  stop
+else (khong ton tai)
+  :Return 404;
+  
+  |Frontend|
+  :Hien thi loi;
+  stop
+end
+
+@enduml

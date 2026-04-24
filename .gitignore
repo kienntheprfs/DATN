@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 knowledge/uploads
 knowledge/diagrams
 test_linh_tinh
@@ -9,6 +10,9 @@ checkpoints.db-*
 
 # Langgraph
 .langgraph_api/
+
+.claude
+convention.md
 
 # VSCode
 .vscode
@@ -35,7 +39,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/
 lib64/
 parts/
 sdist/
@@ -71,6 +75,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+playwright-reports/
 
 # Translations
 *.mo
@@ -195,3 +200,7 @@ cython_debug/
 # Private Credentials, ignore everything in the folder but the .gitkeep file
 privatecredentials/*
 !privatecredentials/.gitkeep
+.next/
+!frontend/lib/
+
+out/

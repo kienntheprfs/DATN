@@ -44,7 +44,7 @@ dependencies = [
     "numpy ~=2.3.4",
     "onnxruntime ~= 1.21.1",
     "pandas ~=2.2.3",
-"psycopg[binary,pool] ~=3.2.4",
+    "psycopg[binary,pool] ~=3.2.4",
     "pyarrow >=18.1.0",
     "sqlalchemy[asyncio] ~=2.0.0",
     "asyncpg ~=0.29.0",
@@ -61,9 +61,12 @@ dependencies = [
     "langchain-mcp-adapters>=0.1.10",
     "ddgs>=9.9.1",
     "qdrant-client",
+    "redis[hiredis]>=5.2.0",
     "openai>=1.30.0",
     "fastembed",
     "langchain_tavily",
+    "boto3",
+    "redisvl>=0.16.0",
 ]
 
 [dependency-groups]

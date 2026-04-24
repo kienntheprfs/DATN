@@ -1,7 +1,50 @@
 from uuid import uuid4
 from repositories.chat_repo import ChatRepository
 from schema.conversation import Conversation
-from fastapi import HTTPException
+from core.settings import settings
+from fastapi import HTTPException, BackgroundTasks
+
+import logging
+from core.database import AsyncSessionLocal 
+from langchain_core.prompts import PromptTemplate
+from langchain_groq import ChatGroq 
+
+logger = logging.getLogger(__name__)
+
+async def background_generate_title(thread_id: str, first_query: str):
+    """
+    Hàm gọi Groq tạo tiêu đề và lưu xuống DB.
+    """
+    try:
+        # 1. Khởi tạo LLM với Groq
+        # Llama 3.1 8B là lựa chọn cực tốt: siêu nhanh, siêu rẻ, khả năng tiếng Việt tốt
+        llm = ChatGroq(
+            model="llama-3.1-8b-instant", # Hoặc dùng "gemma2-9b-it" / "mixtral-8x7b-32768"
+            temperature=0.3, 
+            max_tokens=20,
+            api_key=settings.MY_GROQ_API_KEY # Đổi sang biến môi trường của Groq
+        )
+        
+        # 2. Prompt siêu ngắn gọn
+        prompt = PromptTemplate.from_template(
+            "Tóm tắt truy vấn sau thành tiêu đề hội thoại ngắn gọn (từ 5-8 từ). "
+            "Không dùng dấu ngoặc kép, không giải thích dài dòng.\nTruy vấn: {query}"
+        )
+        
+        chain = prompt | llm
+        response = await chain.ainvoke({"query": first_query})
+        
+        # Xóa các ký tự thừa
+        generated_title = response.content.strip(' "\'\n')
+        
+        # 3. Mở DB session MỚI để lưu dữ liệu
+        async with AsyncSessionLocal() as db:
+            repo = ChatRepository(db)
+            await repo.update_thread_title(thread_id, generated_title)
+            logger.info(f"Đã cập nhật title ngầm cho thread {thread_id}: {generated_title}")
+            
+    except Exception as e:
+        logger.error(f"Lỗi khi generate title ngầm cho thread {thread_id}: {e}")
 
 class ChatService:
     def __init__(self, repo: ChatRepository, user_id: str):
@@ -9,25 +52,37 @@ class ChatService:
         self.user_id = user_id
 
     # Dùng cho /invoke và /stream (Chat)
-    async def get_or_create_thread(self, thread_id: str | None) -> str:
+    async def get_or_create_thread(
+        self, 
+        thread_id: str | None, 
+        user_query: str, 
+        background_tasks: BackgroundTasks = None
+    ) -> str:
+        
+        # Trường hợp 1: Client không truyền ID -> Tự sinh ID, tạo mới
         if not thread_id:
-            # Trường hợp client không truyền, backend tự sinh ID
             new_id = str(uuid4())
-            new_thread = Conversation(id=new_id, user_id=self.user_id)
+            new_thread = Conversation(id=new_id, user_id=self.user_id, title="Hội thoại mới")
             await self.repo.create_thread(new_thread)
+            
+            # Đẩy task tóm tắt title vào background
+            if background_tasks:
+                background_tasks.add_task(background_generate_title, new_id, user_query)
             return new_id
             
-        # Kiểm tra xem thread đã tồn tại chưa
         conversation = await self.repo.get_active_thread(thread_id)
         
+        # Trường hợp 2: Client có truyền ID nhưng DB chưa có -> Tạo mới theo ID của client
         if not conversation:
-            # TRƯỜNG HỢP MỚI: Client tự sinh ID truyền lên nhưng DB chưa có
-            # -> Coi như đây là tạo chat mới với ID của client
-            new_thread = Conversation(id=thread_id, user_id=self.user_id)
+            new_thread = Conversation(id=thread_id, user_id=self.user_id, title="Hội thoại mới")
             await self.repo.create_thread(new_thread)
+            
+            # Đẩy task tóm tắt title vào background
+            if background_tasks:
+                background_tasks.add_task(background_generate_title, thread_id, user_query)
             return thread_id
 
-        # Nếu đã có, kiểm tra quyền sở hữu
+        # Trường hợp 3: Thread đã tồn tại -> Kiểm tra quyền
         if conversation.user_id != self.user_id:
             raise HTTPException(status_code=403, detail="Cấm truy cập.")
             
@@ -47,3 +102,43 @@ class ChatService:
             raise HTTPException(status_code=403, detail="Cấm truy cập.")
             
         return conversation
+    
+    async def get_all_threads(
+        self,
+        offset: int = 0,
+        limit: int = 20
+    ) -> list[Conversation]:
+
+        threads = await self.repo.get_all_thread_by_user_id(
+            user_id=self.user_id,
+            offset=offset,
+            limit=limit
+        )
+
+        return threads
+    
+    async def delete_thread(self, thread_id: str) -> bool:
+        # Tận dụng hàm cũ để kiểm tra xem thread có tồn tại và có thuộc về user hiện tại không
+        # Nếu không thỏa mãn, hàm get_thread_strictly sẽ tự động ném ra HTTPException 404 hoặc 403
+        await self.get_thread_strictly(thread_id) 
+        
+        # Nếu qua được bước trên, tiến hành soft delete
+        await self.repo.delete_thread(thread_id)
+        return True
+
+    # THÊM MỚI: Xử lý logic xóa tất cả thread của user hiện tại
+    async def delete_all_threads(self) -> bool:
+        await self.repo.delete_all_threads_by_user(self.user_id)
+        return True
+    
+    async def update_thread_title(self, thread_id: str, new_title: str):
+        if not new_title.strip():
+            raise HTTPException(status_code=400, detail="Title không thể là chuỗi rỗng.")
+
+        conversation = await self.get_thread_strictly(thread_id)
+        if conversation.title == new_title:
+            return 
+        else:
+            await self.repo.update_thread_title(thread_id, new_title)
+
+

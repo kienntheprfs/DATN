@@ -1,0 +1,28 @@
+@startuml
+|Nguoi dung|
+start
+:Select Add Edge;
+:Click start node;
+:Click end node;
+
+|Frontend|
+if (same node?) then
+  :Show error;
+  end
+else
+  :API POST /edges;
+  |Wayfinder Backend|
+  :Check validation;
+  if (valid) then
+    :Insert;
+    :Return edge;
+    |Frontend|
+    :Show edge;
+  else
+    :Return error;
+    |Frontend|
+    :Show error;
+  end
+endif
+stop
+@enduml

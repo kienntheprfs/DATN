@@ -1,0 +1,34 @@
+@startuml
+title Voice - Error Cases
+
+|User|
+start
+:Click Voice Button;
+
+|Frontend|
+:getUserMedia audio;
+
+if (Permission?) then (denied)
+  :Show permission denied dialog;
+  :Set state = error;
+  :Show error toast "Microphone access denied";
+  stop
+else (granted)
+  :Create RTCPeerConnection;
+  :POST /api/voice/offer;
+  
+  |Backend|
+  if (Server available?) then (yes)
+    :Return SDP answer;
+    |Frontend|
+    :Set state = connected;
+    stop
+  else (no)
+    :Return 500 error;
+    |Frontend|
+    :Set state = error;
+    :Show error toast "Server unavailable";
+    stop
+  endif
+endif
+@enduml

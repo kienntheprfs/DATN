@@ -36,6 +36,7 @@ class AliasSearchOut(BaseModel):
     map_id: Optional[int] = None
     floor: Optional[int] = None
     building_id: Optional[int] = None
+    building_name: Optional[str] = None
     node_type: Optional[str] = None
 
 
@@ -135,36 +136,112 @@ def get_all_locations(
 @router.get("/search", response_model=List[AliasSearchOut])
 def search_alias(
     q: str = Query(..., description="Tên cần tìm"),
-    limit: int = 5,
+    limit: int = 20,
     session: Session = Depends(get_session),
 ):
     if not q or not q.strip():
         return []
 
     norm_q = q.strip().lower()
-    stmt = select(Alias).where(Alias.name.ilike(f"%{norm_q}%"))
-    items = session.exec(stmt).all()
+    # Tách query thành các từ để tìm kiếm linh hoạt hơn
+    query_words = [w.strip() for w in norm_q.split() if len(w) >= 2]
 
-    if not items:
+    if not query_words:
         return []
 
-    choices = {a.id: a.name for a in items}
+    # Get map info for floor lookup
+    from backend.models.entities import Map, Building
 
-    # token_set_ratio rất tốt cho việc tìm "Phòng họp" khi user gõ "họp phòng"
-    results = process.extract(norm_q, choices, scorer=fuzz.token_set_ratio, limit=limit)
+    all_maps = session.exec(select(Map)).all()
+    all_buildings = session.exec(select(Building)).all()
 
-    # Format kết quả trả về
+    building_dict = {b.id: b.name for b in all_buildings}
+
+    map_info = {
+        m.id: {
+            "floor": m.floor_level,
+            "building_id": m.building_id,
+            "building_name": building_dict.get(m.building_id)
+            if m.building_id
+            else None,
+        }
+        for m in all_maps
+    }
+
+    # Lấy tất cả aliases và nodes
+    all_aliases = session.exec(select(Alias)).all()
+    all_nodes = session.exec(select(Node)).all()
+
+    # Tạo dict node info
+    node_dict = {n.id: n for n in all_nodes}
+
     out = []
-    items_map = {a.id: a for a in items}
+    seen_node_ids = set()
 
-    for _, score, alias_id in results:
-        if score < 40:  # Ngưỡng tối thiểu để được coi là khớp
+    # Tìm kiếm linh hoạt: so khớp từng từ trong query với tên
+    for alias in all_aliases:
+        name_lower = alias.name.lower()
+        # Fuzzy match với toàn bộ query
+        full_score = fuzz.token_set_ratio(norm_q, name_lower)
+
+        # Đếm số từ khớp
+        words_matched = sum(1 for w in query_words if w in name_lower)
+
+        # Nếu có từ nào khớp hoặc fuzzy score đủ cao
+        if words_matched > 0 or full_score > 40:
+            if alias.node_id not in seen_node_ids:
+                node = node_dict.get(alias.node_id)
+                map_data = map_info.get(node.map_id, {}) if node else {}
+
+                # Ưu tiên kết quả có nhiều từ khớp hơn
+                # Nếu có đủ từ khớp (>=3), ưu tiên cao
+                if words_matched >= 3:
+                    final_score = max(words_matched * 25, full_score + 30)
+                else:
+                    final_score = full_score
+
+                out.append(
+                    AliasSearchOut(
+                        node_id=alias.node_id,
+                        alias_id=alias.id,
+                        name=alias.name,
+                        score=float(final_score),
+                        map_id=node.map_id if node else None,
+                        floor=map_data.get("floor"),
+                        building_id=map_data.get("building_id"),
+                        building_name=map_data.get("building_name"),
+                        node_type=node.type if node else None,
+                    )
+                )
+                seen_node_ids.add(alias.node_id)
+
+    # Tìm trong Node table (cho các node không có alias)
+    for n in all_nodes:
+        if n.id in seen_node_ids:
             continue
 
-        a = items_map.get(alias_id)
-        out.append(
-            AliasSearchOut(
-                node_id=a.node_id, alias_id=a.id, name=a.name, score=float(score)
+        name_lower = n.name.lower()
+        full_score = fuzz.token_set_ratio(norm_q, name_lower)
+        words_matched = sum(1 for w in query_words if w in name_lower)
+
+        if words_matched > 0 or full_score > 40:
+            map_data = map_info.get(n.map_id, {})
+            final_score = max(words_matched * 25, full_score)
+
+            out.append(
+                AliasSearchOut(
+                    node_id=n.id,
+                    alias_id=0,
+                    name=n.name,
+                    score=float(final_score),
+                    map_id=n.map_id,
+                    floor=map_data.get("floor"),
+                    building_id=map_data.get("building_id"),
+                    building_name=map_data.get("building_name"),
+                    node_type=n.type,
+                )
             )
-        )
-    return out
+
+    # Sort theo điểm giảm dần, lấy top N
+    out.sort(key=lambda x: x.score, reverse=True)
+    return out[:limit]

@@ -195,7 +195,7 @@ export function LocationDropdown({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+        <div className="absolute z-[100] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
           {loading ? (
             <div className="px-4 py-3 text-gray-500 text-sm flex items-center gap-2">
               <span className="material-symbols-outlined animate-spin text-sm">sync</span>

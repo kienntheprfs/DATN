@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/mainLayout"
+    android:background="@android:color/white"
+    >
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guidelineCenter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.5" />
+
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/bg_circle_red"
+        android:padding="16dp"
+        android:contentDescription="@string/action_back"
+        android:src="@drawable/ic_close_48"
+        app:tint="@android:color/white"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <ImageButton
+        android:id="@+id/btnSendMqtt"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginStart="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="16dp"
+        android:contentDescription="Gửi tín hiệu MQTT"
+        android:src="@drawable/ic_send_24" app:tint="@android:color/black"
+        app:layout_constraintStart_toEndOf="@id/btnBack"
+        app:layout_constraintTop_toTopOf="@id/btnBack"
+        app:layout_constraintBottom_toBottomOf="@id/btnBack"/>
+
+    <!-- Mắt trái - thu nhỏ lại -->
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/eyeLeft"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/cd_eye_left"
+        app:lottie_rawRes="@raw/eye_animation"
+        app:lottie_autoPlay="true"
+        app:lottie_loop="true"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/eyeRight"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintWidth_percent="0.27"
+        app:layout_constraintVertical_bias="0.40"
+    app:layout_constraintDimensionRatio="1:1"
+    tools:background="#333333" />
+
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/eyeRight"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/cd_eye_right"
+        app:lottie_rawRes="@raw/eye_animation"
+        app:lottie_autoPlay="true"
+        app:lottie_loop="true"
+        app:layout_constraintStart_toEndOf="@id/eyeLeft"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintWidth_percent="0.27"
+        app:layout_constraintVertical_bias="0.40"
+    app:layout_constraintDimensionRatio="1:1"
+    android:scaleX="-1"
+    tools:background="#333333" />
+
+    <!-- Má hồng trái -->
+    <ImageView
+        android:id="@+id/blushLeft"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:alpha="0.7"
+        android:contentDescription="Má hồng trái"
+        android:src="@drawable/blush_image"
+        app:layout_constraintStart_toStartOf="@id/eyeLeft"
+        app:layout_constraintEnd_toEndOf="@id/eyeLeft"
+        app:layout_constraintTop_toTopOf="@id/eyeLeft"
+        app:layout_constraintBottom_toBottomOf="@id/eyeLeft"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintHeight_percent="0.3"
+    app:layout_constraintHorizontal_bias="0.8"
+    app:layout_constraintVertical_bias="0.95"
+    tools:src="@drawable/blush_image" />
+
+    <!-- Má hồng phải -->
+    <ImageView
+        android:id="@+id/blushRight"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:alpha="0.7"
+        android:contentDescription="Má hồng phải"
+        android:src="@drawable/blush_image"
+        app:layout_constraintStart_toStartOf="@id/eyeRight"
+        app:layout_constraintEnd_toEndOf="@id/eyeRight"
+        app:layout_constraintTop_toTopOf="@id/eyeRight"
+        app:layout_constraintBottom_toBottomOf="@id/eyeRight"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintHeight_percent="0.3"
+    app:layout_constraintHorizontal_bias="0.2"
+    app:layout_constraintVertical_bias="0.95"
+    tools:src="@drawable/blush_image" />
+
+    <!-- Animation miệng Lottie -->
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/mouthAnimation"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/cd_mouth"
+        android:visibility="gone"
+        app:lottie_rawRes="@raw/mouth_animation"
+    app:lottie_autoPlay="false"
+        app:lottie_loop="true"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintTop_toTopOf="parent"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintVertical_bias="0.80"
+    app:layout_constraintWidth_percent="0.40"
+    app:layout_constraintDimensionRatio="2:1" />
+
+    <LinearLayout
+        android:id="@+id/hudContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:elevation="10dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnOpenRating"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginEnd="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="16dp"
+            android:src="@drawable/ic_star_rate"
+            android:visibility="gone"
+            app:tint="#FFD700"
+            android:contentDescription="Đánh giá" />
+
+        <com.example.chatbotntp.ui.VoiceVisualizerView
+            android:id="@+id/audioVisualizer"
+            android:layout_width="80dp"
+            android:layout_height="24dp"
+            android:visibility="gone"
+            android:layout_marginEnd="12dp" />
+
+        <ImageView
+            android:id="@+id/loadingSpinner"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="12dp"
+            android:visibility="gone"
+            android:src="@drawable/spinner"
+            android:contentDescription="Đang xử lý"
+            tools:visibility="visible" />
+
+        <ImageView
+            android:id="@+id/statusDot"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="12dp"
+            android:src="@drawable/dot_shape"
+            android:contentDescription="@string/cd_status_dot"
+            android:clickable="false"
+            android:focusable="false" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/connectButton"
+            android:layout_width="280dp"
+            android:layout_height="96dp"
+            android:background="@drawable/bg_connect_button_blue"
+            android:elevation="4dp"
+            android:minWidth="240dp"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp"
+            android:stateListAnimator="@null"
+            android:text="@string/action_connect"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/controlPanelGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:padding="16dp"
+        android:background="@drawable/bg_control_panel_blue"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+    </LinearLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/speechControlsGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone"
+        android:elevation="10dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        >
+
+        <!-- Nút Clear màu xanh dương - thêm margin -->
+        <ImageButton
+            android:id="@+id/btnSpeechClear"
+            android:layout_width="112dp"
+            android:layout_height="112dp"
+            android:layout_marginEnd="20dp"
+        android:background="@drawable/bg_round_button_blue"
+        android:contentDescription="Xóa câu nói"
+        android:padding="24dp"
+        android:src="@drawable/ic_close_48"
+        app:tint="@android:color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnSpeechSend"
+        />
+
+        <!-- Nút Send màu xanh dương -->
+        <ImageButton
+            android:id="@+id/btnSpeechSend"
+            android:layout_width="112dp"
+            android:layout_height="112dp"
+            android:background="@drawable/bg_round_button_blue"
+            android:contentDescription="Gửi câu nói"
+            android:padding="24dp"
+            android:src="@drawable/ic_send_48"
+            app:tint="@android:color/white"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btnSpeechClear"
+            app:layout_constraintEnd_toEndOf="parent"
+            />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <TextView
+        android:id="@+id/resultText"
+        android:layout_width="0dp"
+        android:layout_height="165dp" android:textSize="48sp"
+        android:textColor="@android:color/black"
+        android:gravity="center"
+        android:text="@string/greeting_message"
+
+        android:scrollbars="vertical" android:maxLines="10" app:layout_constrainedHeight="true"
+        android:layout_marginBottom="24dp"
+        android:layout_marginTop="24dp"
+        app:layout_constraintWidth_percent="0.9"
+
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/controlPanelGroup"
+        app:layout_constraintVertical_bias="1.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+
+        tools:text="Xin chào, tôi có thể giúp gì?" />
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/groupEyes"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="visible"
+        app:constraint_referenced_ids="eyeLeft,eyeRight" />
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/groupHud"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="visible"
+        app:constraint_referenced_ids="hudContainer,resultText" />
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/groupAnimations"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="visible"
+        app:constraint_referenced_ids="eyeLeft,eyeRight,mouthAnimation,blushLeft,blushRight" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

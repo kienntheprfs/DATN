@@ -3,6 +3,9 @@ from pydantic_core import MultiHostUrl
 from pydantic import computed_field
 
 class Settings(BaseSettings):
+    """Postgres schema for all Knowledge service tables (created on startup + migrations)."""
+    KNOWLEDGE_SCHEMA: str = "knowledge_schema"
+
     UPLOAD_DIR: str = "./uploads"
     MAX_CONCURRENT_WORKERS: int = 10 
     BATCH_SIZE: int = 50
@@ -17,6 +20,8 @@ class Settings(BaseSettings):
     FAQ_COLLECTION_NAME: str | None = "faqs"
 
     # Embeddings
+    EMBEDDING_API_KEY: str | None = None
+    EMBEDDING_ENDPOINT: str | None = None
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DEPLOYMENT_NAME: str | None = None
     EMBEDDING_API_VERSION: str | None = None
@@ -33,6 +38,8 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str
 
+    POSTGRES_SSL_MODE: str = "disable"
+
     STORAGE_TYPE: str = "local"
 
     S3_ENDPOINT: str | None = None
@@ -44,7 +51,21 @@ class Settings(BaseSettings):
     REDIS_BROKER_URL: str = "redis://localhost:6379/0"
     REDIS_BACKEND_URL: str = "redis://localhost:6379/1"
 
+    # Semantic cache invalidation (shared with agent-service-toolkit)
+    # Defaults to Redis backend URL, but can be overridden independently.
+    # Default to the Celery Redis backend DB.
+    SEM_CACHE_REDIS_URL: str = "redis://localhost:6379/0"
+    SEM_CACHE_REDIS_PASSWORD: str | None = None
+    SEM_CACHE_KB_VERSION_KEY_PREFIX: str = "kb_sem_cache:kb_version"
+    SEM_CACHE_DOC_SET_PREFIX: str = "kb_sem_cache:doc"
+    SEM_CACHE_TTL_SECONDS: int = 86400
+
     LLAMA_CLOUD_API_KEY: str | None = None
+    LIGHTRAG_BASE_URL: str | None = "http://localhost:9621"
+    LIGHTRAG_API_KEY: str | None = None
+    LIGHTRAG_UPLOAD_PATH: str = "/documents/upload"
+    LIGHTRAG_TRACK_PATH: str = "/documents/track_status/{track_id}"
+    LIGHTRAG_DELETE_PATH: str = "/documents/delete_document"
 
     @computed_field
     @property

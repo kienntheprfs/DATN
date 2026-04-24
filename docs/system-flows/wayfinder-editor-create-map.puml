@@ -1,0 +1,29 @@
+@startuml Wayfinder Editor Create Map
+
+|Nguoi dung|
+start
+:Truy cap trang Editor;
+:Click "Upload Map" / "Tao Map";
+
+|Frontend|
+:Hien thi form upload;
+:Chon file anh;
+:Nhap ten Map, scale, floor;
+
+|Nguoi dung|
+:Click "Tao";
+
+|Frontend|
+:Validate file (png/jpg/webp);
+:Goi POST /maps voi file;
+
+|Wayfinder Backend|
+:Kiem tra file type;
+:Luu file vao data/uploads/;
+:Insert Map vao DB;
+:Return Map;
+
+|Frontend|
+:Hien thi map tren canvas;
+stop
+@enduml
