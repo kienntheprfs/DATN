@@ -9,7 +9,6 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Import các công cụ parse từ project của bạn
-from core import settings
 from memory.postgres import get_postgres_connection_string
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
