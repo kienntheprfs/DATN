@@ -172,6 +172,7 @@ async def _handle_input(
 
     config = RunnableConfig(
         configurable=configurable,
+        metadata={"user_id": user_id},
         run_id=run_id,
         callbacks=callbacks,
     )
