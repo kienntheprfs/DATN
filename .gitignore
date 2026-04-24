@@ -1,3 +1,7 @@
+knowledge/uploads
+knowledge/diagrams
+test_linh_tinh
+
 # Streamlit and sqlite
 .streamlit/secrets.toml
 checkpoints.db
