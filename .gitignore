@@ -1,8 +1,7 @@
-# OWN SETTINGS #
+<<<<<<< HEAD
 knowledge/uploads
+knowledge/diagrams
 test_linh_tinh
-
-# /// DEFAULT ///
 
 # Streamlit and sqlite
 .streamlit/secrets.toml
@@ -76,6 +75,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+playwright-reports/
 
 # Translations
 *.mo

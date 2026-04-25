@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './test-fixtures';
 import { testFixtures, setupMockApi, setupMockVoice, generateTestData } from './test-fixtures';
 import { helpers, TEST_CONSTANTS } from './test-utils';
 

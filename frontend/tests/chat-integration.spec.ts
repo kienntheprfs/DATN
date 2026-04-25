@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './test-fixtures';
 import { testFixtures, setupMockApi, setupMockVoice, generateTestData } from './test-fixtures';
 import { helpers, TEST_CONSTANTS } from './test-utils';
 
@@ -194,7 +194,7 @@ test.describe('Integration - Multiple Message Exchange', () => {
 
 test.describe('Integration - Error Handling', () => {
 	test('should show error toast when API fails', async ({ page }) => {
-		await page.route('**/api/chat/**', (route) => {
+		await page.route('**/api/agent/stream**', (route) => {
 			route.abort('failed');
 		});
 

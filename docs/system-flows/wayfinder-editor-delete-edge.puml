@@ -1,0 +1,23 @@
+@startuml
+|Nguoi dung|
+start
+:Click edge;
+:Click Xoa;
+|Frontend|
+:Show confirm;
+
+|Nguoi dung|
+:Xac nhan?;
+if (confirm) then
+  :API DELETE /edges;
+  |Wayfinder Backend|
+  :Delete Edge;
+  :Return ok;
+  |Frontend|
+  :Remove edge;
+  stop
+else
+  :Close dialog;
+  stop
+endif
+@enduml

@@ -1,0 +1,13 @@
+@startuml
+|Nguoi dung|
+start
+:Select Add Node;
+:Click map;
+|Frontend|
+:API POST /nodes;
+|Backend|
+:Insert Node;
+:Return;
+|Frontend|
+:Show node;
+@enduml

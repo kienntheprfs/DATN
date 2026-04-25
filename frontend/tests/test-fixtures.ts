@@ -1,4 +1,26 @@
 import { test as base, expect, type Page, type Route } from '@playwright/test';
+import { addCoverageReport } from 'monocart-reporter';
+
+// Mở rộng base test để tự động thu thập V8 coverage
+export const test = base.extend<{ autoTestFixture: void }>({
+  autoTestFixture: [async ({ page }, use) => {
+    // Chỉ thu thập coverage khi có biến môi trường COVERAGE=true
+    if (process.env.COVERAGE === 'true') {
+      await Promise.all([
+        page.coverage.startJSCoverage({ resetOnNavigation: false })
+      ]);
+      await use();
+      const [jsCoverage] = await Promise.all([
+        page.coverage.stopJSCoverage()
+      ]);
+      await addCoverageReport([...jsCoverage], test.info());
+    } else {
+      await use();
+    }
+  }, { scope: 'test', auto: true }]
+});
+
+export { expect, type Page, type Route };
 
 // Test data fixtures for consistent testing
 export const testFixtures = {
@@ -219,44 +241,29 @@ export const setupMockApi = async (page: Page, options: {
 
   // Chat endpoints
   if (mockChat) {
-    await page.route('**/api/chat/send', (route: Route) => {
+    await page.route('**/api/agent/stream**', (route: Route) => {
       setTimeout(() => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ...testFixtures.apiResponses.chatSend,
+        // SSE Response format
+        const sseData = JSON.stringify({
+          type: "message",
+          content: {
+            type: "ai",
+            content: testFixtures.apiResponses.chatSend.message,
             citations: mockErrors ? [] : testFixtures.citations.slice(0, 2),
-          }),
+            run_id: "mock-run-id",
+          }
         });
-      }, delay);
-    });
 
-    await page.route('**/api/chat/history', (route: Route) => {
-      setTimeout(() => {
+        const doneData = JSON.stringify({ type: "done" });
+
         route.fulfill({
           status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ...testFixtures.apiResponses.chatHistory,
-            threads: testFixtures.threads,
-          }),
-        });
-      }, delay);
-    });
-
-    await page.route('**/api/chat/thread/**', (route: Route) => {
-      setTimeout(() => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            thread_id: route.request().url().split('/').pop(),
-            messages: [
-              { role: 'user', content: 'Sample user message', id: '1' },
-              { role: 'assistant', content: 'Sample bot response', id: '2' },
-            ],
-          }),
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+          body: `data: ${sseData}\n\ndata: [DONE]\n\n`,
         });
       }, delay);
     });
@@ -308,12 +315,15 @@ export const setupMockApi = async (page: Page, options: {
 
   // Error scenarios
   if (mockErrors) {
-    await page.route('**/api/chat/send', (route: Route) => {
+    await page.route('**/api/agent/stream**', (route: Route) => {
       setTimeout(() => {
+        // Trả về luồng SSE bị lỗi
         route.fulfill({
           status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify(testFixtures.errors.serverError),
+          headers: {
+            'Content-Type': 'text/event-stream',
+          },
+          body: `data: ${JSON.stringify({ type: "error", content: testFixtures.errors.serverError.message })}\n\n`,
         });
       }, delay);
     });

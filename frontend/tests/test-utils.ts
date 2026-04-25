@@ -24,14 +24,21 @@ export const test = base.extend<MyFixtures>({
       });
     });
 
-    await page.route('**/api/chat/**', (route) => {
+    await page.route('**/api/agent/stream**', (route) => {
+      const sseData = JSON.stringify({
+        type: "message",
+        content: {
+          type: "ai",
+          content: 'This is a mock response',
+          run_id: "mock-run-id"
+        }
+      });
       route.fulfill({
         status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          message: 'This is a mock response',
-          thread_id: 'test-thread-123',
-        }),
+        headers: {
+          'Content-Type': 'text/event-stream',
+        },
+        body: `data: ${sseData}\n\ndata: [DONE]\n\n`,
       });
     });
 

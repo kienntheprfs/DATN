@@ -1,0 +1,21 @@
+@startuml
+|Nguoi dung|
+start
+:Select Add Node;
+:Click map;
+|Frontend|
+:Got currentMap;
+
+if (hasMap?) then (yes)
+  :API POST /nodes;
+  |Wayfinder Backend|
+  :Insert Node;
+  :Return NodeOut;
+  |Frontend|
+  :Show node;
+  stop
+else (no)
+  :Show error;
+  stop
+endif
+@enduml

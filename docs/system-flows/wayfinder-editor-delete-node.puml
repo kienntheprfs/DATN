@@ -1,0 +1,29 @@
+@startuml Wayfinder Editor Delete Node
+
+|Nguoi dung|
+start
+:Click node;
+:Click Xoa;
+
+|Frontend|
+:Show confirm dialog;
+
+|Nguoi dung|
+:Xac nhan?;
+if (xac nhan) then (yes)
+  :Goi DELETE /nodes/{id};
+  
+  |Wayfinder Backend|
+  :Xoa Alias, Edge, Node;
+  :Return success;
+  
+  |Frontend|
+  :Xoa khoi state;
+  :Show toast;
+  stop
+else (huy)
+  :Dong dialog;
+  stop
+end
+
+@enduml

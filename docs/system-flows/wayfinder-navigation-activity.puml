@@ -1,0 +1,45 @@
+@startuml Wayfinder Node Select Activity
+
+|Người dùng|
+start
+:Truy cập trang Navigation;
+
+|Frontend|
+:Gọi GET /maps;
+:Gọi GET /nodes?map_id=...;
+:Gọi GET /edges?map_id=...;
+
+|Wayfinder Backend|
+:List[Map];
+:List[Node];
+:List[Edge];
+:Return data;
+|Frontend|
+:Render bản đồ;
+:Hiển thị các node có thể chọn;
+
+|Người dùng|
+:Click chọn điểm bắt đầu;
+:Click chọn điểm kết thúc;
+:Click nút "Tìm đường";
+
+|Frontend|
+:Gọi GET /routes/find?start_node_id=X&end_node_id=Y;
+
+|Wayfinder Backend|
+:Nhận request;
+:Lấy Map để có scale ratio;
+:Build NetworkX graph (nếu chưa có cache);
+:Gọi nx.shortest_path(Dijkstra);
+:Generate human instructions;
+:Build polyline;
+:Return RouteResponse;
+
+|Frontend|
+:Render polyline trên map;
+:Hiển thị danh sách hướng dẫn;
+
+|Người dùng|
+:Theo dõi hướng dẫn từng bước;
+stop
+@enduml
