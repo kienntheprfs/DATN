@@ -13,13 +13,7 @@ test.describe('Voice Chat Feature', () => {
 
 	test.beforeEach(async ({ page }) => {
 		// Dùng dữ liệu thật, đăng nhập vào hệ thống
-		await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
-		await helpers.waitForPageLoad(page);
-		
-		await page.locator('#email').fill('admin@example.com');
-		await page.locator('#password').fill('admin123');
-		await page.locator('form button[type="submit"]').click();
-		await page.waitForTimeout(2000); 
+		await helpers.loginWithCredentials(page);
 	});
 
 	test('should start and stop voice conversation properly', async ({ page }) => {

@@ -1,0 +1,303 @@
+{
+	"version": "2.0.0",
+	"windows": {
+		"options": {
+			"shell": {
+				"executable": "cmd.exe",
+				"args": ["/d", "/c"]
+			}
+		}
+	},
+	"tasks": [
+		{
+			"label": "🚀 [MASTER] Setup & Start Everything",
+			"dependsOrder": "sequence",
+			"dependsOn": ["Install All Requirements", "Start Full Stack"],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+
+		// ==========================================
+		// 1. START SERVICES
+		// ==========================================
+		{
+			"label": "Start LightRAG Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/LightRAG && uv run lightrag-server",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Knowledge Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/knowledge && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Wayfinder Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/wayfinder && uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8004",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Piper TTS Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/voice/piper_tts && uv run uvicorn server:app --host 0.0.0.0 --port 5000",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Voice Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/voice && uv run python server.py",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start API Gateway Auth Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/api_gateway && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Dashboard Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/dashboard && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8007",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		
+		{
+			"label": "Start Agent Service (Backend)",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && uv run python src/run_service.py",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		
+		{
+			"label": "Start Frontend",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/frontend && npm run dev",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start API Gateway (Docker)",
+			"type": "shell",
+			"command": "docker-compose up -d",
+			"options": { "cwd": "${workspaceFolder}/api_gateway" },
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+		{
+			"label": "Start Redis Stack (Docker)",
+			"type": "shell",
+			"command": "docker ps -a --format '{{.Names}}' | findstr redis_stack >nul && echo Redis already running || docker-compose -f dashboard/docker/docker-compose.yml up -d",
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
+
+		// ==========================================
+		// 2. ORCHESTRATION
+		// ==========================================
+		{
+			"label": "Start Full Stack",
+			"dependsOrder": "parallel",
+			"dependsOn": [
+				"Start LightRAG Service",
+				"Start Knowledge Service",
+				"Start Wayfinder Service",
+				"Start Piper TTS Service",
+				"Start Voice Service",
+				"Start API Gateway Auth Service",
+				"Start API Gateway (Docker)",
+				"Start Redis Stack (Docker)",
+				"Start Dashboard Service",
+				"Start Agent Service (Backend)",
+				"Start Frontend"
+			]
+		},
+
+		// ==========================================
+		// 3. DATABASE MIGRATIONS
+		// ==========================================
+		{
+			"label": "Migrate Knowledge Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/knowledge && uv run alembic upgrade head",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Migrate Dashboard Service",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/dashboard && uv run alembic upgrade head",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Run Database Migrations",
+			"dependsOrder": "sequence",
+			"dependsOn": ["Migrate Knowledge Service", "Migrate Dashboard Service"]
+		},
+
+		// ==========================================
+		// 4B. INSTALL & SYNC
+		// ==========================================
+		{
+			"label": "Install LightRAG Requirements",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/LightRAG && uv pip install -e \".[test,offline]\"",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Install Knowledge Requirements",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/knowledge && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Install Wayfinder Requirements",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/wayfinder && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Install Voice Requirements",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/voice && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Sync API Gateway Dependencies",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/api_gateway && uv sync",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Sync Dashboard Dependencies",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/dashboard && uv sync",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Sync Agent Service Dependencies",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && uv sync",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Install Frontend Dependencies",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/frontend && npm install",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Install All Requirements",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Download All Secrets",
+				"Install LightRAG Requirements",
+				"Install Knowledge Requirements",
+				"Install Wayfinder Requirements",
+				"Install Voice Requirements",
+				"Sync API Gateway Dependencies",
+				"Sync Dashboard Dependencies",
+				"Sync Agent Service Dependencies",
+				"Install Frontend Dependencies"
+			]
+		},
+
+		// ==========================================
+		// 4A. DOWNLOAD SECRETS FROM INFISICAL
+		// ==========================================
+		{
+			"label": "Check Infisical",
+			"type": "shell",
+			"command": "npx @infisical/cli",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - LightRAG",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/lightRAG --format=dotenv --output-file=LightRAG/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Knowledge",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/knowledge --format=dotenv --output-file=knowledge/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Wayfinder",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/wayfinder --format=dotenv --output-file=wayfinder/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Voice",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/voice --format=dotenv --output-file=voice/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - API Gateway",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/api_gateway --format=dotenv --output-file=api_gateway/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Dashboard",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/dashboard --format=dotenv --output-file=dashboard/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Agent",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/agent --format=dotenv --output-file=agent-service-toolkit/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download Secrets - Frontend",
+			"type": "shell",
+			"command": "npx @infisical/cli export --path=/frontend --format=dotenv --output-file=frontend/.env",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "Download All Secrets",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Check Infisical",
+				"Download Secrets - LightRAG",
+				"Download Secrets - Knowledge",
+				"Download Secrets - Wayfinder",
+				"Download Secrets - Voice",
+				"Download Secrets - API Gateway",
+				"Download Secrets - Dashboard",
+				"Download Secrets - Agent",
+				"Download Secrets - Frontend"
+			]
+		},
+
+		// ==========================================
+		// 5. STOP SERVICES
+		// ==========================================
+		{
+			"label": "🛑 Stop All Docker Containers",
+			"type": "shell",
+			"command": "docker stop $(docker ps -q) 2>nul || echo No containers running",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "🛑 Kill All Python Services",
+			"type": "shell",
+			"command": "taskkill /F /IM python.exe /T 2>nul || echo No python processes",
+			"presentation": { "panel": "shared" }
+		},
+		{
+			"label": "🛑 Stop Everything",
+			"dependsOrder": "sequence",
+			"dependsOn": ["Stop All Docker Containers", "Kill All Python Services"]
+		}
+	]
+}

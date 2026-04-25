@@ -7,6 +7,7 @@ import {
   RTCIceCandidate,
   mediaDevices,
 } from 'react-native-webrtc';
+import { Audio } from 'expo-av';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8002';
 
@@ -232,6 +233,13 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     lastMessageTimeRef.current = 0;
 
     try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldRouteAudioToSpeaker: true,
+        playThroughEarpieceAndroid: false,
+      });
+
       const stream = await mediaDevices.getUserMedia({ audio: true });
       const audioTrack = stream.getAudioTracks()[0];
       audioTrackRef.current = audioTrack;

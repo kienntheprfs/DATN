@@ -5,16 +5,7 @@ test.describe('Wayfinder Navigation (Real Data & API)', () => {
 	// Dùng beforeEach để đăng nhập thực tế vào hệ thống
 	test.beforeEach(async ({ page }) => {
 		// Bỏ qua setupMockApi và setupMockVoice để dùng dữ liệu hoàn toàn thật
-		await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
-		await helpers.waitForPageLoad(page);
-		
-		// Đăng nhập bằng tài khoản được chỉ định
-		await page.locator('#email').fill('admin@example.com');
-		await page.locator('#password').fill('admin123');
-		await page.locator('form button[type="submit"]').click();
-		
-		// Đợi một chút để chuyển hướng sau khi đăng nhập
-		await page.waitForTimeout(2000); 
+		await helpers.loginWithCredentials(page);
 	});
 
 	test('should display the navigation page and interact with real map data', async ({ page }) => {

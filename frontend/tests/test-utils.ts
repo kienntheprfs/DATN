@@ -1,52 +1,4 @@
-import { test as base, expect, type Page, type Locator } from '@playwright/test';
-
-// Define custom fixtures
-type MyFixtures = {
-  authenticatedPage: Page;
-  mockApi: void;
-};
-
-export const test = base.extend<MyFixtures>({
-  // authenticated page fixture - now uses real auth
-  authenticatedPage: async ({ page, context }, use) => {
-    // Don't mock authentication - let user login manually or use existing session
-    await use(page);
-  },
-
-  // mock API responses fixture
-  mockApi: async ({ page }, use) => {
-    // Mock common API endpoints
-    await page.route('**/api/health', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'healthy' }),
-      });
-    });
-
-    await page.route('**/api/agent/stream**', (route) => {
-      const sseData = JSON.stringify({
-        type: "message",
-        content: {
-          type: "ai",
-          content: 'This is a mock response',
-          run_id: "mock-run-id"
-        }
-      });
-      route.fulfill({
-        status: 200,
-        headers: {
-          'Content-Type': 'text/event-stream',
-        },
-        body: `data: ${sseData}\n\ndata: [DONE]\n\n`,
-      });
-    });
-
-    await use();
-  },
-});
-
-export { expect };
+import { expect, type Page, type Locator } from '@playwright/test';
 
 // Helper functions for common test patterns
 export const helpers = {
@@ -76,10 +28,21 @@ export const helpers = {
     }
   },
 
-  // Mock authentication for individual tests - now uses real auth
-  async mockAuthentication(page: Page): Promise<void> {
-    // Don't mock authentication - let user login manually
-    console.log('Authentication mocking disabled - using real API');
+  // Use real credentials to log into the application
+  async loginWithCredentials(
+    page: Page, 
+    email = process.env.TEST_USER_EMAIL || 'admin@example.com', 
+    password = process.env.TEST_USER_PASSWORD || 'admin123'
+  ): Promise<void> {
+    await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
+    await this.waitForPageLoad(page);
+    
+    await page.locator('#email').fill(email);
+    await page.locator('#password').fill(password);
+    await page.locator('form button[type="submit"]').click();
+    
+    // Wait for redirect to happen after successful login
+    await page.waitForTimeout(2000); 
   },
 
   // Mock voice support

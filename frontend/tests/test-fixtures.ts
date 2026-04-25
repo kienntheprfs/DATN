@@ -210,18 +210,15 @@ export const testFixtures = {
   },
 };
 
-// Mock API setup helper - Auth endpoints are NOT mocked to use real system
 export const setupMockApi = async (page: Page, options: {
   mockHealth?: boolean;
   mockChat?: boolean;
-  mockAuth?: boolean;
   mockErrors?: boolean;
   delay?: number;
 } = {}) => {
   const {
     mockHealth = true,
     mockChat = true,
-    mockAuth = false, // Changed to false - use real auth
     mockErrors = false,
     delay = 0,
   } = options;
@@ -264,50 +261,6 @@ export const setupMockApi = async (page: Page, options: {
             'Connection': 'keep-alive',
           },
           body: `data: ${sseData}\n\ndata: [DONE]\n\n`,
-        });
-      }, delay);
-    });
-  }
-
-  // Auth endpoints
-  if (mockAuth) {
-    await page.route('**/api/auth/login', (route: Route) => {
-      setTimeout(() => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(testFixtures.apiResponses.authLogin),
-        });
-      }, delay);
-    });
-
-    await page.route('**/api/auth/me', (route: Route) => {
-      setTimeout(() => {
-        const headers = route.request().headers();
-        const authHeader = headers.authorization || headers.cookie;
-
-        if (authHeader) {
-          route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(testFixtures.apiResponses.authMe),
-          });
-        } else {
-          route.fulfill({
-            status: 401,
-            contentType: 'application/json',
-            body: JSON.stringify(testFixtures.errors.unauthorized),
-          });
-        }
-      }, delay);
-    });
-
-    await page.route('**/api/auth/logout', (route: Route) => {
-      setTimeout(() => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ message: 'Logged out successfully' }),
         });
       }, delay);
     });
