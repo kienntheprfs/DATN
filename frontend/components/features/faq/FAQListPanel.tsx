@@ -251,7 +251,7 @@ const handleSubmit = () => {
                     <td className="px-6 py-5">
                       <Badge variant="secondary" className="text-sm px-2.5 py-1">{faq.questions.length}</Badge>
                     </td>
-                    {isAdmin && (
+{isAdmin && (
                       <td className="px-6 py-5 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
@@ -261,13 +261,15 @@ const handleSubmit = () => {
                           >
                             <Eye className="w-5 h-5" />
                           </button>
-                          <button
-                            onClick={() => openEditModal(faq)}
-                            className="p-2 rounded hover:bg-slate-200 text-slate-500 hover:text-primary transition-colors"
-                            title="Chỉnh sửa"
-                          >
-                            <Pencil className="w-5 h-5" />
-                          </button>
+                          {faq.source === "manual" && (
+                            <button
+                              onClick={() => openEditModal(faq)}
+                              className="p-2 rounded hover:bg-slate-200 text-slate-500 hover:text-primary transition-colors"
+                              title="Chỉnh sửa"
+                            >
+                              <Pencil className="w-5 h-5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setDeleteCandidate(faq)}
                             className="p-2 rounded hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors"
@@ -310,10 +312,10 @@ const handleSubmit = () => {
         title="Chi tiết FAQ"
         description="Xem thông tin chi tiết của câu hỏi thường gặp."
         size="xl"
-        footer={
+footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setDetailFAQ(null)}>Đóng</Button>
-            {isAdmin && (
+            {isAdmin && detailFAQ?.source === "manual" && (
               <Button onClick={() => { setDetailFAQ(null); openEditModal(detailFAQ!); }}>Chỉnh sửa</Button>
             )}
           </div>
@@ -342,10 +344,13 @@ const handleSubmit = () => {
                 <div className="prose prose-lg max-w-none" dangerouslySetInnerHTML={{ __html: detailFAQ.answer }} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-6 text-base">
+<div className="grid grid-cols-2 gap-6 text-base">
               <div>
                 <span className="text-text-secondary">Nguồn: </span>
                 <span className="font-medium">{detailFAQ.source}</span>
+                {detailFAQ.source === "document" && (
+                  <span className="text-xs text-text-secondary ml-2">(Tự động tạo từ tài liệu, không thể chỉnh sửa câu hỏi)</span>
+                )}
               </div>
               <div>
                 <span className="text-text-secondary">Ngày tạo: </span>
