@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Document, DocumentTable } from "./DocumentTable";
-import { Pagination } from "./Pagination";
+import { Pagination } from "./pagination";
 import { KnowledgeFilters } from "./SearchFilterPanel";
 import { knowledgeService } from "@/services/knowledge-api";
 import { DeletePinModal } from "@/components/admin/pinnedPost/DeletePinModal";

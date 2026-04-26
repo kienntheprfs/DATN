@@ -7,3 +7,4 @@ export * from './building-api';
 export * from './editor-api';
 export * from './agent';
 export * from './missing-in-map-api';
+export * from './faq-api';
