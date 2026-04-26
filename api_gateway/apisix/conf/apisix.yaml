@@ -204,6 +204,22 @@ routes:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
     upstream_id: u-wayfinder
 
+  - id: dashboard-public
+    priority: 95
+    methods: ["GET"]
+    uris:
+      - /dashboard
+      - /dashboard/
+      - /dashboard/pinned-posts
+      - /dashboard/pinned-posts/*
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/dashboard/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-dashboard
+
   - id: dashboard-protected
     priority: 70
     methods: ["GET", "POST", "PATCH", "DELETE", "PUT"]
