@@ -77,7 +77,7 @@ export function FAQEditorPanel({ editingId, onSaved, onCancel }: FAQEditorPanelP
     setQuestions(updated);
   };
 
-  const handleSubmit = () => {
+const handleSubmit = () => {
     if (!answer.trim()) {
       toast.error("Vui lòng nhập câu trả lời.");
       return;
@@ -91,13 +91,12 @@ export function FAQEditorPanel({ editingId, onSaved, onCancel }: FAQEditorPanelP
 
     const payload = {
       answer: answer.trim(),
-      questions: validQuestions,
     };
 
     if (editingId) {
       updateMutation.mutate(payload);
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ ...payload, questions: validQuestions });
     }
   };
 

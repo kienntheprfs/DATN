@@ -1,6 +1,6 @@
 import { apiClient } from "./auth-api";
 
-const FAQ_API_URL = '/kb/faqs/manual';
+const FAQ_API_URL = '/kb/faqs';
 
 export interface FAQQuestion {
   id: number;
@@ -34,13 +34,12 @@ export interface CreateFAQPayload {
 
 export interface UpdateFAQPayload {
   answer?: string;
-  questions?: string[];
   meta_data?: Record<string, unknown>;
 }
 
 export const faqApi = {
   list: async (skip = 0, limit = 50): Promise<FAQListResponse> => {
-    console.log('[FAQ API] GET /faqs/manual', { skip, limit });
+    console.log('[FAQ API] GET /faqs', { skip, limit });
     const response = await apiClient.get<FAQ[]>(FAQ_API_URL, {
       params: { skip, limit },
     });
@@ -53,25 +52,25 @@ export const faqApi = {
   },
 
   get: async (id: number): Promise<FAQ> => {
-    console.log('[FAQ API] GET /faqs/manual/:id', { id });
+    console.log('[FAQ API] GET /faqs/:id', { id });
     const response = await apiClient.get<FAQ>(`${FAQ_API_URL}/${id}`);
     return response.data;
   },
 
   create: async (payload: CreateFAQPayload): Promise<FAQ> => {
-    console.log('[FAQ API] POST /faqs/manual', payload);
+    console.log('[FAQ API] POST /faqs', payload);
     const response = await apiClient.post<FAQ>(FAQ_API_URL, payload);
     return response.data;
   },
 
   update: async (id: number, payload: UpdateFAQPayload): Promise<FAQ> => {
-    console.log('[FAQ API] PATCH /faqs/manual/:id', { id, payload });
+    console.log('[FAQ API] PATCH /faqs/:id', { id, payload });
     const response = await apiClient.patch<FAQ>(`${FAQ_API_URL}/${id}`, payload);
     return response.data;
   },
 
   delete: async (id: number): Promise<void> => {
-    console.log('[FAQ API] DELETE /faqs/manual/:id', { id });
+    console.log('[FAQ API] DELETE /faqs/:id', { id });
     await apiClient.delete(`${FAQ_API_URL}/${id}`);
   },
 };

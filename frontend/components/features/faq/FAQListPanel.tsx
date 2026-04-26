@@ -116,7 +116,7 @@ export function FAQListPanel({ searchQuery, isAdmin }: FAQListPanelProps) {
     setFormQuestions(updated);
   };
 
-  const handleSubmit = () => {
+const handleSubmit = () => {
     if (!formAnswer.trim()) {
       toast.error("Vui lòng nhập câu trả lời.");
       return;
@@ -128,15 +128,10 @@ export function FAQListPanel({ searchQuery, isAdmin }: FAQListPanelProps) {
       return;
     }
 
-    const payload = {
-      answer: formAnswer.trim(),
-      questions: validQuestions,
-    };
-
     if (editFAQ) {
-      updateMutation.mutate({ id: editFAQ.id, payload });
+      updateMutation.mutate({ id: editFAQ.id, payload: { answer: formAnswer.trim() } });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate({ answer: formAnswer.trim(), questions: validQuestions });
     }
   };
 
@@ -185,8 +180,11 @@ export function FAQListPanel({ searchQuery, isAdmin }: FAQListPanelProps) {
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-border-color">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-bold text-text-secondary uppercase tracking-wider font-heading w-20">
+<th className="px-6 py-4 text-left text-sm font-bold text-text-secondary uppercase tracking-wider font-heading w-20">
                   ID
+                </th>
+                <th className="px-6 py-4 text-left text-sm font-bold text-text-secondary uppercase tracking-wider font-heading w-28">
+                  Nguồn
                 </th>
                 <th className="px-6 py-4 text-left text-sm font-bold text-text-secondary uppercase tracking-wider font-heading">
                   Câu hỏi
@@ -218,19 +216,24 @@ export function FAQListPanel({ searchQuery, isAdmin }: FAQListPanelProps) {
                     {isAdmin && <td className="px-6 py-5"><div className="h-5 w-20 bg-slate-200 rounded ml-auto"></div></td>}
                   </tr>
                 ))
-              ) : paginatedFAQs.length === 0 ? (
+) : paginatedFAQs.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 5 : 4} className="px-6 py-12 text-center text-text-secondary">
+                  <td colSpan={isAdmin ? 6 : 5} className="px-6 py-12 text-center text-text-secondary">
                     {searchQuery ? `Không tìm thấy "${searchQuery}"` : "Chưa có câu hỏi thường gặp nào"}
                   </td>
                 </tr>
               ) : (
                 paginatedFAQs.map((faq) => (
-                  <tr key={faq.id} className="hover:bg-slate-50 transition-colors group">
+<tr key={faq.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-6 py-5">
                       <span className="text-sm font-mono text-text-secondary bg-slate-100 px-2 py-1 rounded border border-slate-200">
                         #{faq.id}
                       </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <Badge variant={faq.source === "manual" ? "default" : "outline"} className="text-xs">
+                        {faq.source === "manual" ? "Manual" : "Document"}
+                      </Badge>
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex flex-col gap-1.5">
