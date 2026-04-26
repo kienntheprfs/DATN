@@ -8,6 +8,11 @@ const timestamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
 
 const coverageDir = path.join(process.cwd(), 'coverage');
 
+// Check if coverage directory exists, create if not
+if (!fs.existsSync(coverageDir)) {
+  fs.mkdirSync(coverageDir, { recursive: true });
+}
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -32,13 +37,15 @@ export default defineConfig({
           if (sourcePath.includes('node_modules') || sourcePath.includes('.next/')) {
             return false;
           }
-          // Next.js webpack source map có dạng webpack://_N_E/app/... hoặc webpack://_N_E/components/...
-          return sourcePath.includes('/app/') ||
-            sourcePath.includes('/components/') ||
-            sourcePath.includes('/hooks/') ||
-            sourcePath.includes('/lib/') ||
-            sourcePath.includes('/stores/') ||
-            sourcePath.includes('/services/');
+          // Next.js app router: webpack://_N_E/app/... hoặc có thể là absolute path như D:/Code/...
+          // Chấp nhận mọi đường dẫn trong frontend/
+          return sourcePath.includes('frontend') ||
+            (sourcePath.includes('/app/') && !sourcePath.includes('node_modules')) ||
+            (sourcePath.includes('/components/') && !sourcePath.includes('node_modules')) ||
+            (sourcePath.includes('/hooks/') && !sourcePath.includes('node_modules')) ||
+            (sourcePath.includes('/lib/') && !sourcePath.includes('node_modules')) ||
+            (sourcePath.includes('/stores/') && !sourcePath.includes('node_modules')) ||
+            (sourcePath.includes('/services/') && !sourcePath.includes('node_modules'));
         }
       }
     }]
