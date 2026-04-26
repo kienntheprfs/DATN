@@ -12,7 +12,7 @@ export function AdminSidebar() {
   const isKnowledgeRoute = pathname.startsWith("/admin/knowledge");
   const isRatingRoute = pathname.startsWith("/admin/rating");
   const isTopicRoute = pathname.startsWith("/admin/topic");
-  const isPinnedPostRoute = pathname.startsWith("/admin/pinned_post");
+  const isPinnedPostRoute = pathname.startsWith("/admin/pinned-post");
   const isMissingInMapRoute = pathname.startsWith("/admin/missing-in-map");
 
   // Keep sidebar closed whenever entering mobile breakpoint.
@@ -74,8 +74,8 @@ export function AdminSidebar() {
         </div>
       <nav className="flex-1 py-6 px-2 space-y-1">
         <Link href="#" className="flex items-center gap-3 px-3 py-2 rounded-md text-blue-200 hover:text-white hover:bg-white/5 transition-colors group">
-          <span className="material-symbols-outlined text-[20px]">chat</span>
-          <span className="text-sm font-medium">Trò chuyện mới</span>
+          <span className="material-symbols-outlined text-[20px]">dashboard</span>
+          <span className="text-sm font-medium">Bảng điều khiển</span>
         </Link>
         <Link
           href="/admin/knowledge"
@@ -86,7 +86,7 @@ export function AdminSidebar() {
           }`}
         >
           <span className={`material-symbols-outlined text-[20px] ${isKnowledgeRoute ? "fill-1" : ""}`}>archive</span>
-          <span className="text-sm font-medium">Thư viện &amp; Lịch sử</span>
+          <span className="text-sm font-medium">Cơ sở tri thức</span>
         </Link>
         <div className="pt-4 pb-2">
           <div className="px-3 text-[11px] font-bold text-blue-300/60 uppercase tracking-wider font-heading">Quản trị</div>
@@ -114,7 +114,7 @@ export function AdminSidebar() {
           <span className="text-sm font-medium">Dữ liệu bản đồ thiếu</span>
         </Link>
         <Link
-          href="/admin/pinned_post"
+          href="/admin/pinned-post"
           className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
             isPinnedPostRoute
               ? "bg-primary text-white shadow-sm ring-1 ring-white/10"

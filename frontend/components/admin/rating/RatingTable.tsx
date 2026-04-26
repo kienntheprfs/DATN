@@ -33,7 +33,7 @@ export function RatingTable({ rows, onOpenDetail, isLoading }: RatingTableProps)
             <th scope="col" className="px-6 py-2 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading">
               Bình luận
             </th>
-            <th scope="col" className="px-6 py-2 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-42">
+            <th scope="col" className="px-6 py-2 text-center text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-42">
               Chi tiết
             </th>
           </tr>
@@ -98,39 +98,48 @@ export function RatingTable({ rows, onOpenDetail, isLoading }: RatingTableProps)
                   className="inline-flex items-center gap-1.5 text-primary hover:text-blue-800 transition-colors group/btn"
                 >
                   <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-                  <span className="text-xs underline-offset-4 group-hover/btn:underline">Xem cuộc hội thoại</span>
+                  <span className="text-xs underline-offset-4 group-hover/btn:underline">Xem chi tiết</span>
                 </button>
               </td>
             </tr>
           ))}
 
-          {isLoading && (
-            <tr className="animate-pulse dense-table-row">
-              <td className="px-6 whitespace-nowrap">
-                <div className="h-4 bg-slate-200 rounded w-20 mb-1"></div>
-                <div className="h-3 bg-slate-100 rounded w-10"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap">
-                <div className="h-4 bg-slate-200 rounded w-16 mb-1"></div>
-                <div className="h-3 bg-slate-100 rounded w-12"></div>
-              </td>
-              <td className="px-6">
-                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-              </td>
-              <td className="px-6">
-                <div className="h-4 bg-slate-200 rounded w-5/6"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap">
-                <div className="flex gap-2 items-center">
-                  <div className="h-5 w-5 bg-slate-200 rounded-full"></div>
-                  <div className="h-3 bg-slate-200 rounded w-12"></div>
-                </div>
-              </td>
-              <td className="px-6">
-                <div className="h-4 bg-slate-200 rounded w-1/2"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap">
-                <div className="h-4 bg-slate-200 rounded w-24"></div>
+          {isLoading &&
+            Array.from({ length: 3 }).map((_, index) => (
+              <tr key={`rating-skeleton-${index}`} className="animate-pulse dense-table-row">
+                <td className="px-6 whitespace-nowrap">
+                  <div className="h-4 bg-slate-200 rounded w-20 mb-1"></div>
+                  <div className="h-3 bg-slate-100 rounded w-10"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap">
+                  <div className="h-4 bg-slate-200 rounded w-16 mb-1"></div>
+                  <div className="h-3 bg-slate-100 rounded w-12"></div>
+                </td>
+                <td className="px-6">
+                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                </td>
+                <td className="px-6">
+                  <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap">
+                  <div className="flex gap-2 items-center">
+                    <div className="h-5 w-5 bg-slate-200 rounded-full"></div>
+                    <div className="h-3 bg-slate-200 rounded w-12"></div>
+                  </div>
+                </td>
+                <td className="px-6">
+                  <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap">
+                  <div className="h-4 bg-slate-200 rounded w-24"></div>
+                </td>
+              </tr>
+            ))}
+
+          {!isLoading && rows.length === 0 && (
+            <tr className="dense-table-row">
+              <td colSpan={7} className="px-6 py-6 text-center text-sm text-text-secondary">
+                Không tìm thấy đánh giá phù hợp với bộ lọc hiện tại.
               </td>
             </tr>
           )}

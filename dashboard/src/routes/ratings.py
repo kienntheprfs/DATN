@@ -1,13 +1,15 @@
 """HTTP routes for answer rating feature."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.schemas.rating import RatingCreate, RatingResponse, RatingStats
+from src.models import RatingValue
+from src.schemas.rating import RatingAdminListParams, RatingAdminListResponse, RatingCreate, RatingResponse, RatingStats
 from src.services.rating_service import RatingService
 
 
@@ -79,3 +81,34 @@ async def get_agent_rating_stats(
     if not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
     return await RatingService.get_agent_stats(db, agent_id=agent_id)
+
+
+@router.get("/admin", response_model=RatingAdminListResponse)
+async def get_admin_ratings(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+    x_user_roles: Annotated[str | None, Header(alias="X-User-Roles")] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+    search: str | None = None,
+    rating: RatingValue | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    sort_by: str = "created_desc",
+) -> RatingAdminListResponse:
+    """Get admin rating list with server-side filtering and pagination."""
+    _require_user_id(x_user_id)
+    is_admin: bool = "admin" in _parse_roles(x_user_roles)
+    if not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
+
+    params = RatingAdminListParams(
+        page=page,
+        page_size=page_size,
+        search=search,
+        rating=rating,
+        from_date=from_date,
+        to_date=to_date,
+        sort_by=sort_by,
+    )
+    return await RatingService.list_admin_ratings(db, params=params)

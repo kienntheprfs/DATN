@@ -12,8 +12,12 @@ class LocalStorage(FileStorage):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
+    def _resolve_path(self, key: str) -> Path:
+        path = Path(key)
+        return path if path.is_absolute() else self.base_dir / key
+
     async def upload(self, key: str, file_obj: BinaryIO, content_type: str) -> str:
-        path = self.base_dir / key
+        path = self._resolve_path(key)
         
         # Tạo thư mục cha nếu chưa có (Non-blocking)
         if not path.parent.exists():
@@ -30,17 +34,17 @@ class LocalStorage(FileStorage):
         return str(path)
 
     async def delete(self, key: str):
-        path = self.base_dir / key
+        path = self._resolve_path(key)
         if await asyncio.to_thread(path.exists):
             await asyncio.to_thread(path.unlink)
 
     async def exists(self, key: str) -> bool:
-        path = self.base_dir / key
+        path = self._resolve_path(key)
         return await asyncio.to_thread(path.exists)
 
     @asynccontextmanager
     async def download_stream(self, key: str) -> AsyncGenerator[BinaryIO, None]:
-        path = self.base_dir / key
+        path = self._resolve_path(key)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {key}")
         

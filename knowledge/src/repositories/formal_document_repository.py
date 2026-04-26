@@ -16,12 +16,14 @@ class FormalDocumentRepository:
         file_path: str,
         lightrag_track_id: str,
         lightrag_doc_id: Optional[str] = None,
+        meta_data: Optional[dict] = None,
     ) -> FormalDocument:
         doc = FormalDocument(
             storage_id=storage_id,
             file_path=file_path,
             lightrag_track_id=lightrag_track_id,
             lightrag_doc_id=lightrag_doc_id,
+            meta_data=meta_data or {},
         )
         self.db.add(doc)
         await self.db.flush()

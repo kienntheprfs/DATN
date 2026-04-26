@@ -10,6 +10,22 @@ interface RatingPaginationProps {
   onPageChange: (page: number) => void;
 }
 
+function buildPages(currentPage: number, totalPages: number): Array<number | "..."> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "...", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+
+  return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+}
+
 export function RatingPagination({
   currentPage,
   totalPages,
@@ -17,10 +33,10 @@ export function RatingPagination({
   itemsPerPage,
   onPageChange,
 }: RatingPaginationProps) {
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
-
-  const pages: Array<number | "..."> = [1, 2, 3, "...", 88, 89];
+  const hasData = totalItems > 0;
+  const startItem = hasData ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endItem = hasData ? Math.min(currentPage * itemsPerPage, totalItems) : 0;
+  const pages = buildPages(currentPage, totalPages);
 
   return (
     <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-border-color shrink-0">
@@ -35,7 +51,7 @@ export function RatingPagination({
             <button
               type="button"
               onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
+              disabled={currentPage === 1 || !hasData}
               className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="sr-only">Previous</span>
@@ -55,6 +71,7 @@ export function RatingPagination({
                   type="button"
                   key={page}
                   onClick={() => onPageChange(page)}
+                  disabled={!hasData}
                   className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                     currentPage === page
                       ? "z-10 bg-blue-50 border-primary text-primary"
@@ -70,7 +87,7 @@ export function RatingPagination({
             <button
               type="button"
               onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage === totalPages}
+              disabled={currentPage === totalPages || !hasData}
               className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="sr-only">Next</span>

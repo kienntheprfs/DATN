@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.models import AnswerRating, RatingValue
-from src.schemas.rating import RatingCreate
+from src.schemas.rating import RatingAdminListParams, RatingCreate
 from src.services.rating_service import RatingService
 
 
@@ -194,3 +194,34 @@ def test_validate_comment_rejects_comment_for_like() -> None:
         RatingService._validate_comment(RatingValue.LIKE, "not-allowed")
 
     assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_list_admin_ratings_returns_pagination(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = AsyncMock()
+    row = AnswerRating(
+        user_id="user-1",
+        run_id=str(uuid4()),
+        rating=RatingValue.DISLIKE.value,
+        comment="need improvement",
+        thread_id="thread-1",
+        agent_id="agent-1",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    async def fake_list_admin_ratings(*args, **kwargs):
+        return [row], 11
+
+    monkeypatch.setattr("src.services.rating_service.RatingRepository.list_admin_ratings", fake_list_admin_ratings)
+
+    response = await RatingService.list_admin_ratings(
+        db,
+        params=RatingAdminListParams(page=2, page_size=10),
+    )
+
+    assert response.total_items == 11
+    assert response.total_pages == 2
+    assert response.page == 2
+    assert len(response.items) == 1
+    assert response.items[0].rating == RatingValue.DISLIKE

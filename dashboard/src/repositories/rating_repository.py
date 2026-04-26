@@ -1,9 +1,10 @@
 """Repository methods for answer ratings."""
 
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import case, func
+from sqlalchemy import String, asc, case, cast, desc, func, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -57,7 +58,7 @@ class RatingRepository:
         statement = select(AnswerRating).where(AnswerRating.thread_id == thread_id)
         if user_id is not None:
             statement = statement.where(AnswerRating.user_id == user_id)
-        result = await db.execute(statement.order_by(AnswerRating.created_at.desc()))
+        result = await db.execute(statement.order_by(desc(AnswerRating.created_at)))
         return list(result.scalars().all())
 
     @staticmethod
@@ -76,3 +77,146 @@ class RatingRepository:
         like_count = int(row[1] or 0)
         dislike_count = int(row[2] or 0)
         return total, like_count, dislike_count
+
+    @staticmethod
+    def _build_admin_filters(
+        statement,
+        *,
+        search: Optional[str] = None,
+        rating: Optional[RatingValue] = None,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ):
+        if search:
+            pattern = f"%{search.strip()}%"
+            statement = statement.where(
+                or_(
+                    cast(AnswerRating.run_id, String).ilike(pattern),
+                    cast(AnswerRating.thread_id, String).ilike(pattern),
+                    cast(AnswerRating.user_id, String).ilike(pattern),
+                    cast(AnswerRating.agent_id, String).ilike(pattern),
+                    cast(AnswerRating.comment, String).ilike(pattern),
+                )
+            )
+
+        if rating is not None:
+            statement = statement.where(AnswerRating.rating == rating.value)
+
+        if from_date is not None:
+            from_dt = datetime.combine(from_date, time.min)
+            statement = statement.where(AnswerRating.created_at >= from_dt)
+
+        if to_date is not None:
+            end_exclusive = datetime.combine(to_date + timedelta(days=1), time.min)
+            statement = statement.where(AnswerRating.created_at < end_exclusive)
+
+        return statement
+
+    @staticmethod
+    async def list_admin_ratings(
+        db: AsyncSession,
+        *,
+        page: int,
+        page_size: int,
+        search: Optional[str] = None,
+        rating: Optional[RatingValue] = None,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+        sort_by: str = "created_desc",
+    ) -> tuple[list[AnswerRating], int]:
+        """Return paginated ratings for admin table with optional filters."""
+        base = select(AnswerRating)
+        filtered = RatingRepository._build_admin_filters(
+            base,
+            search=search,
+            rating=rating,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        count_statement = select(func.count(AnswerRating.id))
+        count_statement = RatingRepository._build_admin_filters(
+            count_statement,
+            search=search,
+            rating=rating,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        count_result = await db.execute(count_statement)
+        total_items = int(count_result.scalar_one() or 0)
+
+        offset = (page - 1) * page_size
+        if sort_by == "created_asc":
+            order_clause = [asc(AnswerRating.created_at), asc(AnswerRating.id)]
+        elif sort_by == "updated_desc":
+            order_clause = [desc(AnswerRating.updated_at), desc(AnswerRating.id)]
+        elif sort_by == "updated_asc":
+            order_clause = [asc(AnswerRating.updated_at), asc(AnswerRating.id)]
+        elif sort_by == "rating_desc":
+            order_clause = [desc(AnswerRating.rating), desc(AnswerRating.created_at), desc(AnswerRating.id)]
+        elif sort_by == "rating_asc":
+            order_clause = [asc(AnswerRating.rating), desc(AnswerRating.created_at), desc(AnswerRating.id)]
+        else:
+            order_clause = [desc(AnswerRating.created_at), desc(AnswerRating.id)]
+
+        result = await db.execute(
+            filtered.order_by(*order_clause).offset(offset).limit(page_size)
+        )
+        items = list(result.scalars().all())
+        return items, total_items
+
+    @staticmethod
+    async def get_thread_user_metadata(
+        db: AsyncSession,
+        *,
+        thread_ids: set[str],
+        user_ids: set[str],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Return maps for thread titles and user display names.
+
+        Falls back to empty maps if underlying schemas are unavailable.
+        """
+        thread_name_map: dict[str, str] = {}
+        user_name_map: dict[str, str] = {}
+
+        if thread_ids:
+            thread_stmt = text(
+                """
+                SELECT id, title
+                FROM api_gateway.threads
+                WHERE id = ANY(:thread_ids)
+                """
+            )
+            try:
+                thread_rows = await db.execute(thread_stmt, {"thread_ids": list(thread_ids)})
+                for row in thread_rows:
+                    thread_id = str(row[0])
+                    title = row[1]
+                    if title:
+                        thread_name_map[thread_id] = str(title)
+            except Exception:
+                # Keep admin list endpoint resilient even if api_gateway schema is not present.
+                thread_name_map = {}
+
+        if user_ids:
+            user_stmt = text(
+                """
+                SELECT id, display_name, email
+                FROM api_gateway.users
+                WHERE id = ANY(:user_ids)
+                """
+            )
+            try:
+                user_rows = await db.execute(user_stmt, {"user_ids": list(user_ids)})
+                for row in user_rows:
+                    user_id = str(row[0])
+                    display_name = row[1]
+                    email = row[2]
+                    if display_name:
+                        user_name_map[user_id] = str(display_name)
+                    elif email:
+                        user_name_map[user_id] = str(email)
+            except Exception:
+                user_name_map = {}
+
+        return thread_name_map, user_name_map

@@ -4,18 +4,58 @@ import type { RouteRow } from "./MissingInMapTypes";
 type MissingInMapRouteTableProps = {
   rows: RouteRow[];
   isSubmitting: boolean;
-  pendingActionId: string | null;
-  onDrawRoute: (id: string) => void;
-  onRemove: (id: string) => void;
+  pendingActionId: number | null;
+  isLoading?: boolean;
+  onDrawRoute: (row: RouteRow) => void;
+  onRemove: (row: RouteRow) => void;
 };
 
 export function MissingInMapRouteTable({
   rows,
   isSubmitting,
   pendingActionId,
+  isLoading = false,
   onDrawRoute,
   onRemove,
 }: MissingInMapRouteTableProps) {
+  if (isLoading) {
+    return (
+      <table className="w-full min-w-270 border-collapse text-left">
+        <thead>
+          <tr className="border-b border-slate-200 bg-white">
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">ID</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Start Point</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">End Point</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reason / Notes</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Status</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reported By</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Created At</th>
+            <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <tr key={index} className="animate-pulse">
+              <td className="px-6 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-36 rounded bg-slate-100" /><div className="mt-2 h-3 w-24 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-36 rounded bg-slate-100" /><div className="mt-2 h-3 w-24 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-48 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-5 w-20 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-28 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
+              <td className="px-6 py-4 text-right">
+                <div className="flex justify-end gap-2">
+                  <div className="h-8 w-28 rounded bg-slate-100" />
+                  <div className="h-8 w-16 rounded bg-slate-100" />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
   return (
     <table className="w-full min-w-270 border-collapse text-left">
       <thead>
@@ -39,7 +79,7 @@ export function MissingInMapRouteTable({
           </tr>
         )}
         {rows.map((data) => {
-          const rowBusy = isSubmitting && pendingActionId === data.id;
+          const rowBusy = isSubmitting && pendingActionId === data.rowId;
 
           return (
             <tr key={data.id} className="transition-colors hover:bg-slate-50/80">
@@ -93,7 +133,7 @@ export function MissingInMapRouteTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onDrawRoute(data.id)}
+                      onClick={() => onDrawRoute(data)}
                       className="bg-primary px-3 py-1.5 text-[10px] font-bold text-white uppercase shadow-sm transition-all hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
                       title="Vẽ tuyến đường lên bản đồ"
                     >
@@ -102,7 +142,7 @@ export function MissingInMapRouteTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onRemove(data.id)}
+                      onClick={() => onRemove(data)}
                       className="border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Loại bỏ yêu cầu"
                     >

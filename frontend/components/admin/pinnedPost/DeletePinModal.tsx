@@ -8,6 +8,10 @@ interface DeletePinModalProps {
   isDeleting?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  loadingLabel?: string;
 }
 
 export function DeletePinModal({
@@ -16,6 +20,10 @@ export function DeletePinModal({
   isDeleting = false,
   onCancel,
   onConfirm,
+  title,
+  description,
+  confirmLabel,
+  loadingLabel,
 }: DeletePinModalProps) {
   useEffect(() => {
     if (!open) {
@@ -36,8 +44,15 @@ export function DeletePinModal({
     return null;
   }
 
+  const resolvedTitle = title || "Xác nhận xóa bài ghim";
+  const resolvedDescription =
+    description ||
+    `Bạn có chắc chắn muốn xóa bài ghim${pinTitle ? ` \"${pinTitle}\"` : " này"}? Hành động này không thể hoàn tác.`;
+  const resolvedConfirmLabel = confirmLabel || "Xác nhận xóa";
+  const resolvedLoadingLabel = loadingLabel || "Đang xóa...";
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
@@ -52,12 +67,9 @@ export function DeletePinModal({
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50">
               <span className="material-symbols-outlined text-red-600">warning</span>
             </div>
-            <h3 className="font-heading text-lg font-bold text-text-main">Xác nhận xóa bài ghim</h3>
+            <h3 className="font-heading text-lg font-bold text-text-main">{resolvedTitle}</h3>
           </div>
-          <p className="text-sm leading-relaxed text-text-secondary">
-            Bạn có chắc chắn muốn xóa bài ghim
-            {pinTitle ? ` \"${pinTitle}\"` : " này"}? Hành động này không thể hoàn tác.
-          </p>
+          <p className="text-sm leading-relaxed text-text-secondary">{resolvedDescription}</p>
         </div>
 
         <div className="flex flex-row-reverse gap-3 bg-slate-50 px-6 py-4">
@@ -67,7 +79,7 @@ export function DeletePinModal({
             onClick={onConfirm}
             disabled={isDeleting}
           >
-            {isDeleting ? "Đang xóa..." : "Xác nhận xóa"}
+            {isDeleting ? resolvedLoadingLabel : resolvedConfirmLabel}
           </button>
           <button
             type="button"

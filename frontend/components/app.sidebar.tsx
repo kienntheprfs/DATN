@@ -45,17 +45,17 @@ import { toast } from "sonner";
 const data = {
     navMain: [
         {
-            title: "Tra cứu hỏi đáp",
-            url: "#",
+            title: "Hội thoại mới",
+            url: "/",
             icon: MessageSquare,
             isActive: true,
         },
-        {
-            title: "Kho văn bản",
-            url: "#",
-            icon: ScrollText,
-            isActive: true,
-        },
+        // {
+        //     title: "Kho văn bản",
+        //     url: "#",
+        //     icon: ScrollText,
+        //     isActive: true,
+        // },
         {
             title: "Lịch sử tra cứu",
             icon: History,
@@ -70,14 +70,14 @@ const data = {
             isActive: true,
             requiresAuth: true,
         },
-        {
-            title: "Lịch sử Admin",
-            url: "/admin/audit",
-            icon: Shield,
-            isActive: true,
-            requiresAuth: true,
-            requiresAdmin: true,
-        },
+        // {
+        //     title: "Lịch sử Admin",
+        //     url: "/admin/audit",
+        //     icon: Shield,
+        //     isActive: true,
+        //     requiresAuth: true,
+        //     requiresAdmin: true,
+        // },
     ],
 };
 

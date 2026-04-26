@@ -1,17 +1,21 @@
 """Business logic for answer ratings."""
 
-from datetime import datetime
+from datetime import date, datetime
+import asyncio
+from math import ceil
 import logging
 from typing import Optional
 from uuid import UUID
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.settings import settings
 from src.models import AnswerRating, RatingValue
 from src.repositories.rating_repository import RatingRepository
-from src.schemas.rating import RatingCreate, RatingResponse, RatingStats
+from src.schemas.rating import RatingAdminListItem, RatingAdminListParams, RatingAdminListResponse, RatingCreate, RatingResponse, RatingStats
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -66,7 +70,17 @@ class RatingService:
                 detail="failed to process rating request",
             ) from exc
 
-        return RatingResponse.model_validate(entity)
+        return RatingResponse(
+            id=entity.id,
+            user_id=entity.user_id,
+            run_id=entity.run_id,
+            rating=RatingValue(entity.rating),
+            comment=entity.comment,
+            thread_id=entity.thread_id,
+            agent_id=entity.agent_id,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at,
+        )
 
     @staticmethod
     async def delete(db: AsyncSession, rating_id: UUID, user_id: str, is_admin: bool) -> None:
@@ -99,7 +113,20 @@ class RatingService:
         """Return thread ratings according to caller permissions."""
         scoped_user_id: Optional[str] = None if is_admin else user_id
         ratings = await RatingRepository.get_thread_ratings(db, thread_id=thread_id, user_id=scoped_user_id)
-        return [RatingResponse.model_validate(item) for item in ratings]
+        return [
+            RatingResponse(
+                id=item.id,
+                user_id=item.user_id,
+                run_id=item.run_id,
+                rating=RatingValue(item.rating),
+                comment=item.comment,
+                thread_id=item.thread_id,
+                agent_id=item.agent_id,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+            )
+            for item in ratings
+        ]
 
     @staticmethod
     async def get_agent_stats(db: AsyncSession, agent_id: str) -> RatingStats:
@@ -112,6 +139,135 @@ class RatingService:
             dislike_count=dislike_count,
             like_percentage=round(like_percentage, 2),
         )
+
+    @staticmethod
+    async def list_admin_ratings(
+        db: AsyncSession,
+        *,
+        params: RatingAdminListParams,
+    ) -> RatingAdminListResponse:
+        """Return filtered and paginated ratings for admin management page."""
+        items, total_items = await RatingRepository.list_admin_ratings(
+            db,
+            page=params.page,
+            page_size=params.page_size,
+            search=params.search,
+            rating=params.rating,
+            from_date=params.from_date,
+            to_date=params.to_date,
+            sort_by=params.sort_by,
+        )
+
+        history_map = await RatingService._fetch_histories_for_items(items)
+        thread_name_map, user_name_map = await RatingRepository.get_thread_user_metadata(
+            db,
+            thread_ids={item.thread_id for item in items if item.thread_id},
+            user_ids={item.user_id for item in items if item.user_id},
+        )
+
+        total_pages = ceil(total_items / params.page_size) if total_items > 0 else 0
+        typed_items: list[RatingAdminListItem] = []
+        for item in items:
+            question, answer = RatingService._extract_question_answer(
+                history_map.get((item.thread_id, item.user_id), []),
+                item.run_id,
+            )
+            typed_items.append(
+                RatingAdminListItem(
+                    id=item.id,
+                    user_id=item.user_id,
+                    user_name=user_name_map.get(item.user_id),
+                    run_id=item.run_id,
+                    thread_id=item.thread_id,
+                    thread_name=thread_name_map.get(item.thread_id),
+                    agent_id=item.agent_id,
+                    rating=RatingValue(item.rating),
+                    comment=item.comment,
+                    question=question,
+                    answer=answer,
+                    created_at=item.created_at,
+                    updated_at=item.updated_at,
+                )
+            )
+
+        return RatingAdminListResponse(
+            items=typed_items,
+            page=params.page,
+            page_size=params.page_size,
+            total_items=total_items,
+            total_pages=total_pages,
+        )
+
+    @staticmethod
+    async def _fetch_histories_for_items(items: list[AnswerRating]) -> dict[tuple[str, str], list[dict]]:
+        unique_keys = {(item.thread_id, item.user_id) for item in items if item.thread_id and item.user_id}
+        if not unique_keys:
+            return {}
+
+        timeout = httpx.Timeout(4.0, connect=1.5)
+        history_endpoint = f"{settings.agent_service_url.rstrip('/')}/history"
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async def fetch_one(key: tuple[str, str]) -> tuple[tuple[str, str], list[dict]]:
+                thread_id, user_id = key
+                try:
+                    response = await client.post(
+                        history_endpoint,
+                        json={"thread_id": thread_id},
+                        headers={"X-User-Id": user_id},
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                    messages = payload.get("messages", []) if isinstance(payload, dict) else []
+                    if isinstance(messages, list):
+                        return key, messages
+                except Exception:
+                    logger.warning("Cannot load history for thread=%s user=%s", thread_id, user_id, exc_info=True)
+                return key, []
+
+            pairs = await asyncio.gather(*(fetch_one(key) for key in unique_keys))
+
+        return {key: messages for key, messages in pairs}
+
+    @staticmethod
+    def _extract_question_answer(messages: list[dict], run_id: str) -> tuple[str, str]:
+        missing_question = "Không tìm thấy nội dung câu hỏi của người dùng"
+        missing_answer = "Không tìm thấy nội dung câu trả lời từ chatbot"
+
+        if not messages:
+            return missing_question, missing_answer
+
+        ai_index = next(
+            (
+                index
+                for index, msg in enumerate(messages)
+                if msg.get("type") == "ai" and str(msg.get("run_id") or "") == run_id
+            ),
+            None,
+        )
+
+        if ai_index is not None:
+            ai_message = messages[ai_index]
+            question_message = next(
+                (msg for msg in reversed(messages[:ai_index]) if msg.get("type") == "human"),
+                None,
+            )
+            question = str(question_message.get("content") or missing_question) if question_message else missing_question
+            answer = str(ai_message.get("content") or missing_answer)
+            return question, answer
+
+        last_ai_index = next((index for index in range(len(messages) - 1, -1, -1) if messages[index].get("type") == "ai"), None)
+        if last_ai_index is None:
+            return missing_question, missing_answer
+
+        last_ai = messages[last_ai_index]
+        question_message = next(
+            (msg for msg in reversed(messages[:last_ai_index]) if msg.get("type") == "human"),
+            None,
+        )
+        question = str(question_message.get("content") or missing_question) if question_message else missing_question
+        answer = str(last_ai.get("content") or missing_answer)
+        return question, answer
 
     @staticmethod
     def _validate_comment(rating: RatingValue, comment: Optional[str]) -> None:

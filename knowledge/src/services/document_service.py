@@ -1,10 +1,13 @@
 import asyncio
 import hashlib
 import logging
+import math
+import mimetypes
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.vector_db_setup import QdrantManager
@@ -13,8 +16,10 @@ from .lightrag_service import LightRAGService
 from .validator import validate_upload_file
 from .vector_db import VectorDBService
 from ..models.models import Document
+from ..models.models import DocumentStatus, FormalDocument, ProcessingStatus
 from ..repositories.document_repository import DocumentRepository
 from ..repositories.formal_document_repository import FormalDocumentRepository
+from ..schemas.document import AdminDocumentListResponse, AdminDocumentListItem
 from ..schemas.document import DocumentUpdate
 from ..schemas.formal_document import FormalDocumentUpdate, FormalDocumentResponse
 from .semantic_cache_notifier import semantic_cache_notifier
@@ -57,6 +62,7 @@ class DocumentService:
         self,
         file: UploadFile,
         storage_id: int,
+        meta_data: Optional[dict[str, Any]] = None,
     ) -> Document:
         doc_type = validate_upload_file(file)
         filename = Path(file.filename).name
@@ -111,6 +117,7 @@ class DocumentService:
                 file_path="__pending__",
                 file_size=file_size,
                 checksum=checksum,
+                meta_data=meta_data,
             )
 
             file_path = await self.store_raw_document(
@@ -146,8 +153,11 @@ class DocumentService:
             )
 
     async def upload_formal_document(
-        self, file: UploadFile, storage_id: int
-    ) -> Tuple[object, Optional[str]]:
+        self,
+        file: UploadFile,
+        storage_id: int,
+        meta_data: Optional[dict[str, Any]] = None,
+    ) -> Tuple[FormalDocument, Optional[str]]:
         doc_type = validate_upload_file(file)
         filename = Path(file.filename).name
         file_path = None
@@ -191,6 +201,7 @@ class DocumentService:
                 file_path=file_path,
                 lightrag_track_id=track_id,
                 lightrag_doc_id=str(initial_doc_id) if initial_doc_id else None,
+                meta_data=meta_data,
             )
             await self.db.commit()
             await self.db.refresh(formal_doc)
@@ -243,6 +254,283 @@ class DocumentService:
         storage_id: Optional[int],
     ):
         return await self.doc_repo.get_list(skip, limit, storage_id)
+
+    async def list_admin_documents(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        search: Optional[str],
+        year: Optional[int],
+        unit: Optional[str],
+        document_type: Optional[str],
+        is_formal_doc: Optional[bool],
+        storage_id: Optional[int],
+    ) -> AdminDocumentListResponse:
+        skip = (page - 1) * page_size
+        query_text = search.strip() if search else None
+        normalized_unit = unit.strip().lower() if unit else None
+        normalized_document_type = (
+            document_type.strip().lower() if document_type else None
+        )
+        include_normal = is_formal_doc is not True
+        include_formal = is_formal_doc is not False
+
+        normal_filters = [Document.status != DocumentStatus.DELETED]
+        if storage_id is not None:
+            normal_filters.append(Document.storage_id == storage_id)
+        if query_text:
+            search_clause = f"%{query_text.lower()}%"
+            normal_filters.append(
+                or_(
+                    func.lower(Document.title).like(search_clause),
+                    func.lower(cast(Document.meta_data["summary"].astext, String)).like(search_clause),
+                    func.lower(cast(Document.meta_data["code"].astext, String)).like(search_clause),
+                )
+            )
+        if normalized_unit:
+            normal_filters.append(
+                func.lower(cast(Document.meta_data["unit"].astext, String)) == normalized_unit
+            )
+        if normalized_document_type:
+            normal_filters.append(
+                or_(
+                    func.lower(cast(Document.meta_data["document_type"].astext, String))
+                    == normalized_document_type,
+                    func.lower(cast(Document.meta_data["document_kind"].astext, String))
+                    == normalized_document_type,
+                )
+            )
+        if year is not None:
+            normal_filters.append(
+                or_(
+                    cast(Document.meta_data["year"].astext, String) == str(year),
+                    cast(Document.meta_data["signed_year"].astext, String) == str(year),
+                    cast(func.date_part("year", Document.created_at), String) == str(year),
+                )
+            )
+
+        normal_total = 0
+        normal_items: list[AdminDocumentListItem] = []
+        if include_normal:
+            normal_total_stmt = select(func.count(Document.id)).where(*normal_filters)
+            normal_total = int((await self.db.execute(normal_total_stmt)).scalar_one() or 0)
+            normal_limit = page_size if not include_formal else page * page_size
+            normal_offset = skip if not include_formal else 0
+            normal_stmt = (
+                select(Document)
+                .where(*normal_filters)
+                .order_by(Document.updated_at.desc())
+                .offset(normal_offset)
+                .limit(normal_limit)
+            )
+            normal_docs = (await self.db.execute(normal_stmt)).scalars().all()
+            normal_items = [self._to_admin_normal_item(doc) for doc in normal_docs]
+
+        formal_total = 0
+        formal_items: list[AdminDocumentListItem] = []
+        if include_formal:
+            formal_filters = []
+            if storage_id is not None:
+                formal_filters.append(FormalDocument.storage_id == storage_id)
+            if query_text:
+                search_clause = f"%{query_text.lower()}%"
+                formal_filters.append(
+                    or_(
+                        func.lower(cast(FormalDocument.file_path, String)).like(search_clause),
+                        func.lower(
+                            cast(FormalDocument.meta_data["summary"].astext, String)
+                        ).like(search_clause),
+                        func.lower(
+                            cast(FormalDocument.meta_data["code"].astext, String)
+                        ).like(search_clause),
+                    )
+                )
+
+            if normalized_unit:
+                formal_filters.append(
+                    func.lower(cast(FormalDocument.meta_data["unit"].astext, String))
+                    == normalized_unit
+                )
+
+            if normalized_document_type:
+                formal_filters.append(
+                    or_(
+                        func.lower(
+                            cast(
+                                FormalDocument.meta_data["document_type"].astext,
+                                String,
+                            )
+                        )
+                        == normalized_document_type,
+                        func.lower(
+                            cast(
+                                FormalDocument.meta_data["document_kind"].astext,
+                                String,
+                            )
+                        )
+                        == normalized_document_type,
+                    )
+                )
+
+            if year is not None:
+                year_text = str(year)
+                formal_filters.append(
+                    or_(
+                        cast(FormalDocument.meta_data["year"].astext, String)
+                        == year_text,
+                        cast(FormalDocument.meta_data["signed_year"].astext, String)
+                        == year_text,
+                        func.substring(
+                            cast(
+                                FormalDocument.meta_data["signed_date"].astext,
+                                String,
+                            ),
+                            1,
+                            4,
+                        )
+                        == year_text,
+                        cast(func.date_part("year", FormalDocument.created_at), String)
+                        == year_text,
+                    )
+                )
+
+            formal_total_stmt = select(func.count(FormalDocument.id)).where(*formal_filters)
+            formal_total = int((await self.db.execute(formal_total_stmt)).scalar_one() or 0)
+            formal_limit = page_size if not include_normal else page * page_size
+            formal_offset = skip if not include_normal else 0
+            formal_stmt = (
+                select(FormalDocument)
+                .where(*formal_filters)
+                .order_by(FormalDocument.updated_at.desc())
+                .offset(formal_offset)
+                .limit(formal_limit)
+            )
+            formal_docs = (await self.db.execute(formal_stmt)).scalars().all()
+            formal_items = [self._to_admin_formal_item(doc) for doc in formal_docs]
+
+        if include_normal and include_formal:
+            total_items = normal_total + formal_total
+            merged = sorted(
+                [*normal_items, *formal_items],
+                key=lambda item: item.updated_at,
+                reverse=True,
+            )
+            page_items = merged[skip : skip + page_size]
+        elif include_normal:
+            total_items = normal_total
+            page_items = normal_items
+        else:
+            total_items = formal_total
+            page_items = formal_items
+
+        total_pages = max(1, math.ceil(total_items / page_size))
+        return AdminDocumentListResponse(
+            items=page_items,
+            page=page,
+            page_size=page_size,
+            total_items=total_items,
+            total_pages=total_pages,
+        )
+
+    def _to_admin_normal_item(self, doc: Document) -> AdminDocumentListItem:
+        meta_data = doc.meta_data or {}
+        return AdminDocumentListItem(
+            id=doc.id,
+            title=doc.title,
+            status=doc.status,
+            code=meta_data.get("code"),
+            summary=meta_data.get("summary"),
+            signed_date=meta_data.get("signed_date"),
+            unit=meta_data.get("unit"),
+            document_type=meta_data.get("document_type") or meta_data.get("document_kind"),
+            tags=meta_data.get("tags") or [],
+            is_formal_doc=False,
+            processing_status=doc.processing_status,
+            file_size=doc.file_size,
+            meta_data=meta_data,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+        )
+
+    def _to_admin_formal_item(self, doc: FormalDocument) -> AdminDocumentListItem:
+        file_name = (doc.file_path or "").split("/")[-1] or f"formal-{doc.id}"
+        meta_data = doc.meta_data or {}
+        return AdminDocumentListItem(
+            id=doc.id,
+            title=file_name,
+            code=meta_data.get("code") or f"FORMAL-{doc.id}",
+            summary=meta_data.get("summary") or "Tài liệu formal (đồng bộ qua LightRAG)",
+            signed_date=meta_data.get("signed_date") or meta_data.get("signedDate"),
+            unit=meta_data.get("unit"),
+            document_type=meta_data.get("document_type") or "Formal document",
+            tags=meta_data.get("tags") or ["Formal"],
+            is_formal_doc=True,
+            processing_status=ProcessingStatus.PROCESSING,
+            file_size=None,
+            meta_data={
+                "lightrag_track_id": doc.lightrag_track_id,
+                "lightrag_doc_id": doc.lightrag_doc_id,
+                **meta_data,
+            },
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+        )
+
+    async def resolve_document_file(
+        self,
+        *,
+        document_id: int,
+        is_formal_doc: Optional[bool],
+    ) -> tuple[str, str, str, bool]:
+        if is_formal_doc is True:
+            formal_doc = await self.formal_doc_repo.get_by_id(document_id)
+            if not formal_doc:
+                raise HTTPException(status_code=404, detail="Formal document not found")
+            file_key = formal_doc.file_path
+            file_name = Path(file_key or "").name or f"formal-{formal_doc.id}.pdf"
+            media_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+            return file_key, file_name, media_type, True
+
+        if is_formal_doc is False:
+            normal_doc = await self.doc_repo.get_by_id(document_id)
+            if not normal_doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+            media_map = {
+                "pdf": "application/pdf",
+                "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "txt": "text/plain",
+                "markdown": "text/markdown",
+                "html": "text/html",
+                "json": "application/json",
+            }
+            file_key = normal_doc.file_path
+            file_name = Path(file_key or "").name or normal_doc.title or f"document-{normal_doc.id}"
+            media_type = media_map.get(str(normal_doc.document_type), "application/octet-stream")
+            return file_key, file_name, media_type, False
+
+        normal_doc = await self.doc_repo.get_by_id(document_id)
+        formal_doc = await self.formal_doc_repo.get_by_id(document_id)
+
+        if normal_doc and formal_doc:
+            raise HTTPException(
+                status_code=409,
+                detail="Ambiguous document id. Please set is_formal_doc=true/false explicitly.",
+            )
+
+        if normal_doc:
+            return await self.resolve_document_file(
+                document_id=document_id,
+                is_formal_doc=False,
+            )
+
+        if formal_doc:
+            return await self.resolve_document_file(
+                document_id=document_id,
+                is_formal_doc=True,
+            )
+
+        raise HTTPException(status_code=404, detail="Document not found")
 
     async def update_document(self, document_id: int, data: DocumentUpdate):
         current_doc = await self.doc_repo.get_by_id(document_id)
@@ -412,6 +700,7 @@ class DocumentService:
             "file_path": doc.file_path,
             "lightrag_track_id": doc.lightrag_track_id,
             "lightrag_doc_id": doc.lightrag_doc_id,
+            "meta_data": doc.meta_data,
             "created_at": doc.created_at,
             "updated_at": doc.updated_at,
         }

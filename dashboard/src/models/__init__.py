@@ -1,11 +1,11 @@
 """Database models for dashboard service."""
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Index, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Column, Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -44,4 +44,50 @@ class AnswerRating(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
 
-__all__ = ["AnswerRating", "DASHBOARD_SCHEMA", "RatingValue", "SQLModel"]
+class PinnedPostCategory(str, Enum):
+    """Allowed categories for dashboard pinned posts."""
+
+    ACADEMIC_REGULATION = "Quy chế Đào tạo"
+    POSTGRADUATE = "Sau Đại học"
+    STUDENT_AFFAIRS = "Công tác Sinh viên"
+    SCIENTIFIC_RESEARCH = "Nghiên cứu Khoa học"
+
+
+class DashboardPinnedPost(SQLModel, table=True):
+    """Persisted pinned post metadata for admin content curation."""
+
+    __tablename__ = "dashboard_pinned_posts"
+    __table_args__ = (
+        UniqueConstraint("ref_id", name="uq_dashboard_pinned_posts_ref_id"),
+        UniqueConstraint("display_order", name="uq_dashboard_pinned_posts_display_order"),
+        CheckConstraint("length(title) >= 1", name="ck_dashboard_pinned_posts_title_not_blank"),
+        CheckConstraint("length(summary) >= 1", name="ck_dashboard_pinned_posts_summary_not_blank"),
+        Index("idx_dashboard_pinned_posts_category", "category"),
+        Index("idx_dashboard_pinned_posts_pinned_date", "pinned_date"),
+        Index("idx_dashboard_pinned_posts_updated_at", "updated_at"),
+        {"schema": DASHBOARD_SCHEMA},
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    display_order: int = Field(nullable=False, ge=1)
+    title: str = Field(nullable=False, max_length=255)
+    ref_id: str = Field(nullable=False, max_length=50)
+    category: str = Field(nullable=False, max_length=100)
+    pinned_date: date = Field(nullable=False)
+    summary: str = Field(nullable=False, max_length=5000)
+    source_url: str = Field(nullable=False, max_length=2048)
+    document_type: str = Field(nullable=False, max_length=150)
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    created_by: str = Field(nullable=False, max_length=64)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+__all__ = [
+    "AnswerRating",
+    "DashboardPinnedPost",
+    "DASHBOARD_SCHEMA",
+    "PinnedPostCategory",
+    "RatingValue",
+    "SQLModel",
+]

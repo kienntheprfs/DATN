@@ -11,6 +11,7 @@ from src.core.config import settings
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.models.models import Base
 import src.models.models
+from src.core.config import settings
 
 # this is the Alembic Config object
 config = context.config

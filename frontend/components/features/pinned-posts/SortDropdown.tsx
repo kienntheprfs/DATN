@@ -15,6 +15,7 @@ interface SortDropdownProps {
 }
 
 const SORT_OPTIONS = [
+  { label: "Độ ưu tiên", value: "priority" },
   { label: "Mới nhất", value: "newest" },
   { label: "Cũ nhất", value: "oldest" },
   { label: "Tiêu đề (A-Z)", value: "title-asc" },
@@ -23,7 +24,7 @@ const SORT_OPTIONS = [
 
 export function SortDropdown({ value, onChange }: SortDropdownProps) {
   const currentLabel =
-    SORT_OPTIONS.find((opt) => opt.value === value)?.label || "Mới nhất";
+    SORT_OPTIONS.find((opt) => opt.value === value)?.label || "Độ ưu tiên";
 
   return (
     <DropdownMenu>

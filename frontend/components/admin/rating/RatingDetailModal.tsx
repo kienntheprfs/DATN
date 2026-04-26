@@ -49,20 +49,24 @@ export function RatingDetailModal({ row, onClose }: RatingDetailModalProps) {
             <h3 className="text-primary font-heading font-semibold text-base">Thông tin phiên hội thoại</h3>
             <div className="space-y-1.5 text-sm">
               <div className="flex items-baseline">
-                <span className="w-35 text-text-secondary font-medium shrink-0">Session ID:</span>
-                <span className="font-mono text-[#D13866] truncate">{row.sessionUuid}</span>
+                <span className="w-35 text-text-secondary font-medium shrink-0">Tên hội thoại:</span>
+                <span className="text-[#D13866] truncate">{row.threadName}</span>
               </div>
               <div className="flex items-baseline">
+                <span className="w-35 text-text-secondary font-medium shrink-0">Người dùng:</span>
+                <span className="text-text-main truncate">{row.userName}</span>
+              </div>
+              {/* <div className="flex items-baseline">
                 <span className="w-35 text-text-secondary font-medium shrink-0">Cặp hội thoại:</span>
                 <span className="text-text-main">{row.pair}</span>
-              </div>
+              </div> */}
               <div className="flex items-baseline">
                 <span className="w-35 text-text-secondary font-medium shrink-0">Ngày tạo:</span>
-                <span className="text-text-main">14:48:09 3/10/2025</span>
+                <span className="text-text-main">{new Date(row.createdAt).toLocaleString("vi-VN")}</span>
               </div>
               <div className="flex items-baseline">
                 <span className="w-35 text-text-secondary font-medium shrink-0">Cập nhật lần cuối:</span>
-                <span className="text-text-main">14:56:14 3/10/2025</span>
+                <span className="text-text-main">{new Date(row.updatedAt).toLocaleString("vi-VN")}</span>
               </div>
             </div>
           </div>
@@ -133,7 +137,15 @@ export function RatingDetailModal({ row, onClose }: RatingDetailModalProps) {
         <div className="px-6 py-4 border-t border-border-color bg-slate-50/50 flex justify-end gap-3 shrink-0">
           <button
             type="button"
-            className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md shadow-sm transition-colors text-sm font-medium"
+            onClick={() => {
+              if (!row.threadId) {
+                return;
+              }
+              const encodedThreadId = encodeURIComponent(row.threadId);
+              window.open(`/admin/rating/conversation?thread_id=${encodedThreadId}&run_id=${encodeURIComponent(row.runId)}`, "_blank", "noopener,noreferrer");
+            }}
+            disabled={!row.threadId}
+            className="flex items-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-slate-400 disabled:hover:bg-slate-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md shadow-sm transition-colors text-sm font-medium"
           >
             <span className="material-symbols-outlined text-[18px]">forum</span>
             <span>Xem cuộc hội thoại gốc</span>

@@ -9,6 +9,7 @@ class FormalDocumentResponse(BaseModel):
     file_path: str
     lightrag_track_id: str
     lightrag_doc_id: Optional[str] = None
+    meta_data: Optional[Dict[str, Any]] = None
     # LightRAG is the source of truth for processing status; we surface it in response only.
     lightrag_status_summary: Optional[Dict[str, int]] = None
     lightrag_documents: Optional[List[Dict[str, Any]]] = None
@@ -21,4 +22,5 @@ class FormalDocumentResponse(BaseModel):
 
 class FormalDocumentUpdate(BaseModel):
     file_path: Optional[str] = None
+    meta_data: Optional[Dict[str, Any]] = None
 
