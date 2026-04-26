@@ -1,10 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { SearchFilterPanel } from "@/components/admin/knowledge/SearchFilterPanel";
-import { DocumentTable, Document } from "@/components/admin/knowledge/DocumentTable";
+import { DocumentTable, type Document } from "@/components/admin/knowledge/DocumentTable";
 import { Pagination } from "@/components/admin/knowledge/pagination";
 import { UploadModal } from "@/components/admin/knowledge/UploadModal";
+import { FAQTable, type FAQTableProps } from "@/components/admin/knowledge/FAQTable";
+import type { FAQ, CreateFAQPayload, UpdateFAQPayload } from "@/services/faq-api";
+import { FAQModal } from "@/components/admin/knowledge/FAQModal";
+import { faqApi } from "@/services/faq-api";
+import { toast } from "sonner";
 
 const MOCK_DOCUMENTS: Document[] = [
   {
@@ -69,9 +74,75 @@ export default function KnowledgePage() {
     type: "all",
   });
 
-  const totalItems = 1204; // Set to a large number as in the original HTML mock
+  // FAQ state
+  const [activeTab, setActiveTab] = useState<"documents" | "faqs">("faqs");
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [isLoadingFaqs, setIsLoadingFaqs] = useState(false);
+  const [editingFaq, setEditingFaq] = useState<FAQ | null>(null);
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [faqPage, setFaqPage] = useState(1);
+  const [totalFaqs, setTotalFaqs] = useState(0);
+
+  const totalItems = 1204;
   const itemsPerPage = 10;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+  const fetchFaqs = async () => {
+    setIsLoadingFaqs(true);
+    try {
+      const skip = (faqPage - 1) * itemsPerPage;
+      const response = await faqApi.list(skip, itemsPerPage);
+      setFaqs(response.items);
+      setTotalFaqs(response.total);
+    } catch (error) {
+      console.error("Failed to fetch FAQs:", error);
+      toast.error("Không thể tải danh sách câu hỏi thường gặp");
+    } finally {
+      setIsLoadingFaqs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "faqs") {
+      fetchFaqs();
+    }
+  }, [faqPage, activeTab]);
+
+  const handleCreateFaq = async (payload: CreateFAQPayload) => {
+    try {
+      await faqApi.create(payload);
+      toast.success("Đã tạo câu hỏi thường gặp mới");
+      setIsFaqModalOpen(false);
+      fetchFaqs();
+    } catch (error) {
+      console.error("Failed to create FAQ:", error);
+      toast.error("Không thể tạo câu hỏi thường gặp");
+    }
+  };
+
+  const handleUpdateFaq = async (id: number, payload: UpdateFAQPayload) => {
+    try {
+      await faqApi.update(id, payload);
+      toast.success("Đã cập nhật câu hỏi thường gặp");
+      setEditingFaq(null);
+      setIsFaqModalOpen(false);
+      fetchFaqs();
+    } catch (error) {
+      console.error("Failed to update FAQ:", error);
+      toast.error("Không thể cập nhật câu hỏi thường gặp");
+    }
+  };
+
+  const handleDeleteFaq = async (id: number) => {
+    try {
+      await faqApi.delete(id);
+      toast.success("Đã xóa câu hỏi thường gặp");
+      fetchFaqs();
+    } catch (error) {
+      console.error("Failed to delete FAQ:", error);
+      toast.error("Không thể xóa câu hỏi thường gặp");
+    }
+  };
 
   return (
     <div className="max-w-400 mx-auto w-full flex flex-col md:h-full">
@@ -81,43 +152,91 @@ export default function KnowledgePage() {
             <h1 className="text-2xl font-heading font-bold text-text-main tracking-tight">Thư viện &amp; Lịch sử</h1>
             <p className="text-sm text-text-secondary mt-1">Quản lý các phiên làm việc cũ và tra cứu kho văn bản gốc.</p>
           </div>
-          <button 
-            onClick={() => setIsUploadModalOpen(true)}
-            className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-800 text-white px-4 py-2 rounded-md shadow-sm transition-colors text-sm font-medium w-full sm:w-auto"
-          >
-            <span className="material-symbols-outlined text-[18px]">upload_file</span>
-            <span>Tải lên văn bản mới</span>
-          </button>
+          {activeTab === "documents" && (
+            <button 
+              onClick={() => setIsUploadModalOpen(true)}
+              className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-800 text-white px-4 py-2 rounded-md shadow-sm transition-colors text-sm font-medium w-full sm:w-auto"
+            >
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+              <span>Tải lên văn bản mới</span>
+            </button>
+          )}
+          {activeTab === "faqs" && (
+            <button 
+              onClick={() => {
+                setEditingFaq(null);
+                setIsFaqModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-800 text-white px-4 py-2 rounded-md shadow-sm transition-colors text-sm font-medium w-full sm:w-auto"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>Thêm câu hỏi mới</span>
+            </button>
+          )}
         </div>
         
-        {/* <div className="border-b border-border-color w-full overflow-x-auto">
+        <div className="border-b border-border-color w-full overflow-x-auto">
           <div className="flex gap-8 min-w-max">
-            <button className="group relative pb-3 px-1">
-              <span className="text-sm font-bold text-text-secondary group-hover:text-text-main transition-colors">Lịch sử Chat</span>
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-transparent group-hover:bg-slate-300 transition-colors translate-y-px"></span>
+            <button 
+              onClick={() => setActiveTab("faqs")}
+              className="group relative pb-3 px-1"
+            >
+              <span className={`text-sm font-bold transition-colors ${activeTab === "faqs" ? "text-primary" : "text-text-secondary group-hover:text-text-main"}`}>
+                Câu hỏi thường gặp (FAQ)
+              </span>
+              <span className={`absolute bottom-0 left-0 w-full h-0.5 transition-colors translate-y-px ${activeTab === "faqs" ? "bg-primary" : "bg-transparent group-hover:bg-slate-300"}`}></span>
             </button>
-            <button className="relative pb-3 px-1">
-              <span className="text-sm font-bold text-primary">Kho Văn bản</span>
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary transition-colors translate-y-px"></span>
+            <button 
+              onClick={() => setActiveTab("documents")}
+              className="group relative pb-3 px-1"
+            >
+              <span className={`text-sm font-bold transition-colors ${activeTab === "documents" ? "text-primary" : "text-text-secondary group-hover:text-text-main"}`}>
+                Kho Văn bản
+              </span>
+              <span className={`absolute bottom-0 left-0 w-full h-0.5 transition-colors translate-y-px ${activeTab === "documents" ? "bg-primary" : "bg-transparent group-hover:bg-slate-300"}`}></span>
             </button>
           </div>
-        </div> */}
+        </div>
       </div>
 
-      <SearchFilterPanel filters={filters} setFilters={setFilters} />
-
-      <div className="bg-surface rounded-md border border-border-color shadow-sm flex flex-col overflow-visible md:flex-1 md:overflow-hidden">
-        <DocumentTable documents={MOCK_DOCUMENTS} isLoading={false} />
-        <Pagination 
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          itemsPerPage={itemsPerPage}
-          onPageChange={setCurrentPage}
+      {activeTab === "faqs" ? (
+        <FAQTable 
+          faqs={faqs} 
+          isLoading={isLoadingFaqs}
+          onEdit={(faq) => {
+            setEditingFaq(faq);
+            setIsFaqModalOpen(true);
+          }}
+          onDelete={handleDeleteFaq}
         />
-      </div>
+      ) : (
+        <>
+          <SearchFilterPanel filters={filters} setFilters={setFilters} />
+
+          <div className="bg-surface rounded-md border border-border-color shadow-sm flex flex-col overflow-visible md:flex-1 md:overflow-hidden">
+            <DocumentTable documents={MOCK_DOCUMENTS} isLoading={false} />
+            <Pagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        </>
+      )}
 
       <UploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} />
+      
+      <FAQModal 
+        isOpen={isFaqModalOpen}
+        onClose={() => {
+          setIsFaqModalOpen(false);
+          setEditingFaq(null);
+        }}
+        onSubmit={editingFaq ? (payload) => handleUpdateFaq(editingFaq.id, payload) : handleCreateFaq}
+        faq={editingFaq}
+      />
     </div>
   );
 }
