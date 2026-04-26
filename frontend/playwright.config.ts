@@ -26,12 +26,19 @@ export default defineConfig({
       coverage: {
         lcov: true,
         html: true,
+        textSummary: true,
         sourceFilter: (sourcePath: string) => {
-          // Chỉ lấy báo cáo cho phần source code thực tế (app, components, hooks, lib...)
-          return sourcePath.includes('frontend/app/') ||
-            sourcePath.includes('frontend/components/') ||
-            sourcePath.includes('frontend/hooks/') ||
-            sourcePath.includes('frontend/lib/');
+          // Lọc bỏ node_modules và các file không liên quan
+          if (sourcePath.includes('node_modules') || sourcePath.includes('.next/')) {
+            return false;
+          }
+          // Next.js webpack source map có dạng webpack://_N_E/app/... hoặc webpack://_N_E/components/...
+          return sourcePath.includes('/app/') ||
+            sourcePath.includes('/components/') ||
+            sourcePath.includes('/hooks/') ||
+            sourcePath.includes('/lib/') ||
+            sourcePath.includes('/stores/') ||
+            sourcePath.includes('/services/');
         }
       }
     }]

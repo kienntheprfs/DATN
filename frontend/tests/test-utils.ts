@@ -90,7 +90,7 @@ export const helpers = {
   // Wait for page load with fallback
   async waitForPageLoad(page: Page, timeout: number = 10000): Promise<void> {
     try {
-      await page.waitForLoadState('networkidle', { timeout });
+      await page.waitForLoadState('domcontentloaded', { timeout });
     } catch (error) {
       // Fallback to just wait for body
       await page.waitForSelector('body', { timeout: 5000 });
