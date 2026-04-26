@@ -10,6 +10,7 @@ setup_logging()
 
 app = FastAPI(title="Knowledge Base Service")
 
+
 # Create schema + tables (dev); production should prefer Alembic.
 @app.on_event("startup")
 async def init_tables():
@@ -19,11 +20,14 @@ async def init_tables():
         )
         await conn.run_sync(Base.metadata.create_all)
 
+
 app.include_router(documents.router)
 app.include_router(document_storage.router)
 app.include_router(faqs.router)
+app.include_router(faqs.manual_router)
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

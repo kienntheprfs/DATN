@@ -37,7 +37,7 @@ from src.core.vector_db_setup import QdrantManager
 from src.core.transaction import QdrantTransaction
 from src.models.models import FAQSource
 from src.repositories.faq_repository import FAQRepository
-from src.schemas.faq import ManualFAQCreate, ManualFAQUpdate
+from src.schemas.faq import ManualFAQCreate, ManualFAQUpdate, FAQCreate, FAQUpdate
 from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 
@@ -197,6 +197,26 @@ class FAQService:
             logger.info(f"Created manual FAQ id={faq.id} with {len(texts)} questions")
 
         return await self.repo.get_by_id(faq.id, source=FAQSource.MANUAL)
+
+    async def create(self, payload: FAQCreate):
+        """
+        Create a new FAQ using unified schema (delegates to manual creation).
+
+        Args:
+            payload: FAQ creation data
+
+        Returns:
+            Created FAQ object
+
+        Raises:
+            HTTPException: On validation failure or operation failure
+        """
+        manual_payload = ManualFAQCreate(
+            answer=payload.answer,
+            questions=payload.questions,
+            meta_data=payload.meta_data,
+        )
+        return await self.create_manual(manual_payload)
 
     async def update_manual(self, faq_id: int, payload: ManualFAQUpdate):
         """
@@ -384,7 +404,159 @@ class FAQService:
             # Commit transaction
             await self.db.commit()
 
-            logger.info(f"Deleted manual FAQ id={faq_id}")
+        logger.info(f"Deleted manual FAQ id={faq_id}")
+
+    async def list_all(self, skip: int = 0, limit: int = 50) -> List:
+        """
+        List all FAQs (manual + document) with pagination.
+
+        Args:
+            skip: Number of records to skip
+            limit: Maximum records to return
+
+        Returns:
+            List of FAQ objects
+        """
+        return list(await self.repo.list_all(skip=skip, limit=limit))
+
+    async def get(self, faq_id: int):
+        """
+        Get a single FAQ by ID (any source).
+
+        Args:
+            faq_id: ID of the FAQ to retrieve
+
+        Returns:
+            FAQ object
+
+        Raises:
+            HTTPException: If FAQ not found
+        """
+        faq = await self.repo.get(faq_id)
+        if not faq:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"FAQ with id={faq_id} not found",
+            )
+        return faq
+
+    async def update(self, faq_id: int, payload: FAQUpdate):
+        """
+        Update an existing FAQ (any source).
+
+        For both manual and document FAQs: only answer and metadata can be updated.
+        Questions are managed by the system (manual via this API, document via ingestion).
+
+        Args:
+            faq_id: ID of FAQ to update
+            payload: Update data
+
+        Returns:
+            Updated FAQ object
+
+        Raises:
+            HTTPException: If FAQ not found or validation fails
+        """
+        faq = await self.repo.get(faq_id)
+        if not faq:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"FAQ with id={faq_id} not found",
+            )
+
+        if payload.answer is None and payload.meta_data is None:
+            return faq
+
+        vec = await self._get_vector_service()
+        qdrant_client = QdrantManager.get_client()
+
+        async with QdrantTransaction(
+            qdrant_client, settings.FAQ_COLLECTION_NAME
+        ) as txn:
+            answer = payload.answer if payload.answer is not None else faq.answer
+
+            if payload.answer is not None and faq.questions:
+                old_ids = await self.repo.list_embedding_ids_for_faq(faq_id)
+                if old_ids:
+                    await vec.delete_points_by_ids(old_ids, transaction=txn)
+
+                    ingestion = IngestionService()
+                    texts = [v.question for v in faq.questions]
+                    embeddings = await ingestion.embed_hybrid_batch(texts)
+                    point_ids = [str(uuid.uuid4()) for _ in texts]
+
+                    points = []
+                    variants = []
+                    for i, qtext in enumerate(texts):
+                        pid = point_ids[i]
+                        variants.append({"question": qtext, "embedding_id": pid})
+                        points.append(
+                            {
+                                "id": pid,
+                                "dense": embeddings[i]["dense"],
+                                "sparse": embeddings[i]["sparse"],
+                                "payload": {
+                                    "content": qtext,
+                                    "answer_preview": payload.answer[:300],
+                                    "type": "faq",
+                                    "faq_source": faq.source.value,
+                                    "faq_id": faq.id,
+                                },
+                            }
+                        )
+
+                    await vec.upsert_with_explicit_ids(points, transaction=txn)
+                    await self.repo.replace_manual_variants(faq_id, variants)
+
+            await self.repo.update(
+                faq_id,
+                answer=payload.answer,
+                meta_data=payload.meta_data,
+            )
+            await self.db.commit()
+
+            logger.info(f"Updated FAQ id={faq_id}")
+
+        return await self.repo.get(faq_id)
+
+    async def delete(self, faq_id: int) -> None:
+        """
+        Delete a FAQ and its associated vectors (any source).
+
+        This operation:
+        1. Deletes vectors from Qdrant
+        2. Deletes FAQ record from PostgreSQL (cascade deletes variants)
+        3. Commits transaction
+
+        On any failure, both are rolled back.
+
+        Args:
+            faq_id: ID of FAQ to delete
+
+        Raises:
+            HTTPException: If FAQ not found
+        """
+        faq = await self.repo.get(faq_id)
+        if not faq:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"FAQ with id={faq_id} not found",
+            )
+
+        vec = await self._get_vector_service()
+        qdrant_client = QdrantManager.get_client()
+
+        async with QdrantTransaction(
+            qdrant_client, settings.FAQ_COLLECTION_NAME
+        ) as txn:
+            ids = await self.repo.list_embedding_ids_for_faq(faq_id)
+            if ids:
+                await vec.delete_points_by_ids(ids, transaction=txn, backup=False)
+
+            await self.repo.delete(faq_id)
+            await self.db.commit()
+
+            logger.info(f"Deleted FAQ id={faq_id} (source={faq.source})")
 
     async def get_stats(self) -> dict:
         """

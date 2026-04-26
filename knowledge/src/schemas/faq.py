@@ -46,3 +46,22 @@ class ManualFAQUpdate(BaseModel):
         description="If set, replaces all question variants and re-embeds.",
     )
     meta_data: Optional[dict] = None
+
+
+class FAQCreate(BaseModel):
+    """Unified FAQ creation - supports manual FAQs only (document FAQs are auto-generated)."""
+
+    answer: str = Field(..., min_length=1)
+    questions: List[str] = Field(
+        ...,
+        min_length=1,
+        description="At least one surface form; additional entries are variants for embedding.",
+    )
+    meta_data: Optional[dict] = None
+
+
+class FAQUpdate(BaseModel):
+    """Unified FAQ update - answer and metadata only (document FAQs follow source documents)."""
+
+    answer: Optional[str] = Field(None, min_length=1)
+    meta_data: Optional[dict] = None

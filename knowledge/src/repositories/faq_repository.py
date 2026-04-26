@@ -167,8 +167,61 @@ class FAQRepository:
         return result.rowcount > 0
 
     async def list_embedding_ids_for_faq(self, faq_id: int) -> List[str]:
-        stmt = select(FAQQuestionVariant.embedding_id).where(
-            FAQQuestionVariant.faq_id == faq_id
+            stmt = select(FAQQuestionVariant.embedding_id).where(
+                FAQQuestionVariant.faq_id == faq_id
+            )
+            result = await self.db.execute(stmt)
+            return [row[0] for row in result.all()]
+
+    # --- Unified CRUD (all sources) ---
+
+    async def list_all(self, skip: int = 0, limit: int = 50) -> Sequence[FAQ]:
+        """List all FAQs (manual + document) with pagination."""
+        stmt = (
+            select(FAQ)
+            .options(selectinload(FAQ.questions))
+            .order_by(desc(FAQ.updated_at))
+            .offset(skip)
+            .limit(limit)
         )
         result = await self.db.execute(stmt)
-        return [row[0] for row in result.all()]
+        return result.scalars().all()
+
+    async def get(self, faq_id: int) -> Optional[FAQ]:
+        """Get FAQ by ID (any source)."""
+        stmt = select(FAQ).options(selectinload(FAQ.questions)).where(FAQ.id == faq_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def update(
+        self,
+        faq_id: int,
+        *,
+        answer: Optional[str] = None,
+        meta_data: Optional[dict] = None,
+    ) -> Optional[FAQ]:
+        """Update FAQ (any source)."""
+        values = {}
+        if answer is not None:
+            values["answer"] = answer
+        if meta_data is not None:
+            values["meta_data"] = meta_data
+        if not values:
+            return await self.get(faq_id)
+        stmt = (
+            update(FAQ)
+            .where(FAQ.id == faq_id)
+            .values(**values)
+            .returning(FAQ.id)
+        )
+        res = await self.db.execute(stmt)
+        await self.db.flush()
+        if res.scalar_one_or_none() is None:
+            return None
+        return await self.get(faq_id)
+
+    async def delete(self, faq_id: int) -> bool:
+        """Delete FAQ by ID (any source). Also deletes associated question variants."""
+        stmt = delete(FAQ).where(FAQ.id == faq_id)
+        result = await self.db.execute(stmt)
+        return result.rowcount > 0
