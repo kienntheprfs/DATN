@@ -1,0 +1,62 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Người dùng" as User
+participant "Giao diện (UI)" as UI
+participant "Backend Server" as Backend
+participant "Google OAuth Server" as Google
+database "Cơ sở dữ liệu" as DB
+
+User -> UI : Chọn phương thức Đăng nhập/Đăng ký
+activate UI
+
+alt Đăng ký tài khoản
+    User -> UI : Nhập Email, Password, Họ tên
+    UI -> Backend : Gửi thông tin đăng ký
+    activate Backend
+    Backend -> DB : Lưu thông tin (Mã hóa mật khẩu)
+    activate DB
+    DB --> Backend : Thành công
+    deactivate DB
+    Backend --> UI : Thông báo Đăng ký thành công
+    deactivate Backend
+
+else Đăng nhập hệ thống nội bộ
+    User -> UI : Nhập Tên đăng nhập & Mật khẩu
+    UI -> Backend : Gửi Credentials
+    activate Backend
+    Backend -> DB : Xác thực thông tin
+    activate DB
+    DB --> Backend : Hợp lệ
+    deactivate DB
+    Backend -> Backend : Khởi tạo JWT
+    Backend --> UI : Trả về Access Token
+    deactivate Backend
+
+else Đăng nhập bằng Google
+    User -> UI : Nhấn "Login with Google"
+    UI -> Google : Chuyển hướng xác thực
+    activate Google
+    User -> Google : Cấp quyền truy cập
+    Google --> UI : Trả về Authorization Code
+    deactivate Google
+    UI -> Backend : Gửi Authorization Code
+    activate Backend
+    Backend -> Google : Đổi Code lấy Access Token & Profile info
+    activate Google
+    Google --> Backend : Trả về thông tin Email/Tên
+    deactivate Google
+    Backend -> DB : Kiểm tra/Tạo tài khoản Google này
+    activate DB
+    DB --> Backend : Hợp lệ
+    deactivate DB
+    Backend -> Backend : Khởi tạo JWT
+    Backend --> UI : Trả về Token hệ thống
+    deactivate Backend
+end
+
+UI --> User : Chuyển hướng vào màn hình chính
+deactivate UI
+@enduml

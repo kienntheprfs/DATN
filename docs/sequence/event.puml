@@ -1,0 +1,38 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Người dùng" as User
+participant "Giao diện (UI)" as UI
+participant "Backend Server" as Backend
+participant "AI Agent (LLM)" as Agent
+database "Database Sự kiện" as EventDB
+
+User -> UI : Nhập "Có sự kiện gì tuần sau không?"
+activate UI
+
+UI -> Backend : Gửi câu hỏi văn bản
+activate Backend
+
+Backend -> Agent : Gửi ngữ cảnh hội thoại
+activate Agent
+
+Agent -> Agent : Suy luận (Reasoning) \nQuyết định gọi Tool (Search_Events)
+    
+Agent -> EventDB : Thực thi truy vấn sự kiện (Tham số: tuần sau)
+activate EventDB
+EventDB --> Agent : Trả về dữ liệu thô (Tên, Địa điểm, Thời gian)
+deactivate EventDB
+
+Agent -> Agent : Tổng hợp dữ liệu thành câu trả lời tự nhiên \nThêm câu hỏi: "Bạn có muốn tôi chỉ đường tới đó không?"
+    
+Agent --> Backend : Trả về chuỗi văn bản hoàn chỉnh
+deactivate Agent
+
+Backend --> UI : Trả về nội dung phản hồi
+deactivate Backend
+
+UI --> User : Hiển thị câu trả lời dạng văn bản chat
+deactivate UI
+@enduml

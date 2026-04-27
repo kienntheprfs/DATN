@@ -1,0 +1,57 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor LightCyan
+  BorderColor DarkCyan
+  ArrowColor DimGray
+}
+skinparam actor {
+  BackgroundColor Azure
+  BorderColor DarkCyan
+}
+
+actor "Quản trị viên\n(Admin)" as Admin
+
+rectangle "Web Portal Quản trị (Admin Portal)" {
+  
+  ' --- Nhóm Xác thực ---
+  usecase "Đăng nhập\ntài khoản Admin" as UC_AdminLogin
+  
+  ' --- Nhóm Quản lý Dữ liệu ---
+  package "Quản lý Dữ liệu" {
+    usecase "Quản lý tri thức\n(Tài liệu, QA)" as UC_ManageKnowledge
+    usecase "Quản lý bản đồ\n(Điểm mốc, tuyến đường)" as UC_ManageMap
+  }
+  
+  ' --- Nhóm Thống kê & Theo dõi ---
+  package "Thống kê & Theo dõi" {
+    usecase "Xem bảng điều khiển\ntổng quan (Dashboard)" as UC_Dashboard
+    usecase "Theo dõi chủ đề\ncâu hỏi phổ biến" as UC_TrackTopics
+    usecase "Theo dõi câu hỏi\nchưa trả lời được" as UC_TrackUnanswered
+    usecase "Quản lý phản hồi,\nđánh giá của người dùng" as UC_TrackFeedback
+    usecase "Theo dõi tình trạng\nbản đồ và tìm đường" as UC_TrackMapStatus
+  }
+}
+
+' --- Quan hệ giữa Admin và các Use Case ---
+
+Admin --> UC_AdminLogin
+
+Admin --> UC_ManageKnowledge
+Admin --> UC_ManageMap
+
+Admin --> UC_Dashboard
+Admin --> UC_TrackTopics
+Admin --> UC_TrackUnanswered
+Admin --> UC_TrackFeedback
+Admin --> UC_TrackMapStatus
+
+' --- (Tùy chọn) Thể hiện luồng chuyển hướng ---
+' Admin có thể từ Dashboard đi đến các màn hình chi tiết
+UC_Dashboard ..> UC_TrackTopics : <<extend>>
+UC_Dashboard ..> UC_TrackUnanswered : <<extend>>
+UC_Dashboard ..> UC_TrackFeedback : <<extend>>
+UC_Dashboard ..> UC_TrackMapStatus : <<extend>>
+
+@enduml

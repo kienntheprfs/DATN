@@ -61,7 +61,7 @@ interface ChatWindowProps {
 	voiceThreadId?: string;
 	voiceState?: string;
 	readOnly?: boolean;
-	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview: string; source_type: string }) => void;
+	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string }) => void;
 }
 
 function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {

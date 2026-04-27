@@ -1,167 +1,333 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Search, FileText, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { useState, useMemo, memo, useEffect } from "react";
+import { X, Search, FileText, ChevronDown, ChevronUp, ExternalLink, Loader2, File, Highlighter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-interface DocumentSection {
-	id: string;
-	title: string;
-	content: string;
-}
-
-interface Document {
-	id: string;
-	title: string;
-	sections: DocumentSection[];
-}
+import { CitationPdfPreview } from "./citation-pdf-preview";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Citation {
 	file_name: string;
 	s3_url: string;
-	text_preview: string;
+	text_preview?: string;
 	source_type: string;
+	doc_id?: string;
+	file_path?: string;
+	is_faq?: boolean;
+	faq_source?: string;
 }
 
-interface RouteData {
-	type: string;
-	start_name: string;
-	end_name: string;
-	map: any;
-	path_coords: number[][];
-	path_node_ids: number[];
-	total_distance_m: number;
-	instructions: any[];
-	is_multi_floor?: boolean;
-	floor_count?: number;
-	route_maps?: any[];
-	floors?: any[];
-}
-
-const mockDocuments: Document[] = [
-	{
-		id: "1",
-		title: "Quy chế đào tạo 2024",
-		sections: [
-			{
-				id: "1-1",
-				title: "Điều 1. Phạm vi điều chỉnh",
-				content:
-					"Quy chế này quy định về đào tạo trình độ đại học, cao đẳng tại Trường Đại học Bách Khoa. Áp dụng cho tất cả các ngành đào tạo trực thuộc trường.",
-			},
-			{
-				id: "1-2",
-				title: "Điều 2. Đối tượng áp dụng",
-				content: "Quy chế này áp dụng cho sinh viên, giảng viên và các đơn vị tham gia vào quá trình đào tạo tại trường.",
-			},
-			{
-				id: "1-3",
-				title: "Điều 3. Nguyên tắc đào tạo",
-				content: "Đào tạo theo tín chỉ, kết hợp lý thuyết với thực hành, đảm bảo chất lượng và phát triển năng lực người học.",
-			},
-		],
-	},
-	{
-		id: "2",
-		title: "Quy định về đánh giá học phần",
-		sections: [
-			{
-				id: "2-1",
-				title: "Điều 10. Thành phần đánh giá",
-				content: "Đánh giá học phần gồm: điểm thường xuyên (30%), điểm giữa kỳ (20%), điểm cuối kỳ (50%).",
-			},
-			{
-				id: "2-2",
-				title: "Điều 11. Thang điểm",
-				content: "Sử dụng thang điểm 10. Điểm học phần là điểm trung bình có trọng số của các thành phần đánh giá.",
-			},
-		],
-	},
-	{
-		id: "3",
-		title: "Quy chế về tốt nghiệp",
-		sections: [
-			{
-				id: "3-1",
-				title: "Điều 25. Điều kiện tốt nghiệp",
-				content:
-					"Sinh viên được xét tốt nghiệp khi: tích lũy đủ số tín chỉ theo yêu cầu chương trình, điểm trung bình tích lũy từ 5.0 trở lên, không nợ học phí.",
-			},
-			{
-				id: "3-2",
-				title: "Điều 26. Thời gian tốt nghiệp",
-				content: "Thời gian đào tạo chuẩn là 4 năm cho chương trình đại học, có thể kéo dài tối đa 2 năm nếu sinh viên chưa hoàn thành chương trình.",
-			},
-		],
-	},
-];
-
-interface HighlightedTextProps {
-	text: string;
-	highlight: string;
-}
-
-function HighlightedText({ text, highlight }: HighlightedTextProps) {
-	if (!highlight.trim()) {
-		return <>{text}</>;
-	}
-
-	const parts = text.split(new RegExp(`(${highlight})`, "gi"));
-
-	return (
-		<>
-			{parts.map((part, index) =>
-				part.toLowerCase() === highlight.toLowerCase() ? (
-					<mark key={index} className="bg-yellow-200 px-0.5 rounded">
-						{part}
-					</mark>
-				) : (
-					<span key={index}>{part}</span>
-				),
-			)}
-		</>
-	);
-}
+type PreviewData = {
+	isPdf: boolean;
+	content: string;
+	contentType?: string;
+};
 
 interface DocumentPanelProps {
 	onClose: () => void;
 	citations?: Citation[];
-	routeData?: RouteData | null;
+	toolChunks?: { source: string; content: string }[];
+	routeData?: {
+		type: string;
+		[key: string]: unknown;
+	} | null;
 }
 
-export function DocumentPanel({ onClose, citations, routeData }: DocumentPanelProps) {
-	const [searchQuery, setSearchQuery] = useState("");
-	const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
-	const [expandedSection, setExpandedSection] = useState<string | null>(null);
-	const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-	const [previewSearch, setPreviewSearch] = useState("");
+function inferExtension(name?: string | null): string {
+	if (!name) return "";
+	const parts = name.toLowerCase().split(".");
+	return parts.length > 1 ? parts[parts.length - 1] : "";
+}
 
-	useEffect(() => {
-		if (citations && citations.length > 0 && !selectedCitation) {
-			setSelectedCitation(citations[0]);
+const HighlightTextWithChunk = memo(({ text, chunks }: { text: string; chunks?: string[] }) => {
+	const parts = useMemo(() => {
+		if (!text || !chunks || chunks.length === 0) return [text];
+
+		// Escape regex special characters
+		const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+		// Sort chunks by length (longest first) to avoid partial matches
+		const sortedChunks = [...chunks].sort((a, b) => b.length - a.length);
+		
+		// Create a pattern that allows non-word characters and whitespace between words of each chunk
+		const pattern = sortedChunks
+			.map(c => {
+				const escaped = escapeRegExp(c);
+				// Split by whitespace and rejoin with a flexible pattern that allows non-word chars (bullets, punctuation)
+				return escaped.split(/\s+/).filter(Boolean).join('[\\s\\W]{0,15}');
+			})
+			.filter(Boolean)
+			.join('|');
+		
+		if (!pattern) return [text];
+
+		try {
+			const regex = new RegExp(`(${pattern})`, 'gi');
+			return text.split(regex);
+		} catch (e) {
+			console.error("Regex error:", e);
+			return [text];
 		}
-	}, [citations, selectedCitation]);
+	}, [text, chunks]);
 
-	const filteredDocs = mockDocuments.map((doc) => {
-		if (!searchQuery.trim()) return doc;
+	const lowerChunks = useMemo(() => (chunks || []).map(c => c.toLowerCase().replace(/[\W_]+/g, '')), [chunks]);
 
-		const matchingSections = doc.sections.filter(
-			(section) => section.title.toLowerCase().includes(searchQuery.toLowerCase()) || section.content.toLowerCase().includes(searchQuery.toLowerCase()),
-		);
+	return (
+		<>
+			{parts.map((part, i) => {
+				const normalizedPart = part.toLowerCase().replace(/[\W_]+/g, '');
+				const isMatch = normalizedPart.length > 3 && lowerChunks.some(chunk => {
+					return normalizedPart.includes(chunk) || chunk.includes(normalizedPart);
+				});
+				
+				return isMatch ? (
+					<span key={i} className="bg-yellow-200/80 px-0.5 rounded font-medium border-b border-yellow-400">
+						{part}
+					</span>
+				) : (
+					part
+				);
+			})}
+		</>
+	);
+});
+const CitationItem = memo(({ 
+	cite, 
+	isExpanded, 
+	isLoading, 
+	hasError, 
+	preview, 
+	isPdf, 
+	isMarkdown,
+	allChunks,
+	onToggle, 
+	onOpenPdf 
+}: { 
+	cite: Citation; 
+	isExpanded: boolean; 
+	isLoading: boolean; 
+	hasError: boolean; 
+	preview?: PreviewData; 
+	isPdf: boolean; 
+	isMarkdown: boolean;
+	allChunks: string[];
+	onToggle: () => void; 
+	onOpenPdf: (chunks: string[]) => void;
+}) => {
+	const relevantChunks = useMemo(() => {
+		const rawContent = preview?.content || cite.text_preview || "";
+		if (!rawContent || allChunks.length === 0) return [];
+		
+		// Normalize both for comparison: lowercase and strip non-alphanumeric
+		const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[\W_]+/g, '');
+		
+		const normalizedDoc = normalizeForCompare(rawContent);
+		return allChunks.filter(chunk => {
+			const normalizedChunk = normalizeForCompare(chunk);
+			return normalizedChunk.length > 5 && normalizedDoc.includes(normalizedChunk);
+		});
+	}, [preview?.content, cite.text_preview, allChunks]);
 
-		return {
-			...doc,
-			sections: matchingSections.length > 0 ? matchingSections : doc.sections,
-		};
-	});
+	return (
+		<div className="border rounded-lg overflow-hidden">
+			<button
+				onClick={onToggle}
+				className="w-full text-left p-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
+			>
+				<div className="flex items-center gap-2 min-w-0 flex-1">
+					{isPdf ? (
+						<File className="size-4 text-red-500 shrink-0" />
+					) : (
+						<FileText className="size-4 text-blue-500 shrink-0" />
+					)}
+					<span className="text-sm font-medium text-blue-800 truncate">{cite.file_name}</span>
+					<span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded shrink-0">{cite.source_type}</span>
+				</div>
+				{isExpanded ? (
+					<ChevronUp className="size-4 text-muted-foreground shrink-0 ml-2" />
+				) : (
+					<ChevronDown className="size-4 text-muted-foreground shrink-0 ml-2" />
+				)}
+			</button>
 
-	const filteredCitations = citations?.filter(
+			{isExpanded && (
+				<div className="p-3 border-t bg-muted/30">
+					{isLoading ? (
+						<div className="flex items-center gap-2 text-sm text-muted-foreground">
+							<Loader2 className="size-4 animate-spin" />
+							Đang tải nội dung...
+						</div>
+					) : hasError ? (
+						<div className="flex items-center justify-between">
+							<p className="text-sm text-muted-foreground">Không thể tải nội dung</p>
+							{cite.s3_url && cite.s3_url !== "#" && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										window.open(cite.s3_url, "_blank");
+									}}
+								>
+									<ExternalLink className="size-4 mr-1" />
+									Xem chi tiết
+								</Button>
+							)}
+						</div>
+					) : preview?.isPdf ? (
+						<div className="flex items-center justify-between p-3 bg-red-50 rounded border border-red-200">
+							<div>
+								<p className="text-sm font-medium text-red-800">Tài liệu PDF</p>
+								<p className="text-xs text-red-600">Nhấp để mở overlay</p>
+							</div>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={(e) => {
+									e.stopPropagation();
+									onOpenPdf(relevantChunks);
+								}}
+							>
+								<ExternalLink className="size-4 mr-1" />
+								Mở PDF
+							</Button>
+						</div>
+					) : isMarkdown ? (
+						<div className="text-sm prose prose-sm dark:prose-invert max-w-none bg-background/50 p-3 rounded-md border">
+							<ReactMarkdown remarkPlugins={[remarkGfm]}>
+								{preview?.content || cite.text_preview || ""}
+							</ReactMarkdown>
+							<div className="mt-3 pt-3 border-t text-xs text-muted-foreground flex items-center gap-2">
+								<Highlighter className="size-3" />
+								Lưu ý: Highlight có thể không hiển thị đầy đủ trong chế độ Markdown
+							</div>
+						</div>
+					) : preview?.content || cite.text_preview ? (
+						<div>
+							<div className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-15 leading-relaxed">
+								<HighlightTextWithChunk 
+									text={preview?.content || cite.text_preview || ""} 
+									chunks={relevantChunks}
+								/>
+							</div>
+							{cite.s3_url && cite.s3_url !== "#" && (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="mt-2"
+									onClick={(e) => {
+										e.stopPropagation();
+										window.open(cite.s3_url, "_blank");
+									}}
+								>
+									<ExternalLink className="size-4 mr-1" />
+									Xem toàn bộ
+								</Button>
+							)}
+						</div>
+					) : isPdf ? (
+						<div className="flex items-center justify-between">
+							<p className="text-sm text-muted-foreground">Tài liệu PDF</p>
+							{cite.s3_url && cite.s3_url !== "#" && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										window.open(cite.s3_url, "_blank");
+									}}
+								>
+									<ExternalLink className="size-4 mr-1" />
+									Xem PDF
+								</Button>
+							)}
+						</div>
+					) : (
+						<div className="flex items-center justify-between">
+							<p className="text-sm text-muted-foreground">Không có nội dung</p>
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+});
+
+export function DocumentPanel({ onClose, citations, toolChunks, routeData }: DocumentPanelProps) {
+	const [searchQuery, setSearchQuery] = useState("");
+	const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
+	const [previews, setPreviews] = useState<Record<string, PreviewData>>({});
+	const [loadingPreviews, setLoadingPreviews] = useState<Set<string>>(new Set());
+	const [errorPreviews, setErrorPreviews] = useState<Set<string>>(new Set());
+	const [pdfModal, setPdfModal] = useState<{ pdfData: string; fileName: string; highlightText: string[] } | null>(null);
+
+	// Get all chunks combined for matching
+	const allChunks = useMemo(() => toolChunks?.map(c => c.content) || [], [toolChunks]);
+
+	const filteredCitations = useMemo(() => citations?.filter(
 		(cite) =>
 			!searchQuery.trim() ||
-			cite.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			cite.text_preview.toLowerCase().includes(searchQuery.toLowerCase())
-	);
+			cite.file_name.toLowerCase().includes(searchQuery.toLowerCase())
+	), [citations, searchQuery]);
+
+	const isMarkdownFile = (cite: Citation): boolean => {
+		return cite.s3_url?.toLowerCase().endsWith(".md") || 
+			inferExtension(cite.file_name) === "md" ||
+			cite.source_type === "markdown";
+	};
+
+	const isPdfFile = (cite: Citation): boolean => {
+		return cite.s3_url?.toLowerCase().endsWith(".pdf") || 
+			inferExtension(cite.file_name) === "pdf";
+	};
+
+	const toggleCitation = async (cite: Citation) => {
+		const key = cite.file_name;
+		const newExpanded = new Set(expandedCitations);
+
+		if (expandedCitations.has(key)) {
+			newExpanded.delete(key);
+		} else {
+			newExpanded.add(key);
+			// Luôn fetch preview để có đầy đủ nội dung
+			if (!previews[key] && !loadingPreviews.has(key) && cite.s3_url && cite.s3_url !== "#") {
+				fetchPreview(cite);
+			}
+		}
+		setExpandedCitations(newExpanded);
+	};
+
+	const fetchPreview = async (cite: Citation) => {
+		const key = cite.file_name;
+		setLoadingPreviews((prev) => new Set(prev).add(key));
+		setErrorPreviews((prev) => {
+			const next = new Set(prev);
+			next.delete(key);
+			return next;
+		});
+
+		try {
+			const response = await fetch("/api/proxy-file", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url: cite.s3_url }),
+			});
+			if (!response.ok) throw new Error("Failed to fetch");
+			const data = await response.json();
+			if (data.error) throw new Error(data.error);
+			setPreviews((prev) => ({ ...prev, [key]: data }));
+		} catch {
+			setErrorPreviews((prev) => new Set(prev).add(key));
+		} finally {
+			setLoadingPreviews((prev) => {
+				const next = new Set(prev);
+				next.delete(key);
+				return next;
+			});
+		}
+	};
 
 	return (
 		<div className="flex flex-col h-full bg-background">
@@ -185,119 +351,53 @@ export function DocumentPanel({ onClose, citations, routeData }: DocumentPanelPr
 			</div>
 
 			<div className="flex-1 overflow-y-auto">
-				{citations && citations.length > 0 && (
-					<div className="p-4 border-b bg-blue-50/50">
-						<div className="text-xs font-semibold text-blue-600 mb-2">Nguồn trong cuộc trò chuyện</div>
-						<div className="space-y-2">
-							{filteredCitations?.map((cite, idx) => (
-								<button
-									key={idx}
-									onClick={() => setSelectedCitation(cite)}
-									className="w-full text-left p-2 rounded bg-white border hover:bg-blue-50 transition-colors"
-								>
-									<div className="flex items-center gap-2">
-										<FileText className="size-4 text-blue-500" />
-										<span className="text-sm font-medium text-blue-700">{cite.file_name}</span>
-									</div>
-									<p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cite.text_preview}</p>
-								</button>
-							))}
-						</div>
+				{citations && citations.length > 0 ? (
+					<div className="p-4 space-y-2">
+						{filteredCitations?.map((cite, idx) => (
+							<CitationItem 
+								key={cite.file_name + idx}
+								cite={cite}
+								isExpanded={expandedCitations.has(cite.file_name)}
+								isLoading={loadingPreviews.has(cite.file_name)}
+								hasError={errorPreviews.has(cite.file_name)}
+								preview={previews[cite.file_name]}
+								isPdf={isPdfFile(cite)}
+								isMarkdown={isMarkdownFile(cite)}
+								allChunks={allChunks}
+								onToggle={() => toggleCitation(cite)}
+								onOpenPdf={(chunks) => setPdfModal({
+									pdfData: previews[cite.file_name].content,
+									fileName: cite.file_name,
+									highlightText: chunks,
+								})}
+							/>
+						))}
+					</div>
+				) : (
+					<div className="p-4 text-center text-muted-foreground text-sm">
+						Chưa có tài liệu tham khảo nào
 					</div>
 				)}
-
-				<div className="p-4 space-y-3">
-					{filteredDocs.map((doc) => (
-						<div key={doc.id} className="border rounded-lg overflow-hidden">
-							<button
-								onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
-								className="w-full flex items-center justify-between p-3 bg-muted/50 hover:bg-muted transition-colors"
-							>
-								<div className="flex items-center gap-2">
-									<FileText className="size-4 text-muted-foreground" />
-									<span className="font-medium text-sm">{doc.title}</span>
-								</div>
-								{expandedDoc === doc.id ? (
-									<ChevronUp className="size-4" />
-								) : (
-									<ChevronDown className="size-4" />
-								)}
-							</button>
-
-							{expandedDoc === doc.id && (
-								<div className="border-t">
-									{doc.sections.map((section) => (
-										<div key={section.id} className="border-b last:border-b-0">
-											<button
-												onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
-												className="w-full p-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between"
-											>
-												<span className="text-sm font-medium">{section.title}</span>
-												{expandedSection === section.id ? (
-													<ChevronUp className="size-3 text-muted-foreground" />
-												) : (
-													<ChevronDown className="size-3 text-muted-foreground" />
-												)}
-											</button>
-
-											{expandedSection === section.id && (
-												<div className="px-3 pb-3">
-													<p className="text-sm text-muted-foreground leading-relaxed">
-														<HighlightedText text={section.content} highlight={searchQuery} />
-													</p>
-												</div>
-											)}
-										</div>
-									))}
-								</div>
-							)}
-						</div>
-					))}
-
-					{searchQuery && filteredDocs.every((doc) => doc.sections.every((section) => !section.title.toLowerCase().includes(searchQuery.toLowerCase()) && !section.content.toLowerCase().includes(searchQuery.toLowerCase()))) && (
-						<p className="text-center text-muted-foreground text-sm py-8">Không tìm thấy kết quả nào</p>
-					)}
-				</div>
 			</div>
 
-			{selectedCitation && (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-					<div className="bg-background rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
-						<div className="flex items-center justify-between p-4 border-b shrink-0">
+			{pdfModal && (
+				<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 md:p-8">
+					<div className="bg-background rounded-xl shadow-2xl w-full max-w-6xl h-full flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+						<div className="flex items-center justify-between p-4 border-b bg-muted/30 shrink-0">
 							<div className="flex items-center gap-2">
-								<FileText className="size-5 text-blue-500" />
-								<h3 className="font-semibold">{selectedCitation.file_name}</h3>
-								<span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">{selectedCitation.source_type}</span>
+								<File className="size-5 text-red-500" />
+								<h3 className="font-semibold text-lg truncate max-w-[300px] md:max-w-md">{pdfModal.fileName}</h3>
 							</div>
-							<div className="flex items-center gap-2">
-								<Button variant="ghost" size="icon" onClick={() => window.open(selectedCitation.s3_url, "_blank")}>
-									<ExternalLink className="size-4" />
-								</Button>
-								<Button variant="ghost" size="icon" onClick={() => setSelectedCitation(null)}>
-									<X className="size-5" />
-								</Button>
-							</div>
+							<Button variant="ghost" size="icon" onClick={() => setPdfModal(null)} className="rounded-full hover:bg-red-100 hover:text-red-600 transition-colors">
+								<X className="size-5" />
+							</Button>
 						</div>
-
-						<div className="p-4 border-b shrink-0">
-							<div className="relative">
-								<Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-								<Input
-									placeholder="Tìm kiếm trong tài liệu..."
-									value={previewSearch}
-									onChange={(e) => setPreviewSearch(e.target.value)}
-									className="pl-9"
-								/>
-							</div>
-						</div>
-
-						<div className="flex-1 overflow-y-auto p-4">
-							<div className="prose prose-sm max-w-none">
-								<HighlightedText text={selectedCitation.text_preview} highlight={previewSearch} />
-							</div>
-							{!selectedCitation.text_preview && (
-								<p className="text-muted-foreground text-sm">Không có nội dung xem trước</p>
-							)}
+						<div className="flex-1 overflow-hidden relative bg-gray-200/50">
+							<CitationPdfPreview 
+								pdfData={pdfModal.pdfData} 
+								fileName={pdfModal.fileName}
+								highlightText={pdfModal.highlightText}
+							/>
 						</div>
 					</div>
 				</div>

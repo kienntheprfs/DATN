@@ -1,0 +1,71 @@
+@startuml
+left to right direction
+skinparam linetype orthor
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor White
+  BorderColor DarkCyan
+  ArrowColor DimGray
+}
+skinparam actor {
+  BackgroundColor White
+  BorderColor DarkCyan
+}
+
+actor "Người dùng khác" as Guest
+actor "Người dùng\nđã đăng nhập" as Member
+
+' Member kế thừa các quyền của Guest
+Member -|> Guest
+
+rectangle "Hệ thống BK-TBOT" {
+  
+  ' --- Nhóm Xác thực tài khoản ---
+  usecase "Đăng nhập" as UC_Login
+  usecase "Đăng ký tài khoản" as UC_Register
+  usecase "Đăng nhập bằng Google" as UC_LoginGG
+
+  ' --- Nhóm Tương tác Chatbot ---
+  usecase "Hỏi - đáp thông tin\n(Chế độ thường)" as UC_ChatNormal
+  usecase "Tương tác bằng giọng nói" as UC_Voice
+  usecase "Tra cứu sự kiện\nqua BK-TBOT" as UC_Event
+  usecase "Yêu cầu chỉ đường\nqua BK-TBOT" as UC_RouteChat
+  usecase "Đánh giá câu trả lời" as UC_Feedback
+  usecase "Gửi lý do/bình luận" as UC_FeedbackDetail
+  
+  ' --- Nhóm Nâng cao (Yêu cầu đăng nhập) ---
+  usecase "Hỏi - đáp chuyên sâu\n(Deepmode)" as UC_Deepmode
+
+  ' --- Nhóm Bản đồ ---
+  usecase "Tìm đường trực tiếp\n(Trang Bản đồ)" as UC_RouteMap
+  
+  ' --- Nhóm Lịch sử hội thoại ---
+  usecase "Xem và tiếp tục\ntrò chuyện" as UC_HistoryView
+  usecase "Sửa tên\nphiên hội thoại" as UC_HistoryEdit
+  usecase "Xóa\nphiên hội thoại" as UC_HistoryDelete
+}
+
+' --- Quan hệ giữa Actor và Use Case ---
+
+' Guest có thể làm những việc cơ bản
+Guest --> UC_Login
+Guest --> UC_LoginGG
+Guest --> UC_Register
+
+Guest --> UC_ChatNormal
+Guest --> UC_Voice
+Guest --> UC_Event
+Guest --> UC_RouteChat
+Guest --> UC_RouteMap
+Guest --> UC_Feedback
+
+' Quan hệ Extend: Gửi bình luận chỉ xảy ra khi chọn "Không thích" trong Đánh giá
+UC_Feedback <.. UC_FeedbackDetail :<<extend>>
+
+' Member có thêm quyền sử dụng tính năng nâng cao và quản lý lịch sử
+Member --> UC_Deepmode
+Member --> UC_HistoryView
+Member --> UC_HistoryEdit
+Member --> UC_HistoryDelete
+
+@enduml

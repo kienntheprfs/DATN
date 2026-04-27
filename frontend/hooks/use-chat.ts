@@ -31,8 +31,12 @@ interface MessageChunk {
 	citations?: Array<{
 		file_name: string;
 		s3_url: string;
-		text_preview: string;
+		text_preview?: string;
 		source_type: string;
+		doc_id?: string;
+		file_path?: string;
+		is_faq?: boolean;
+		faq_source?: string;
 	}>;
 }
 
@@ -268,7 +272,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 								content: null,
 							}));
 							setCurrentTools((prev) => [...prev, ...newTools]);
-							continue;
 						}
 
 						if (content) {
@@ -284,7 +287,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 								return [...prev, { id: assistantMsgId, role: "assistant", content: content, ...(citations ? { citations } : {}) }];
 							});
 						}
-						break;
 					} else if (chunk.type === "citations_ready") {
 						const citations = (chunk as any).data;
 						console.log("[use-chat] citations_ready:", citations);
@@ -297,7 +299,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 								);
 							});
 						}
-						break;
 					} else if (chunk.type === "error") {
 						setError(chunk.content || "Unknown error");
 						setCurrentTools([]);
