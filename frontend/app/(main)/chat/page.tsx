@@ -60,7 +60,13 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 
 	const citations = useMemo(() => {
 		const allCitations: Array<{ file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string; is_faq?: boolean; faq_source?: string }> = [];
-		messages.forEach((msg) => {
+		
+		// Find index of last user message
+		const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === "user");
+		const startIndex = lastUserMsgIndex === -1 ? 0 : messages.length - 1 - lastUserMsgIndex;
+
+		// Only process messages from the last user message onwards
+		messages.slice(startIndex).forEach((msg) => {
 			if (msg.citations && msg.citations.length > 0) {
 				msg.citations.forEach((cite) => {
 					if (!allCitations.some((c) => c.file_name === cite.file_name)) {
@@ -136,8 +142,11 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			}
 		});
 
-		// Process historical tool messages
-		messages.forEach((msg) => {
+		// Process historical tool messages - only from the latest user turn
+		const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === "user");
+		const startIndex = lastUserMsgIndex === -1 ? 0 : messages.length - 1 - lastUserMsgIndex;
+
+		messages.slice(startIndex).forEach((msg) => {
 			if (msg.msgType === "tool" && msg.content) {
 				const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
 				processContent(content, msg.toolName || "tool");
@@ -160,14 +169,14 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	}, [messages]);
 
 	useEffect(() => {
-		if (citations && citations.length > 0) {
+		if (citations && citations.length > 0 && !isDocumentPanelOpen) {
 			setIsDocumentPanelOpen(true);
 		}
 		
-		if (isReadOnly && citations && citations.length > 0) {
+		if (isReadOnly && citations && citations.length > 0 && !isDocumentPanelOpen) {
 			setIsDocumentPanelOpen(true);
 		}
-	}, [citations, isReadOnly]);
+	}, [citations, isReadOnly, isDocumentPanelOpen]);
 
 	const routeData = useMemo(() => {
 		const routeTool = currentTools.find((tool) => {

@@ -291,15 +291,40 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 			newExpanded.delete(key);
 		} else {
 			newExpanded.add(key);
-			// Luôn fetch preview để có đầy đủ nội dung
-			if (!previews[key] && !loadingPreviews.has(key) && cite.s3_url && cite.s3_url !== "#") {
+			// If it's a PDF, we want to open it immediately
+			if (isPdfFile(cite)) {
+				if (previews[key]) {
+					// Already loaded, open now
+					openPdfWithHighlights(cite, previews[key].content);
+				} else {
+					// Not loaded, fetch and then open
+					fetchPreview(cite, true);
+				}
+			} else if (!previews[key] && !loadingPreviews.has(key) && cite.s3_url && cite.s3_url !== "#") {
 				fetchPreview(cite);
 			}
 		}
 		setExpandedCitations(newExpanded);
 	};
 
-	const fetchPreview = async (cite: Citation) => {
+	const openPdfWithHighlights = (cite: Citation, pdfContent: string) => {
+		const rawContent = pdfContent || cite.text_preview || "";
+		const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[\W_]+/g, '');
+		const normalizedDoc = normalizeForCompare(rawContent);
+		
+		const relevantChunks = allChunks.filter(chunk => {
+			const normalizedChunk = normalizeForCompare(chunk);
+			return normalizedChunk.length > 5 && normalizedDoc.includes(normalizedChunk);
+		});
+
+		setPdfModal({
+			pdfData: pdfContent,
+			fileName: cite.file_name,
+			highlightText: relevantChunks,
+		});
+	};
+
+	const fetchPreview = async (cite: Citation, autoOpenPdf = false) => {
 		const key = cite.file_name;
 		setLoadingPreviews((prev) => new Set(prev).add(key));
 		setErrorPreviews((prev) => {
@@ -318,6 +343,10 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 			const data = await response.json();
 			if (data.error) throw new Error(data.error);
 			setPreviews((prev) => ({ ...prev, [key]: data }));
+			
+			if (autoOpenPdf && data.content) {
+				openPdfWithHighlights(cite, data.content);
+			}
 		} catch {
 			setErrorPreviews((prev) => new Set(prev).add(key));
 		} finally {
