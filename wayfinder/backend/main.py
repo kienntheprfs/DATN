@@ -13,6 +13,8 @@ from backend.routers import (
     events,
     missing_locations,
     missing_routes,
+    locations,
+    uploads,
 )
 
 app = FastAPI(title="Indoor Wayfinder API", version="0.1.0")
@@ -59,3 +61,5 @@ app.include_router(
     prefix="/api/missing-routes",
     tags=["missing-routes"],
 )
+app.include_router(locations.router, prefix="/api/locations", tags=["locations"])
+app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])

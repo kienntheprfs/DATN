@@ -1,0 +1,39 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Quản trị viên" as Admin
+participant "Giao diện (Báo cáo)" as UI
+participant "Backend Server" as Backend
+database "Log Database\n(Lịch sử Chat & Đánh giá)" as LogDB
+participant "Module Quản lý Tri thức" as Knowledge
+
+Admin -> UI : Chọn "Câu hỏi hệ thống chưa trả lời được"
+activate UI
+
+UI -> Backend : Yêu cầu danh sách câu hỏi
+activate Backend
+Backend -> LogDB : Truy vấn các log được đánh dấu "Unanswered"
+activate LogDB
+LogDB --> Backend : Trả về danh sách
+deactivate LogDB
+Backend --> UI : Hiển thị danh sách phân loại theo chủ đề
+deactivate Backend
+
+Admin -> UI : Chọn câu hỏi & Phân tích nguyên nhân
+Admin -> UI : Nhấn "Chuyển sang Xử lý (Nạp tri thức)"
+UI -> Knowledge : Điều hướng sang giao diện FAQ/Tài liệu
+activate Knowledge
+
+Admin -> Knowledge : Cập nhật nội dung giải quyết câu hỏi
+Knowledge -> Backend : Cập nhật Database & Vector DB
+activate Backend
+Backend --> Knowledge : Thành công
+deactivate Backend
+
+Knowledge -> UI : Đánh dấu câu hỏi đã được xử lý (Resolved)
+deactivate Knowledge
+UI --> Admin : Cập nhật lại biểu đồ thống kê
+deactivate UI
+@enduml

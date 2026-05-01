@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAgent } from "@/contexts/agent-context";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings } from "lucide-react";
 import {
 	Select,
 	SelectContent,
@@ -55,8 +55,41 @@ function StatusBadge() {
 	);
 }
 
+function AgentSwitcher() {
+	const { agent, setAgent, agents, isOnline } = useAgent();
+	
+	if (!isOnline) return null;
+
+	// Backend keys are hyphenated: 'knowledge-base-agent' and 'map-assistant'
+	const kbAgent = agents.find(a => a.key === 'knowledge-base-agent');
+	const mapAgent = agents.find(a => a.key === 'map-assistant');
+
+	return (
+		<div className="flex items-center bg-muted/50 p-1 rounded-lg border border-border h-8">
+			<Button
+				variant={agent === 'knowledge-base-agent' ? "default" : "ghost"}
+				size="sm"
+				onClick={() => setAgent('knowledge-base-agent')}
+				className="h-6 text-[10px] font-bold px-2 uppercase transition-all"
+				disabled={!kbAgent}
+			>
+				Hỏi đáp
+			</Button>
+			<Button
+				variant={agent === 'map-assistant' ? "default" : "ghost"}
+				size="sm"
+				onClick={() => setAgent('map-assistant')}
+				className="h-6 text-[10px] font-bold px-2 uppercase transition-all"
+				disabled={!mapAgent}
+			>
+				Chỉ đường
+			</Button>
+		</div>
+	);
+}
+
 function SettingsPanel() {
-	const { model, setModel, agent, setAgent, agents, isOnline, models } = useAgent();
+	const { model, setModel, isOnline, models } = useAgent();
 	const [isOpen, setIsOpen] = React.useState(false);
 
 	if (!isOnline) return null;
@@ -67,41 +100,25 @@ function SettingsPanel() {
 				variant="ghost"
 				size="sm"
 				onClick={() => setIsOpen(!isOpen)}
-				className="h-7 text-xs font-mono"
+				className="h-7 w-7 p-0 flex items-center justify-center rounded-full hover:bg-muted"
 			>
-				Settings ▼
+				<Settings />
 			</Button>
 
 			{isOpen && (
 				<>
 					<div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 					<div className="absolute right-0 top-full mt-1 z-50 w-64 bg-popover border rounded-lg shadow-lg p-3">
-						<div className="mb-3">
-							<label className="text-xs font-semibold mb-2 block">LLM Model</label>
+						<div className="mb-0">
+							<label className="text-[10px] font-bold uppercase text-muted-foreground mb-2 block">LLM Model</label>
 							<Select value={model} onValueChange={setModel}>
-								<SelectTrigger className="w-full">
+								<SelectTrigger className="w-full h-8 text-xs">
 									<SelectValue placeholder="Chọn model" />
 								</SelectTrigger>
 								<SelectContent>
 									{models.map((m) => (
-										<SelectItem key={m.id} value={m.id}>
+										<SelectItem key={m.id} value={m.id} className="text-xs">
 											{m.name}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-
-						<div>
-							<label className="text-xs font-semibold mb-2 block">Agent</label>
-							<Select value={agent} onValueChange={setAgent}>
-								<SelectTrigger className="w-full">
-									<SelectValue placeholder="Chọn agent" />
-								</SelectTrigger>
-								<SelectContent>
-									{agents.map((a) => (
-										<SelectItem key={a.key} value={a.key}>
-											{a.key}
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -159,7 +176,8 @@ export function AppHeader() {
 				</BreadcrumbList>
 			</Breadcrumb>
 
-			<div className="ml-auto flex items-center gap-2">
+			<div className="ml-auto flex items-center gap-3">
+				<AgentSwitcher />
 				<StatusBadge />
 				<SettingsPanel />
 			</div>

@@ -1,0 +1,43 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Quản trị viên" as Admin
+participant "Giao diện (Web Portal)" as UI
+participant "Backend Server" as Backend
+participant "Embedding Service" as Embed
+database "Vector Database\n(Qdrant/Milvus...)" as VectorDB
+
+Admin -> UI : Tải lên tài liệu mới / Nhập FAQ
+activate UI
+
+UI -> Backend : Gửi dữ liệu (File / Text)
+activate Backend
+
+Backend -> Backend : Tiền xử lý dữ liệu\n(Đọc file, Chunking/Chia nhỏ văn bản)
+
+Backend -> Embed : Gửi các đoạn văn bản (Chunks)
+activate Embed
+Embed --> Backend : Trả về các Vector (Embeddings)
+deactivate Embed
+
+Backend -> VectorDB : Lưu trữ Vectors & Metadata (Text gốc)
+activate VectorDB
+VectorDB --> Backend : Xác nhận lưu trữ thành công
+deactivate VectorDB
+
+Backend --> UI : Thông báo cập nhật tri thức thành công
+deactivate Backend
+
+Admin -> UI : Thử nghiệm đặt câu hỏi (Test)
+UI -> Backend : Gửi truy vấn test
+activate Backend
+Backend -> VectorDB : Tìm kiếm ngữ cảnh tương đồng (Similarity Search)
+VectorDB --> Backend : Trả về ngữ cảnh
+Backend --> UI : Trả về câu trả lời từ AI
+deactivate Backend
+
+UI --> Admin : Hiển thị kết quả kiểm tra
+deactivate UI
+@enduml

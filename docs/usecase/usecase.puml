@@ -1,131 +1,98 @@
 @startuml
 left to right direction
-skinparam packageStyle rectangle
-skinparam roundcorner 20
-
-' Cấu hình màu sắc chung
+skinparam monochrome true
+skinparam shadowing false
 skinparam usecase {
-  BackgroundColor White
-  BorderColor DarkCyan
-  ArrowColor DimGray
+    BackgroundColor white
+    BorderColor black
 }
-skinparam actor {
-  BackgroundColor White
-  BorderColor DarkCyan
+skinparam rectangle {
+    BorderColor black
+    BackgroundColor transparent
 }
 
-' --- Khai báo Actor ---
-actor "Người dùng khác" as Guest
-actor "Người dùng\nđã đăng nhập" as Member
+' --- 1. ĐỊNH NGHĨA ACTORS ---
+actor "Người dùng khách" as Guest
+actor "Người dùng\nđã đăng nhập" as LoggedIn
 actor "Quản trị viên" as Admin
 
-Member -|> Guest
+' User đăng nhập kế thừa User khách
+LoggedIn -up-|> Guest
 
-' ==========================================
-' KHUNG HỆ THỐNG CHUNG Ở GIỮA
-' ==========================================
+' --- 2. HỆ THỐNG BK-TBOT ---
 rectangle "Hệ thống BK-TBOT" {
-  
-  ' ----------------------------------------
-  ' PHÂN HỆ NGƯỜI DÙNG (Đã nhóm để dàn ngang)
-  ' ----------------------------------------
-  package "Quản lý Tài khoản" {
-    usecase "Đăng nhập" as UC_Login
-    usecase "Đăng ký tài khoản" as UC_Register
-    usecase "Đăng nhập bằng Google" as UC_LoginGG
-  }
+    
+    ' --- NHÓM XÁC THỰC ---
+    together {
+        usecase "Xác thực người dùng" as UC_Auth
+        usecase "Đăng ký tài khoản" as UC_Register
+        usecase "Đăng nhập" as UC_Login
+        usecase "Đăng nhập bằng Google" as UC_LoginGoogle
+        
+        UC_Login -up-|> UC_Auth
+        UC_LoginGoogle -up-|> UC_Auth
+    }
+    
+    ' --- NHÓM TƯƠNG TÁC (NGƯỜI DÙNG) ---
+    together {
+        usecase "Đặt câu hỏi" as UC_Chat
+        usecase "Hỏi đáp thông tin\n(Chế độ thường)" as UC_Normal
+        usecase "Hỏi đáp chuyên sâu\n(deep mode)" as UC_Deep
+        usecase "Tra cứu sự kiện" as UC_Event
+        
+        UC_Normal -up-|> UC_Chat
+        UC_Deep -up-|> UC_Chat
+        UC_Event -up-|> UC_Chat
+        
+        usecase "Yêu cầu chỉ đường" as UC_Map
+        usecase "Tương tác giọng nói" as UC_Voice
+        usecase "Đánh giá câu trả lời" as UC_Rate
+        
+        ' Extend đúng chuẩn: Mũi tên chĩa TỪ chức năng phụ VÀO chức năng chính
+        UC_Voice .up.> UC_Chat : <<extend>>
+        UC_Rate .up.> UC_Chat : <<extend>>
+        UC_Map .up.> UC_Event : <<extend>>
+        
+        usecase "Quản lý lịch sử hội thoại" as UC_History
+    }
 
-  package "Tương tác Chatbot" {
-    usecase "Hỏi - đáp thông tin\n(Chế độ thường)" as UC_ChatNormal
-    usecase "Hỏi - đáp chuyên sâu\n(Deepmode)" as UC_Deepmode
-    usecase "Tương tác bằng giọng nói" as UC_Voice
-    usecase "Đánh giá câu trả lời" as UC_Feedback
-    usecase "Gửi lý do/bình luận" as UC_FeedbackDetail
-  }
-
-  package "Bản đồ & Sự kiện" {
-    usecase "Tra cứu sự kiện\nqua BK-TBOT" as UC_Event
-    usecase "Yêu cầu chỉ đường\nqua BK-TBOT" as UC_RouteChat
-    usecase "Tìm đường trực tiếp\n(Trang Bản đồ)" as UC_RouteMap
-  }
-  
-  package "Quản lý Lịch sử" {
-    usecase "Xem và tiếp tục\ntrò chuyện" as UC_HistoryView
-    usecase "Sửa tên\nphiên hội thoại" as UC_HistoryEdit
-    usecase "Xóa\nphiên hội thoại" as UC_HistoryDelete
-  }
-
-  ' ----------------------------------------
-  ' PHÂN HỆ ADMIN
-  ' ----------------------------------------
-  package "Xác thực hệ thống" {
-    usecase "Đăng nhập\nWeb Portal" as UC_AdminLogin
-  }
-
-  package "Quản lý tri thức Chatbot" {
-    usecase "Quản lý tri thức" as UC_Knowledge
-    usecase "Cập nhật tri thức\ncho Chatbot" as UC_UpdateKnowledge
-  }
-
-  package "Quản lý bản đồ" {
-    usecase "Quản lý bản đồ" as UC_MapManage
-    usecase "Biên tập bản đồ\n(thêm/sửa địa điểm)" as UC_MapEdit
-  }
-
-  package "Bảng điều khiển & phân tích" {
-    usecase "Xem bảng điều khiển\ntổng quan" as UC_Dashboard
-    usecase "Theo dõi chủ đề\ncâu hỏi phổ biến" as UC_Topic
-    usecase "Theo dõi câu hỏi\nchưa trả lời được" as UC_Unanswered
-  }
-
-  package "Quản lý phản hồi người dùng" {
-    usecase "Theo dõi và quản lý\nphản hồi người dùng" as UC_FeedbackManage
-    usecase "Xem chi tiết\nhội thoại" as UC_ViewConversation
-  }
-
-  package "Giám sát dịch vụ bản đồ" {
-    usecase "Theo dõi tình trạng\nbản đồ & tìm đường" as UC_MapMonitor
-  }
+    ' --- NHÓM QUẢN TRỊ VIÊN ---
+    together {
+        usecase "Quản lý tri thức" as UC_ManageKB
+        usecase "Quản lý bản đồ" as UC_ManageMap
+        usecase "Quản lý tài khoản" as UC_ManageUser
+        usecase "Xem bảng điều khiển\ntổng quan" as UC_Dash
+        
+        usecase "Theo dõi chủ đề\ncâu hỏi phổ biến" as UC_TrackTopic
+        usecase "Theo dõi câu hỏi hệ thống\nchưa trả lời được" as UC_TrackUnanswered
+        usecase "Quản lý đánh giá\nngười dùng" as UC_TrackRate
+        usecase "Theo dõi tình trạng\nbản đồ" as UC_TrackMap
+        
+        ' Extend cho Dashboard
+        UC_TrackTopic .up.> UC_Dash : <<extend>>
+        UC_TrackUnanswered .up.> UC_Dash : <<extend>>
+        UC_TrackRate .up.> UC_Dash : <<extend>>
+        UC_TrackMap .up.> UC_Dash : <<extend>>
+    }
 }
 
-' ==========================================
-' QUAN HỆ CỦA NGƯỜI DÙNG (Mũi tên xuôi ->)
-' ==========================================
-Guest --> UC_Login
-Guest --> UC_LoginGG
+' --- 3. KẾT NỐI ACTOR VÀ USE CASE ---
+' Guest
+Guest --> UC_Auth
 Guest --> UC_Register
-
-Guest --> UC_ChatNormal
-Guest --> UC_Voice
+Guest --> UC_Normal
 Guest --> UC_Event
-Guest --> UC_RouteChat
-Guest --> UC_RouteMap
-Guest --> UC_Feedback
+Guest --> UC_Map
 
-UC_Feedback <.. UC_FeedbackDetail :<<extend>>
+' Logged In
+LoggedIn --> UC_Deep
+LoggedIn --> UC_History
 
-Member --> UC_Deepmode
-Member --> UC_HistoryView
-Member --> UC_HistoryEdit
-Member --> UC_HistoryDelete
-
-' ==========================================
-' QUAN HỆ CỦA ADMIN (Mũi tên ngược <--)
-' ==========================================
-UC_AdminLogin <-- Admin
-UC_Knowledge <-- Admin
-UC_MapManage <-- Admin
-UC_Dashboard <-- Admin
-UC_FeedbackManage <-- Admin
-UC_MapMonitor <-- Admin
-
-' Các quan hệ include bên trong hệ thống
-UC_Knowledge ..> UC_UpdateKnowledge : <<include>>
-UC_MapManage ..> UC_MapEdit : <<include>>
-
-UC_Dashboard ..> UC_Topic : <<include>>
-UC_Dashboard ..> UC_Unanswered : <<include>>
-
-UC_FeedbackManage ..> UC_ViewConversation : <<include>>
+' Admin
+Admin --> UC_Login
+Admin --> UC_ManageKB
+Admin --> UC_ManageMap
+Admin --> UC_ManageUser
+Admin --> UC_Dash
 
 @enduml

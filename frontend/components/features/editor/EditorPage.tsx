@@ -1,16 +1,19 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, MouseEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useEditorStore } from '@/stores/editor.store';
 import { useBuildingStore } from '@/stores/building.store';
 import { mapApi } from '@/services/maps-api';
 import { editorApi } from '@/services/editor-api';
+import { useConfirmStore } from '@/stores/confirm.store';
 import { MapData, MapNode, MapEdge, ToolType, NodeFormData, EdgeFormData, Building } from '@/types';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { BuildingModal } from './BuildingModal';
 import { EditorInspector } from './EditorInspector';
 import { MapOverlay } from './MapOverlay';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -18,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 const MAP_WIDTH = 800;
@@ -38,10 +42,11 @@ const TOOLS = [
 ];
 
 export default function EditorPage() {
-  const { maps, currentMap, nodes, edges, activeTool, selectedId, selectedType, isEditing, setMap, setMaps, setNodes, setEdges, setTool, selectItem, addNode, updateNode, deleteNode, addEdge, deleteEdge, setEditing } = useEditorStore();
+  const { maps, currentMap, nodes, edges, activeTool, selectedId, selectedType, isEditing, setMap, setMaps, setNodes, setEdges, setTool, selectItem, addNode, updateNode, deleteNode, addEdge, deleteEdge, setEditing, updateMapInList } = useEditorStore();
   const buildings = useBuildingStore((state) => state.buildings);
   const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
-  
+  const confirm = useConfirmStore((state) => state.confirm);
+
   const [cursorCoords, setCursorCoords] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -50,11 +55,25 @@ export default function EditorPage() {
   const [drawingPath, setDrawingPath] = useState<{ x: number; y: number }[]>([]);
   const [virtualMouse, setVirtualMouse] = useState({ x: 0, y: 0 });
   const [draggingNodeId, setDraggingNodeId] = useState<number | null>(null);
-  
+
+  const [localScaleRatio, setLocalScaleRatio] = useState<string>('1.0');
+  const [isSavingScale, setIsSavingScale] = useState(false);
+
   const svgRef = useRef<SVGSVGElement>(null);
   const groupRef = useRef<SVGGElement>(null);
   const startPanRef = useRef({ x: 0, y: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (currentMap) {
+      setLocalScaleRatio(currentMap.scale_ratio.toString());
+    }
+  }, [currentMap?.id]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -76,7 +95,7 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (!currentMap?.id) return;
-    
+
     const loadData = async () => {
       try {
         const [fetchedNodes, fetchedEdges] = await Promise.all([
@@ -241,7 +260,7 @@ export default function EditorPage() {
     if (!startNode || !endNode) return '';
 
     let d = `M ${startNode.x} ${startNode.y}`;
-    
+
     if (edge.polyline && edge.polyline.length > 0) {
       edge.polyline.forEach((p) => {
         if (Array.isArray(p) && p.length >= 2) {
@@ -249,7 +268,7 @@ export default function EditorPage() {
         }
       });
     }
-    
+
     d += ` L ${endNode.x} ${endNode.y}`;
     return d;
   };
@@ -260,6 +279,15 @@ export default function EditorPage() {
 
   const handleDeleteMap = async () => {
     if (!currentMap) return;
+    
+    const confirmed = await confirm({
+      title: "Xác nhận xóa bản đồ",
+      description: "Bạn có chắc chắn muốn xóa bản đồ này? Tất cả dữ liệu liên quan (điểm, đường đi) sẽ bị xóa vĩnh viễn.",
+      variant: 'destructive',
+      confirmText: 'Xóa bản đồ'
+    });
+
+    if (!confirmed) return;
     try {
       await mapApi.delete(currentMap.id);
       setMaps(maps.filter(m => m.id !== currentMap.id));
@@ -278,13 +306,41 @@ export default function EditorPage() {
     }
   };
 
-  const cursorStyle = activeTool === 'select' 
-    ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') 
+  const handleSaveScale = async () => {
+    if (!currentMap) return;
+    const newRatio = parseFloat(localScaleRatio);
+    if (isNaN(newRatio) || newRatio <= 0) {
+      toast.error('Tỉ lệ không hợp lệ');
+      return;
+    }
+
+    setIsSavingScale(true);
+    try {
+      const updatedMap = await mapApi.updateMap(currentMap.id, { scale_ratio: newRatio });
+      updateMapInList(currentMap.id, { scale_ratio: newRatio });
+
+      // Refresh edges since their weights might have changed in the backend
+      const fetchedEdges = await editorApi.getEdges(currentMap.id);
+      setEdges(fetchedEdges);
+
+      toast.success('Đã cập nhật tỉ lệ bản đồ và tính lại weights!');
+    } catch (err) {
+      console.error('Error saving scale:', err);
+      toast.error('Lỗi khi lưu tỉ lệ');
+    } finally {
+      setIsSavingScale(false);
+    }
+  };
+
+  const cursorStyle = activeTool === 'select'
+    ? (isDragging ? 'cursor-grabbing' : 'cursor-grab')
     : 'cursor-crosshair';
+
+  if (!mounted) return null;
 
   return (
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden">
-      <EditorHeader 
+      <EditorHeader
         maps={maps}
         currentMapId={currentMap?.id}
         onMapChange={(newId) => {
@@ -298,8 +354,8 @@ export default function EditorPage() {
       <div className="flex-1 flex overflow-hidden relative">
         <aside className="w-64 h-full border-r border-border bg-card flex flex-col p-4 gap-6 shadow-sm z-10">
           <div className="flex flex-col gap-2">
-            <h1 className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-2">Editor Tools</h1>
-            
+            <h1 className="text-muted-foreground text-xs font-black uppercase tracking-widest mb-2 opacity-50">Editor Tools</h1>
+
             <div className="flex flex-col gap-2">
               {TOOLS.map((tool) => {
                 const isActive = activeTool === tool.id;
@@ -310,8 +366,8 @@ export default function EditorPage() {
                     title={tool.description}
                     className={`
                       flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 text-left group
-                      ${isActive 
-                        ? 'bg-primary text-primary-foreground shadow-md' 
+                      ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-md'
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border'
                       }
                     `}
@@ -320,9 +376,9 @@ export default function EditorPage() {
                       {tool.icon}
                     </span>
                     <div>
-                      <p className="text-sm font-bold">{tool.label}</p>
-                      <p className={`text-[10px] ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                        {tool.id === 'select' ? 'Click to select' : 'Click map to add'}
+                      <p className="text-sm font-black uppercase tracking-tight">{tool.label}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-tight ${isActive ? 'text-primary-foreground/60' : 'text-muted-foreground/60'}`}>
+                        {isActive ? 'Current active' : 'Click to activate'}
                       </p>
                     </div>
                     {isActive && (
@@ -332,6 +388,71 @@ export default function EditorPage() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Map Configuration Section */}
+          <div className="flex flex-col gap-4 p-4 bg-muted/10 border border-border/60 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-primary">straighten</span>
+                <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Cấu hình Tỉ lệ</h2>
+              </div>
+              {currentMap?.id && (
+                <Badge variant="outline" className="font-mono text-[9px] border-primary/20 text-primary bg-primary/5">
+                  ID: #{currentMap.id}
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-end px-1">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">m/px ratio</label>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={localScaleRatio}
+                    onChange={(e) => setLocalScaleRatio(e.target.value)}
+                    placeholder="1.0"
+                    className="h-8 text-xs bg-background border-border focus-visible:ring-primary/20 font-mono font-black"
+                    type="number"
+                    step="0.001"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 px-3 text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90"
+                    onClick={handleSaveScale}
+                    disabled={!!(isSavingScale || !currentMap)}
+                  >
+                    {isSavingScale ? <span className="material-symbols-outlined text-sm animate-spin">sync</span> : "Lưu"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-2 bg-primary/5 rounded border border-primary/10">
+                <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight opacity-70">
+                  Phục vụ tính toán lộ trình & thời gian thực tế.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Building Management Section */}
+          <div className="flex flex-col gap-4 p-4 bg-muted/10 border border-border/60 rounded-xl">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg text-primary">corporate_fare</span>
+              <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Hạ tầng</h2>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBuildingModal(true)}
+              className="h-9 w-full justify-start gap-2 border-border/60 hover:bg-muted font-black text-[10px] uppercase tracking-widest rounded-lg"
+            >
+              <span className="material-symbols-outlined text-lg text-primary">layers</span>
+              Quản lý tòa nhà
+            </Button>
           </div>
 
           <div className="mt-auto pt-4 border-t border-border">
@@ -435,7 +556,7 @@ export default function EditorPage() {
                             stroke={isSelected ? '#2563eb' : 'white'}
                             strokeWidth={isSelected ? 3 : 2}
                           />
-                          {node.name && (
+                          {node.name && node.name.toLowerCase() !== 'new node' && (
                             <text
                               x={node.x}
                               y={node.y - 15}
@@ -507,8 +628,8 @@ export default function EditorPage() {
           </main>
         </div>
 
-        <EditorInspector 
-          buildings={buildings} 
+        <EditorInspector
+          buildings={buildings}
           nodes={nodes}
           edges={edges}
           selectedId={selectedId}
@@ -527,6 +648,16 @@ export default function EditorPage() {
           onRefreshBuildings={fetchBuildings}
           currentMap={currentMap}
         />
+        {showBuildingModal && (
+          <BuildingModal
+            initialBuildingId={currentMap?.building_id}
+            onClose={() => setShowBuildingModal(false)}
+            onSuccess={() => {
+              fetchBuildings();
+              setShowBuildingModal(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -562,108 +693,99 @@ function EditorHeader({
   const campusMaps = maps.filter(m => !m.building_id);
   const buildingMaps = maps.filter(m => m.building_id);
 
+  const router = useRouter();
+
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 shrink-0 z-30 shadow-sm relative">
+    <header className="h-11 bg-background border-b border-border flex items-center justify-between px-4 shrink-0 z-30 relative">
       <div className="flex-1 flex items-center justify-start">
-        <button 
-          onClick={() => window.location.href = '/'}
-          className="group flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-sm"
+        <button
+          onClick={() => router.push('/')}
+          className="group flex items-center justify-center w-8 h-8 rounded-md bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-sm"
           title="Quay lại Dashboard"
         >
-          <span className="material-symbols-outlined text-xl group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
+          <span className="material-symbols-outlined text-base group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
         </button>
       </div>
 
-      <div className="flex-1 flex justify-center min-w-0 px-4" ref={dropdownRef}>
-        <div className="relative w-full max-w-md">
-          <div 
+      <div className="flex-1 flex justify-center min-w-0 px-2" ref={dropdownRef}>
+        <div className="relative w-full max-w-xs">
+          <div
             onClick={() => setIsOpen(!isOpen)}
-            className={`flex items-center justify-between gap-3 px-4 py-2 rounded-full border bg-card cursor-pointer transition-all select-none
-              ${isOpen ? 'border-primary ring-2 ring-primary/20 shadow-lg' : 'border-border hover:border-primary/50 hover:shadow-md'}`}
+            className={`flex items-center justify-between gap-2 px-3 py-1 rounded-md border bg-background cursor-pointer transition-all select-none h-8
+              ${isOpen ? 'border-primary ring-1 ring-primary/20 shadow-sm' : 'border-border hover:border-primary/50'}`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-card shadow-sm transition-colors shrink-0
-                ${currentMap?.building_id ? 'bg-primary' : 'bg-primary'}`}>
-                <span className="material-symbols-outlined text-lg">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-5 h-5 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-base">
                   {currentMap?.building_id ? 'apartment' : 'map'}
                 </span>
               </div>
-              <div className="flex flex-col items-start min-w-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider leading-none mb-0.5">
-                  {currentMap ? (currentMap.building_id ? 'Building Map' : 'Campus Map') : 'Select Map'}
-                </span>
-                <h1 className="text-sm font-bold text-foreground truncate max-w-[200px]">
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="text-xs font-bold text-foreground truncate max-w-[150px]">
                   {currentMap ? currentMap.name : 'Chọn bản đồ...'}
                 </h1>
+                {currentMap && (
+                  <Badge variant="outline" className="h-4 px-1.5 text-[8px] font-bold uppercase tracking-tighter opacity-50 border-none bg-muted">
+                    {currentMap.building_id ? 'BLDG' : 'CAMPUS'}
+                  </Badge>
+                )}
               </div>
             </div>
-            <span className={`material-symbols-outlined text-muted-foreground text-xl transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary' : ''}`}>
-              expand_more
-            </span>
+            <span className={`material-symbols-outlined text-sm text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary' : ''}`}>expand_more</span>
           </div>
 
           {isOpen && (
-            <div className="absolute top-full mt-2 w-full bg-card rounded-2xl shadow-xl border border-border overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
-              <div className="max-h-[60vh] overflow-y-auto py-2 custom-scrollbar">
+            <div className="absolute top-full mt-1 w-full bg-popover border border-border rounded-md shadow-lg overflow-hidden z-50 py-1">
+              <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
                 {campusMaps.length > 0 && (
-                  <div className="mb-2">
-                    <div className="px-4 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/50">
-                      Bản đồ chung
+                  <div className="mb-1">
+                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest bg-muted/30">
+                      Bản đồ khuôn viên
                     </div>
                     {campusMaps.map(map => (
-                      <div 
+                      <button
                         key={map.id}
                         onClick={() => { onMapChange(map.id); setIsOpen(false); }}
-                        className={`px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors ${map.id === currentMapId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+                        className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${map.id === currentMapId ? 'bg-primary text-white' : 'hover:bg-muted'}`}
                       >
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-primary shrink-0 bg-primary/10">
-                          <span className="material-symbols-outlined text-lg">map</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`text-sm font-bold truncate ${map.id === currentMapId ? 'text-primary' : 'text-foreground'}`}>
-                            {map.name}
-                          </h4>
-                        </div>
+                        <span className="material-symbols-outlined text-base">map</span>
+                        <span className="text-xs font-bold truncate flex-1">{map.name}</span>
                         {map.id === currentMapId && (
-                          <span className="material-symbols-outlined text-primary text-lg">check_circle</span>
+                          <span className="material-symbols-outlined text-xs">check</span>
                         )}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
 
                 {buildingMaps.length > 0 && (
-                  <div>
-                    <div className="px-4 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/50">
+                  <div className="border-t border-border/50">
+                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest bg-muted/30">
                       Bản đồ tòa nhà
                     </div>
                     {buildingMaps.map(map => (
-                      <div 
+                      <button
                         key={map.id}
                         onClick={() => { onMapChange(map.id); setIsOpen(false); }}
-                        className={`px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors ${map.id === currentMapId ? 'bg-primary/10' : 'hover:bg-muted'}`}
+                        className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${map.id === currentMapId ? 'bg-primary text-white' : 'hover:bg-muted'}`}
                       >
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-primary shrink-0 bg-primary/10">
-                          <span className="material-symbols-outlined text-lg">apartment</span>
-                        </div>
+                        <span className="material-symbols-outlined text-base">apartment</span>
                         <div className="flex-1 min-w-0">
-                          <h4 className={`text-sm font-bold truncate ${map.id === currentMapId ? 'text-primary' : 'text-foreground'}`}>
-                            {map.name}
-                          </h4>
+                          <div className="text-xs font-bold truncate">{map.name}</div>
                           {map.building_id && (
-                            <p className="text-[10px] text-muted-foreground truncate">ID Tòa nhà: #{map.building_id}</p>
+                            <div className={`text-[9px] uppercase tracking-tighter ${map.id === currentMapId ? 'text-white/60' : 'text-muted-foreground'}`}>ID: #{map.building_id}</div>
                           )}
                         </div>
                         {map.id === currentMapId && (
-                          <span className="material-symbols-outlined text-primary text-lg">check_circle</span>
+                          <span className="material-symbols-outlined text-xs">check</span>
                         )}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
 
                 {maps.length === 0 && (
-                  <div className="p-4 text-center text-sm text-muted-foreground italic">
+                  <div className="p-4 text-center text-xs text-muted-foreground italic">
                     Chưa có bản đồ nào
                   </div>
                 )}
@@ -673,24 +795,28 @@ function EditorHeader({
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-end gap-3">
+      <div className="flex-1 flex items-center justify-end gap-2">
         {onOpenBuildingModal && (
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onOpenBuildingModal}
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all"
-            title="Quản lý tòa nhà"
+            className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-primary"
           >
-            <span className="material-symbols-outlined">apartment</span>
-          </button>
+            <span className="material-symbols-outlined text-base mr-2">apartment</span>
+            Thiết lập
+          </Button>
         )}
         {currentMapId && onDelete && (
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onDelete}
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 border border-transparent hover:border-destructive/20 transition-all"
-            title="Xóa bản đồ"
+            className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
-            <span className="material-symbols-outlined">delete</span>
-          </button>
+            <span className="material-symbols-outlined text-base mr-2">delete</span>
+            Xóa
+          </Button>
         )}
       </div>
     </header>
@@ -698,10 +824,11 @@ function EditorHeader({
 }
 
 function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: MapNode[] }) {
-  const { currentMap, edges, selectedId, selectedType, isEditing, updateNode, deleteNode, deleteEdge, setEditing } = useEditorStore();
+  const { currentMap, edges, selectedId, selectedType, isEditing, updateNode, deleteNode, deleteEdge, setEditing, selectItem } = useEditorStore();
+  const confirm = useConfirmStore((state) => state.confirm);
 
   const data = selectedType === 'node' ? nodes.find(n => n.id === selectedId) : edges.find(e => e.id === selectedId);
-  
+
   const [editedData, setEditedData] = useState<NodeFormData | EdgeFormData | null>(null);
   const [aliasInput, setAliasInput] = useState('');
   const [linkedNodeSearch, setLinkedNodeSearch] = useState('');
@@ -727,10 +854,10 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
     const currentLinkedIds = nodeData.linked_node_ids || [];
     const searchLower = linkedNodeSearch.toLowerCase();
     return nodes
-      .filter(n => 
-        n.id !== selectedId && 
+      .filter(n =>
+        n.id !== selectedId &&
         !currentLinkedIds.includes(n.id) &&
-        (linkedNodeSearch === '' || 
+        (linkedNodeSearch === '' ||
           n.name.toLowerCase().includes(searchLower) ||
           String(n.id).includes(linkedNodeSearch))
       )
@@ -779,7 +906,16 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
   };
 
   const handleDelete = async () => {
-    if (!selectedId || !confirm('Bạn có chắc muốn xóa?')) return;
+    if (!selectedId) return;
+
+    const confirmed = await confirm({
+      title: `Xác nhận xóa ${selectedType === 'node' ? 'điểm' : 'đường đi'}`,
+      description: `Bạn có chắc chắn muốn xóa ${selectedType === 'node' ? 'điểm' : 'đường đi'} này?`,
+      variant: 'destructive'
+    });
+
+    if (!confirmed) return;
+    
     try {
       if (selectedType === 'node') {
         await editorApi.deleteNode(selectedId);
@@ -790,11 +926,10 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
         deleteEdge(selectedId);
         toast.success('Đã xóa edge!');
       }
+      selectItem(null, null);
     } catch (error) {
       console.error('Error deleting:', error);
-      toast.error('Lỗi khi xóa!', {
-        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
-      });
+      toast.error('Lỗi khi xóa!');
     }
   };
 
@@ -883,7 +1018,7 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-            {isNode && nodeData && (
+        {isNode && nodeData && (
           <>
             <div className="p-4 rounded-xl bg-muted border border-border">
               <div className="flex justify-between items-center mb-3">
@@ -980,7 +1115,7 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
                   </span>
                 )}
               </div>
-              
+
               <div className="space-y-2 mb-3">
                 {(nodeData.aliases || []).map((alias, index) => {
                   const aliasName = typeof alias === 'string' ? alias : alias.name;
@@ -1030,7 +1165,7 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
                     </span>
                   )}
                 </div>
-                
+
                 <div className="space-y-2 mb-3">
                   {linkedNodeNames.map((linkedNode) => (
                     <div key={linkedNode.id} className="flex items-center gap-2">
@@ -1099,9 +1234,8 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
                   disabled={!isEditing}
                   value={edgeData.weight || 0}
                   onChange={(e) => handleChange('weight', parseFloat(e.target.value))}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm font-mono font-bold text-foreground outline-none ${
-                    isEditing ? 'bg-background border-input focus:border-primary' : 'bg-muted border-transparent'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg border text-sm font-mono font-bold text-foreground outline-none ${isEditing ? 'bg-background border-input focus:border-primary' : 'bg-muted border-transparent'
+                    }`}
                 />
               </div>
               <div>
@@ -1163,7 +1297,6 @@ function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: 
 
       {showBuildingModal && selectedType === 'node' && (
         <BuildingModal
-          nodeId={selectedId ?? undefined}
           initialBuildingId={nodeData?.building_id}
           onClose={() => setShowBuildingModal(false)}
           onSuccess={() => {

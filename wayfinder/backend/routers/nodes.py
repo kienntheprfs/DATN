@@ -28,6 +28,8 @@ class NodeIn(BaseModel):
     type: str = "path"  # Mặc định là path
     linked_node_ids: Optional[List[int]] = None
     linked_campus_node_id: Optional[int] = None
+    description: Optional[str] = None
+    real_image_url: Optional[str] = None
     aliases: List[str] = []
 
 
@@ -69,6 +71,8 @@ class NodeOut(BaseModel):
     building: Optional[BuildingOut] = None
     linked_node_ids: Optional[List[int]] = None
     linked_campus_node_id: Optional[int] = None
+    description: Optional[str] = None
+    real_image_url: Optional[str] = None
     aliases: List[AliasOut] = []
 
     class Config:
@@ -77,7 +81,7 @@ class NodeOut(BaseModel):
 
 # 2. Update cho phép sửa cả name, type và danh sách aliases
 class NodeUpdate(BaseModel):
-    model_config = {"extra": "ignore"}  # Ignore extra fields from frontend
+    model_config = {"extra": "ignore"}
 
     name: Optional[str] = None
     x: Optional[float] = None
@@ -86,7 +90,10 @@ class NodeUpdate(BaseModel):
     linked_node_ids: Optional[List[int]] = None
     linked_campus_node_id: Optional[int] = None
     building_id: Optional[int] = None
-    aliases: Optional[Any] = None  # Accept any format
+    description: Optional[str] = None
+    real_image_url: Optional[str] = None
+    aliases: Optional[Any] = None
+    map_id: Optional[int] = None  # Thêm nhưng sẽ bị loại bỏ khi update
 
 
 # --- ENDPOINTS ---
@@ -164,8 +171,10 @@ def update_node(
         raise HTTPException(status_code=404, detail="Node không tồn tại.")
 
     # 1. Update thông tin cơ bản
+    # Loại bỏ map_id và id khỏi data để tránh vô tình ghi đè
     data = payload.model_dump(
-        exclude_unset=True, exclude={"aliases", "map", "building", "flags"}
+        exclude_unset=True, 
+        exclude={"aliases", "map", "building", "flags", "id", "map_id"}
     )
 
     # Auto-set building_id từ map nếu map có building và không truyền building_id

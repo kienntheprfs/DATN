@@ -20,6 +20,8 @@ export interface MapNode {
     wheelchair?: boolean;
     hidden?: boolean;
   };
+  description?: string;
+  real_image_url?: string;
 }
 
 export interface MapEdge {
@@ -36,6 +38,7 @@ export interface Building {
     id: number;
     name: string;
     description?: string;
+    real_image_url?: string;
     maps?: MapData[]; 
 }
 
@@ -71,8 +74,9 @@ export interface LocationSuggestion {
   name: string;
   score: number;
   map_id?: number;
-  floor?: number;
+  floor?: number | null;
   building_id?: number;
+  building_name?: string;
   node_type?: string;
 }
 
@@ -112,6 +116,8 @@ export interface NodeFormData {
     wheelchair?: boolean;
     hidden?: boolean;
   };
+  description?: string;
+  real_image_url?: string;
 }
 
 export type EdgeFormData = MapEdge;

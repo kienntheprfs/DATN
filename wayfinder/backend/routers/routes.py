@@ -555,62 +555,61 @@ def generate_human_instructions(
 
 def find_best_alias_node(
     session: Session,
-    map_id: int,
     query: str,
+    map_id: Optional[int] = None,
     cx: Optional[float] = None,
     cy: Optional[float] = None,
-) -> Optional[int]:
+) -> List[Tuple[Node, float]]:
     """
-    Tìm node_id dựa trên text search.
-    Sử dụng RapidFuzz để so khớp gần đúng.
+    Tìm danh sách các node_id dựa trên text search, có so khớp với cả tên tòa nhà.
+    Trả về List[(Node, score)] sắp xếp theo score giảm dần.
     """
     norm_q = normalize_name(query)
 
-    # Lấy tất cả Alias của map này
-    aliases = session.exec(
-        select(Alias, Node)
+    # Lấy tất cả Alias + Node + Map + Building
+    from backend.models.entities import Building, Map
+    stmt = (
+        select(Alias, Node, Building)
         .join(Node, Alias.node_id == Node.id)
-        .where(Node.map_id == map_id)
-    ).all()
-
-    if not aliases:
-        return None
-
-    # Tạo dict để fuzzy search: {id: norm_name}
-    choices = {a.id: normalize_name(a.name) for (a, _n) in aliases}
-
-    # Tìm top 5 kết quả giống nhất
-    # process.extract trả về list [(name, score, key), ...]
-    best_matches = process.extract(
-        norm_q, choices, scorer=fuzz.token_set_ratio, limit=5
+        .join(Map, Node.map_id == Map.id)
+        .outerjoin(Building, Map.building_id == Building.id)
     )
+    
+    if map_id:
+        # Nếu có map_id, ưu tiên các kết quả trong map này hoặc lân cận
+        # Nhưng vẫn cho phép tìm ở map khác nếu được yêu cầu cụ thể qua tên
+        pass
+
+    results = session.exec(stmt).all()
+
+    if not results:
+        return []
 
     candidates = []
-    # aliases_by_id = {a.id: (a, n) for a, n in aliases} # Map nhanh
+    for alias, node, building in results:
+        alias_name = normalize_name(alias.name)
+        building_name = normalize_name(building.name) if building else ""
+        
+        # So khớp cả tên alias và kết hợp alias + tòa nhà
+        combined_name = f"{alias_name} {building_name}".strip()
+        
+        # Tính score cao nhất giữa các cách gọi
+        score_alias = fuzz.token_set_ratio(norm_q, alias_name)
+        score_combined = fuzz.token_set_ratio(norm_q, combined_name)
+        
+        score = max(score_alias, score_combined)
+        
+        # Ưu tiên kết quả khớp hoàn toàn
+        if norm_q in alias_name or norm_q in combined_name:
+            score += 10
+            
+        if score > 50:
+            candidates.append((node, float(score)))
 
-    # Lọc những kết quả có độ khớp > 50 (để tránh lấy bừa)
-    valid_keys = [res[2] for res in best_matches if res[1] > 50]
-
-    if not valid_keys:
-        return None
-
-    # Lấy thông tin Node của các candidate
-    for a, n in aliases:
-        if a.id in valid_keys:
-            candidates.append(n)
-
-    if not candidates:
-        return None
-
-    # Nếu có tọa độ người dùng (cx, cy), ưu tiên Node gần nhất trong số các kết quả trùng tên
-    # Ví dụ: Có 2 cái "Nhà vệ sinh", chọn cái gần người dùng nhất.
-    if cx is not None and cy is not None:
-        candidates.sort(key=lambda n: math.hypot(n.x - cx, n.y - cy))
-        return candidates[0].id
-
-    # Nếu không có tọa độ, trả về kết quả khớp nhất (thường là cái đầu tiên fuzzy trả về)
-    # Ở đây ta lấy cái đầu tiên trong list candidates (đã được lọc)
-    return candidates[0].id
+    # Sắp xếp theo score
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    
+    return candidates
 
 
 # --- API ENDPOINT ---
@@ -734,7 +733,7 @@ def build_full_polyline(G, path_nodes: List[int], node_pos: Dict) -> List[List[f
 
 @router.get("/query", response_model=RouteResponse)
 def route_by_query(
-    map_id: int,
+    map_id: Optional[int] = None,
     q: str = Query(..., description="Ví dụ: 'từ Sảnh A đến Thang máy'"),
     cx: Optional[float] = None,
     cy: Optional[float] = None,
@@ -743,43 +742,47 @@ def route_by_query(
     # 1. Parse câu query
     start_txt, end_txt = extract_a_b(q)
 
-    start_id = None
-    end_id = None
+    start_candidates = []
+    end_candidates = []
 
-    # 2. Tìm Start Node ID
+    # 2. Tìm Start Node candidates
     if start_txt:
-        # Nếu người dùng nói "Từ A..."
-        start_id = find_best_alias_node(session, map_id, start_txt, cx, cy)
-    elif cx is not None and cy is not None:
-        # Nếu người dùng không nói "Từ đâu", lấy vị trí hiện tại (cx, cy)
-        # Tìm node gần nhất với cx, cy
+        start_candidates = find_best_alias_node(session, start_txt, map_id, cx, cy)
+    elif cx is not None and cy is not None and map_id is not None:
         all_nodes = session.exec(select(Node).where(Node.map_id == map_id)).all()
         if all_nodes:
-            # Sort theo khoảng cách
             all_nodes.sort(key=lambda n: math.hypot(n.x - cx, n.y - cy))
-            start_id = all_nodes[0].id
+            start_candidates = [(all_nodes[0], 100.0)]
 
-    # 3. Tìm End Node ID
+    # 3. Tìm End Node candidates
     if end_txt:
-        end_id = find_best_alias_node(session, map_id, end_txt, cx, cy)
+        end_candidates = find_best_alias_node(session, end_txt, map_id, cx, cy)
 
-    # Error handling chi tiết
-    errors = []
-    if not start_id:
-        source_desc = start_txt if start_txt else "vị trí của bạn"
-        errors.append(f"Không tìm thấy điểm đi '{source_desc}'")
-    if not end_id:
-        dest_desc = end_txt if end_txt else "điểm đến"
-        errors.append(f"Không tìm thấy điểm đến '{dest_desc}'")
+    # Kiểm tra tính rõ ràng (ambiguity check)
+    def check_ambiguity(candidates, name):
+        if not candidates:
+            return None, f"Không tìm thấy địa điểm '{name}'"
+        
+        # Nếu có nhiều hơn 1 kết quả và các kết quả hàng đầu có score quá sát nhau
+        if len(candidates) > 1:
+            score1 = candidates[0][1]
+            score2 = candidates[1][1]
+            # Nếu chênh lệch score < 10, coi là không rõ ràng
+            if score1 - score2 < 10:
+                options = [f"{c[0].name} (Tầng {session.get(Map, c[0].map_id).floor_level})" for c in candidates[:3]]
+                return None, f"Tìm thấy nhiều địa điểm '{name}': {', '.join(options)}. Vui lòng xác nhận chính xác hơn."
+        
+        return candidates[0][0].id, None
 
-    if errors:
-        raise HTTPException(status_code=404, detail=". ".join(errors))
+    start_id, start_err = check_ambiguity(start_candidates, start_txt or "vị trí của bạn")
+    end_id, end_err = check_ambiguity(end_candidates, end_txt or "điểm đến")
 
-    # 4. Tính toán đường đi (Sử dụng lại logic của hàm find_route cũ nhưng gọi nội bộ)
-    # Copy logic từ find_route hoặc tách logic find_route ra hàm riêng để tái sử dụng
-    # Ở đây mình viết lại đoạn gọi logic cho gọn:
+    if start_err or end_err:
+        error_msg = ". ".join(filter(None, [start_err, end_err]))
+        raise HTTPException(status_code=400, detail=error_msg)
 
-    m = session.get(Map, map_id)
+    # 4. Tính toán đường đi
+    m = session.get(Map, map_id) if map_id else session.get(Map, start_candidates[0][0].map_id)
     scale = m.scale_ratio if m and m.scale_ratio else 1.0
 
     G, node_pos = _get_global_graph(session)
@@ -795,11 +798,10 @@ def route_by_query(
     except nx.NodeNotFound:
         raise HTTPException(status_code=400, detail="Lỗi dữ liệu đồ thị.")
 
-    # Tạo hướng dẫn
     instrs, total_px = generate_human_instructions(G, path_nodes, node_pos, scale)
 
     return RouteResponse(
-        map_id=map_id,
+        map_id=start_candidates[0][0].map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
         path_node_ids=path_nodes,
         total_distance_m=round(total_px * scale, 2),

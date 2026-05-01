@@ -11,6 +11,7 @@ class Building(SQLModel, table=True, metadata=metadata):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     description: Optional[str] = None
+    real_image_url: Optional[str] = None
 
     maps: List["Map"] = Relationship(back_populates="building")
 
@@ -41,6 +42,8 @@ class Node(SQLModel, table=True, metadata=metadata):
     name: str
     x: float
     y: float
+    description: Optional[str] = None
+    real_image_url: Optional[str] = None
     type: str = Field(default="path")
 
     map_id: int = Field(foreign_key="wayfinder_map.id", index=True)
@@ -92,7 +95,7 @@ class Edge(SQLModel, table=True, metadata=metadata):
     weight: float
     bidirectional: bool = Field(default=True)
 
-    polyline: Optional[List[dict]] = Field(default=None, sa_column=Column(JSON))
+    polyline: Optional[List[List[float]]] = Field(default=None, sa_column=Column(JSON))
 
     start_node: Node = Relationship(
         back_populates="edges_from",

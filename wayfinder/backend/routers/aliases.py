@@ -71,12 +71,20 @@ def get_all_locations(
     session: Session = Depends(get_session),
 ):
     """Lấy tất cả các địa điểm có thể điều hướng (bao gồm cả nodes không có alias)"""
-    # Get map info first
-    from backend.models.entities import Map
+    # Get map and building info
+    from backend.models.entities import Map, Building
 
     all_maps = session.exec(select(Map)).all()
+    all_buildings = session.exec(select(Building)).all()
+    building_dict = {b.id: b.name for b in all_buildings}
+
     map_info = {
-        m.id: {"floor": m.floor_level, "building_id": m.building_id} for m in all_maps
+        m.id: {
+            "floor": m.floor_level,
+            "building_id": m.building_id,
+            "building_name": building_dict.get(m.building_id) if m.building_id else None,
+        }
+        for m in all_maps
     }
 
     # Get all nodes
@@ -110,6 +118,7 @@ def get_all_locations(
                         map_id=node.map_id,
                         floor=map_data.get("floor"),
                         building_id=map_data.get("building_id"),
+                        building_name=map_data.get("building_name"),
                         node_type=node.type,
                     )
                 )
@@ -124,6 +133,7 @@ def get_all_locations(
                     map_id=node.map_id,
                     floor=map_data.get("floor"),
                     building_id=map_data.get("building_id"),
+                    building_name=map_data.get("building_name"),
                     node_type=node.type,
                 )
             )
@@ -178,27 +188,39 @@ def search_alias(
     out = []
     seen_node_ids = set()
 
-    # Tìm kiếm linh hoạt: so khớp từng từ trong query với tên
+    # Tìm kiếm linh hoạt: so khớp từng từ trong query với tên + tòa nhà
     for alias in all_aliases:
+        node = node_dict.get(alias.node_id)
+        if not node:
+            continue
+            
+        map_data = map_info.get(node.map_id, {})
+        building_name = map_data.get("building_name") or ""
+        
         name_lower = alias.name.lower()
+        building_lower = building_name.lower()
+        combined_name = f"{name_lower} {building_lower}".strip()
+
         # Fuzzy match với toàn bộ query
-        full_score = fuzz.token_set_ratio(norm_q, name_lower)
+        score_name = fuzz.token_set_ratio(norm_q, name_lower)
+        score_combined = fuzz.token_set_ratio(norm_q, combined_name)
+        full_score = max(score_name, score_combined)
 
         # Đếm số từ khớp
-        words_matched = sum(1 for w in query_words if w in name_lower)
+        words_matched = sum(1 for w in query_words if w in combined_name)
 
         # Nếu có từ nào khớp hoặc fuzzy score đủ cao
         if words_matched > 0 or full_score > 40:
             if alias.node_id not in seen_node_ids:
-                node = node_dict.get(alias.node_id)
-                map_data = map_info.get(node.map_id, {}) if node else {}
-
                 # Ưu tiên kết quả có nhiều từ khớp hơn
-                # Nếu có đủ từ khớp (>=3), ưu tiên cao
                 if words_matched >= 3:
                     final_score = max(words_matched * 25, full_score + 30)
                 else:
                     final_score = full_score
+
+                # Bonus for building name match if query contains it
+                if building_lower and building_lower in norm_q:
+                    final_score += 15
 
                 out.append(
                     AliasSearchOut(
@@ -206,11 +228,11 @@ def search_alias(
                         alias_id=alias.id,
                         name=alias.name,
                         score=float(final_score),
-                        map_id=node.map_id if node else None,
+                        map_id=node.map_id,
                         floor=map_data.get("floor"),
                         building_id=map_data.get("building_id"),
-                        building_name=map_data.get("building_name"),
-                        node_type=node.type if node else None,
+                        building_name=building_name,
+                        node_type=node.type,
                     )
                 )
                 seen_node_ids.add(alias.node_id)
@@ -220,13 +242,21 @@ def search_alias(
         if n.id in seen_node_ids:
             continue
 
+        map_data = map_info.get(n.map_id, {})
+        building_name = map_data.get("building_name") or ""
+        
         name_lower = n.name.lower()
-        full_score = fuzz.token_set_ratio(norm_q, name_lower)
-        words_matched = sum(1 for w in query_words if w in name_lower)
+        building_lower = building_name.lower()
+        combined_name = f"{name_lower} {building_lower}".strip()
+        
+        full_score = max(fuzz.token_set_ratio(norm_q, name_lower), fuzz.token_set_ratio(norm_q, combined_name))
+        words_matched = sum(1 for w in query_words if w in combined_name)
 
         if words_matched > 0 or full_score > 40:
-            map_data = map_info.get(n.map_id, {})
             final_score = max(words_matched * 25, full_score)
+            
+            if building_lower and building_lower in norm_q:
+                final_score += 15
 
             out.append(
                 AliasSearchOut(
@@ -237,7 +267,7 @@ def search_alias(
                     map_id=n.map_id,
                     floor=map_data.get("floor"),
                     building_id=map_data.get("building_id"),
-                    building_name=map_data.get("building_name"),
+                    building_name=building_name,
                     node_type=n.type,
                 )
             )

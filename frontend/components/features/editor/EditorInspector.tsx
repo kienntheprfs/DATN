@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { MapData, MapNode, NodeFormData, EdgeFormData, Building } from '@/types';
 import { editorApi } from '@/services/editor-api';
 import { mapApi } from '@/services/maps-api';
+import { useConfirmStore } from '@/stores/confirm.store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,8 +13,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { BuildingModal } from './BuildingModal';
-import { Building2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+
+interface StructuredDescription {
+  landmarks?: string;
+  colors?: string;
+  proximity?: string;
+  signs?: string;
+  notes?: string;
+}
+
+const parseDescription = (desc: string): StructuredDescription => {
+  if (!desc) return {};
+  try {
+    const parsed = JSON.parse(desc);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as StructuredDescription;
+    }
+  } catch (e) {
+    return { notes: desc };
+  }
+  return {};
+};
 
 interface EditorInspectorProps {
   currentMap: MapData | null;
@@ -48,11 +70,13 @@ export function EditorInspector({
   buildings,
   onRefreshBuildings,
 }: EditorInspectorProps) {
+  const confirm = useConfirmStore((state) => state.confirm);
   const [editedData, setEditedData] = useState<NodeFormData | EdgeFormData | null>(null);
   const [aliasInput, setAliasInput] = useState('');
   const [showBuildingModal, setShowBuildingModal] = useState(false);
   const [buildingMaps, setBuildingMaps] = useState<MapData[]>([]);
   const [buildingNodes, setBuildingNodes] = useState<MapNode[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const rawData = useMemo(() => {
     if (selectedType === 'node') {
@@ -83,6 +107,11 @@ export function EditorInspector({
   }, [rawData, selectedType, editedData]);
 
   useEffect(() => {
+    setEditedData(null);
+    setAliasInput('');
+  }, [selectedId, selectedType]);
+
+  useEffect(() => {
     const nodeFormData = formData as NodeFormData | null;
     const buildingId = nodeFormData?.building_id;
     if (buildingId) {
@@ -109,7 +138,7 @@ export function EditorInspector({
   };
 
   const handleSave = async () => {
-    if (!formData || !selectedId) return;
+    if (!formData || selectedId === null) return;
 
     try {
       if (selectedType === 'node') {
@@ -121,6 +150,8 @@ export function EditorInspector({
           aliases,
           linked_node_ids: nodeData.linked_node_ids,
           building_id: nodeData.building_id,
+          description: nodeData.description,
+          real_image_url: nodeData.real_image_url,
         });
         onNodeUpdate(selectedId, { ...nodeData, aliases });
       } else if (selectedType === 'edge') {
@@ -144,7 +175,15 @@ export function EditorInspector({
   };
 
   const handleDelete = async () => {
-    if (!selectedId || !confirm('Bạn có chắc muốn xóa?')) return;
+    if (selectedId === null) return;
+    
+    const confirmed = await confirm({
+      title: "Xác nhận xóa đối tượng",
+      description: "Bạn có chắc chắn muốn xóa đối tượng này?",
+      variant: 'destructive'
+    });
+
+    if (!confirmed) return;
 
     try {
       if (selectedType === 'node') {
@@ -175,7 +214,14 @@ export function EditorInspector({
     setAliasInput('');
   };
 
-  const handleRemoveAlias = (index: number) => {
+  const handleRemoveAlias = async (index: number) => {
+    const confirmed = await confirm({
+      title: "Xóa tên gọi",
+      description: "Bạn có chắc muốn xóa tên gọi này?",
+      variant: 'destructive'
+    });
+
+    if (!confirmed) return;
     const currentData = formData as NodeFormData | null;
     if (!currentData) return;
     setEditedData({ ...currentData, aliases: currentData.aliases?.filter((_, i) => i !== index) });
@@ -192,7 +238,14 @@ export function EditorInspector({
     }
   };
 
-  const handleRemoveLinkedNode = (nodeId: number) => {
+  const handleRemoveLinkedNode = async (nodeId: number) => {
+    const confirmed = await confirm({
+      title: "Xóa liên kết",
+      description: "Bạn có chắc muốn xóa liên kết này?",
+      variant: 'destructive'
+    });
+
+    if (!confirmed) return;
     const currentData = formData as NodeFormData;
     handleChange('linked_node_ids', (currentData.linked_node_ids || []).filter((id: number) => id !== nodeId));
   };
@@ -201,25 +254,28 @@ export function EditorInspector({
     return <aside className="w-80 bg-background border-l border-border" />;
   }
 
-  if (!formData || !selectedType) {
+  if (selectedId === null || !formData) {
     return (
       <aside className="w-80 bg-background border-l border-border flex flex-col">
-        <div className="h-40 bg-muted relative overflow-hidden">
+        <div className="h-32 bg-muted relative overflow-hidden shrink-0">
           <img
             src={getFullImageUrl(currentMap.image_url)}
-            className="w-full h-full object-cover opacity-50"
+            className="w-full h-full object-cover opacity-40 grayscale"
             alt={`Bản đồ ${currentMap.name}`}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
-          <div className="absolute bottom-4 left-4">
-            <span className="bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded uppercase">
-              Current Map
+          <div className="absolute bottom-3 left-4">
+            <span className="bg-primary/10 text-primary text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border border-primary/20">
+              Active Context
             </span>
-            <h2 className="text-lg font-bold mt-1">{currentMap.name}</h2>
+            <h2 className="text-sm font-black mt-1 text-foreground/80 uppercase tracking-tight">{currentMap.name}</h2>
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center text-muted-foreground p-6 text-center">
-          <p>Chọn một đối tượng để xem chi tiết</p>
+        <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+            <span className="material-symbols-outlined text-2xl opacity-20">touch_app</span>
+          </div>
+          <p className="text-xs font-medium leading-relaxed">Chọn một đối tượng trên bản đồ để xem và chỉnh sửa thuộc tính</p>
         </div>
       </aside>
     );
@@ -248,6 +304,8 @@ export function EditorInspector({
             <NodeForm
               data={nodeData}
               isEditing={isEditing}
+              selectedId={selectedId}
+              onNodeUpdate={onNodeUpdate}
               onChange={handleChange}
               aliasInput={aliasInput}
               onAliasInputChange={setAliasInput}
@@ -261,6 +319,7 @@ export function EditorInspector({
               buildingNodes={buildingNodes}
               onLinkedNodeSelect={handleLinkedNodeSelect}
               onRemoveLinkedNode={handleRemoveLinkedNode}
+              fileInputRef={fileInputRef}
             />
           )}
 
@@ -279,7 +338,6 @@ export function EditorInspector({
 
       {showBuildingModal && isNode && (
         <BuildingModal
-          nodeId={selectedId ?? undefined}
           initialBuildingId={nodeData.building_id}
           onClose={() => setShowBuildingModal(false)}
           onSuccess={() => {
@@ -316,33 +374,37 @@ function InspectorHeader({
   onNameChange: (name: string) => void;
 }) {
   return (
-    <div className="px-4 py-3 border-b border-border bg-muted/50 flex justify-between items-start">
-      <div className="flex-1 mr-2">
-        <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase mb-2 ${
-            isNode ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-          }`}
-        >
-          {isNode ? 'Location' : 'Connection'} <span className="opacity-50">|</span> #{id}
-        </span>
+    <div className="px-4 py-3 border-b border-border bg-muted/20 flex justify-between items-start shrink-0">
+      <div className="flex-1 mr-2 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
+              isNode ? 'bg-primary/5 text-primary border-primary/20' : 'bg-muted text-muted-foreground border-border'
+            }`}
+          >
+            {isNode ? 'Node' : 'Edge'}
+          </span>
+          <span className="text-[10px] font-mono text-muted-foreground">#{id}</span>
+        </div>
         {isEditing && isNode ? (
           <Input
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             autoFocus
             placeholder="Tên địa điểm..."
-            className="font-bold"
+            className="h-8 text-sm font-bold bg-background border-primary/30"
           />
         ) : (
-          <h2 className="text-lg font-bold truncate">{name}</h2>
+          <h2 className="text-sm font-black truncate text-foreground/80 uppercase tracking-tight leading-none">{name}</h2>
         )}
       </div>
       <Button
-        variant={isEditing ? 'default' : 'outline'}
+        variant="ghost"
         size="icon"
+        className={`h-8 w-8 rounded-md transition-all ${isEditing ? 'bg-primary text-white hover:bg-primary/90 shadow-sm' : 'text-muted-foreground hover:text-primary hover:bg-primary/5'}`}
         onClick={onToggleEdit}
       >
-        {isEditing ? '✓' : '✏️'}
+        <span className="material-symbols-outlined text-lg">{isEditing ? 'check' : 'edit'}</span>
       </Button>
     </div>
   );
@@ -351,6 +413,8 @@ function InspectorHeader({
 function NodeForm({
   data,
   isEditing,
+  selectedId,
+  onNodeUpdate,
   onChange,
   aliasInput,
   onAliasInputChange,
@@ -364,9 +428,12 @@ function NodeForm({
   buildingNodes,
   onLinkedNodeSelect,
   onRemoveLinkedNode,
+  fileInputRef,
 }: {
   data: NodeFormData;
   isEditing: boolean;
+  selectedId: number | null;
+  onNodeUpdate: (id: number, data: Partial<MapNode>) => void;
   onChange: (field: string, value: unknown) => void;
   aliasInput: string;
   onAliasInputChange: (value: string) => void;
@@ -380,6 +447,7 @@ function NodeForm({
   buildingNodes: MapNode[];
   onLinkedNodeSelect: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   onRemoveLinkedNode: (nodeId: number) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const linkedNodeOptions = buildingNodes.filter(
     (n) => n.id !== data.id && n.map_id !== data.map_id && !(data.linked_node_ids || []).includes(n.id)
@@ -387,47 +455,228 @@ function NodeForm({
 
   return (
     <>
-      <div className="p-3 bg-muted rounded-lg">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase mb-2">Coordinates</h3>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <span className="text-xs text-muted-foreground">X</span>
-            <div className="font-mono font-bold">{Math.round(data.x)}</div>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground">Y</span>
-            <div className="font-mono font-bold">{Math.round(data.y)}</div>
+      <div className="space-y-4">
+        <div className="p-3 bg-muted/30 rounded-lg border border-border/50">
+          <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Vị trí tương đối</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground/60 font-medium uppercase">Tọa độ X</span>
+              <div className="font-mono font-black text-xs text-primary">{Math.round(data.x)} <span className="text-[9px] font-normal opacity-40 italic">px</span></div>
+            </div>
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground/60 font-medium uppercase">Tọa độ Y</span>
+              <div className="font-mono font-black text-xs text-primary">{Math.round(data.y)} <span className="text-[9px] font-normal opacity-40 italic">px</span></div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div>
-        <Label className="text-xs font-bold uppercase mb-1 block">Loại địa điểm</Label>
-        <Select
-          disabled={!isEditing}
-          value={data.type}
-          onValueChange={(value) => onChange('type', value)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="path">Điểm trung gian</SelectItem>
-            <SelectItem value="room">Phòng</SelectItem>
-            <SelectItem value="stairs">Cầu thang</SelectItem>
-            <SelectItem value="elevator">Thang máy</SelectItem>
-            <SelectItem value="entrance">Cổng ra vào</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Loại thực thể</Label>
+            <Select
+              disabled={!isEditing}
+              value={data.type}
+              onValueChange={(value) => onChange('type', value)}
+            >
+              <SelectTrigger className="h-9 bg-background border-border text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="path">Điểm trung gian (Path)</SelectItem>
+                <SelectItem value="room">Phòng chức năng (Room)</SelectItem>
+                <SelectItem value="stairs">Cầu thang bộ</SelectItem>
+                <SelectItem value="elevator">Thang máy</SelectItem>
+                <SelectItem value="entrance">Cổng ra vào / Sảnh</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Dấu hiệu nhận diện</Label>
+            
+            {(() => {
+              const structured = parseDescription(data.description || '');
+              const count = Object.values(structured).filter(v => !!v).length;
+              
+              return (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className={`w-full h-9 justify-between border-dashed hover:border-primary/50 group px-3 ${
+                        !isEditing ? 'bg-muted/10 border-border/40' : 'bg-muted/20 border-border/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`material-symbols-outlined text-base opacity-50 group-hover:text-primary transition-colors ${
+                          !isEditing ? 'text-muted-foreground' : 'text-primary'
+                        }`}>
+                          {isEditing ? 'settings' : 'visibility'}
+                        </span>
+                        <span className="text-xs font-bold truncate">
+                          {isEditing ? 'Cấu hình nhận diện' : 'Xem dấu hiệu'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isEditing && (
+                          <Badge variant="outline" className="h-4 px-1 text-[7px] font-black uppercase tracking-tighter opacity-50">
+                            View
+                          </Badge>
+                        )}
+                        {count > 0 && (
+                          <Badge variant="secondary" className="h-4 px-1 text-[8px] font-black bg-primary/10 text-primary border-none">
+                            {count}
+                          </Badge>
+                        )}
+                      </div>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary">visibility</span>
+                        Dấu hiệu nhận diện thực tế
+                      </DialogTitle>
+                    </DialogHeader>
+                    
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-3 py-4">
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Vật thể nổi bật</Label>
+                        <Input 
+                          disabled={!isEditing}
+                          value={structured.landmarks || ''}
+                          onChange={(e) => {
+                            const newData = { ...structured, landmarks: e.target.value };
+                            onChange('description', JSON.stringify(newData));
+                          }}
+                          placeholder={isEditing ? "VD: Chậu cây to, Máy bán hàng..." : "Trống"}
+                          className="h-8 text-xs disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Màu sắc / Ánh sáng</Label>
+                        <Input 
+                          disabled={!isEditing}
+                          value={structured.colors || ''}
+                          onChange={(e) => {
+                            const newData = { ...structured, colors: e.target.value };
+                            onChange('description', JSON.stringify(newData));
+                          }}
+                          placeholder={isEditing ? "VD: Tường vàng..." : "Trống"}
+                          className="h-8 text-xs disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Biển báo / Số hiệu</Label>
+                        <Input 
+                          disabled={!isEditing}
+                          value={structured.signs || ''}
+                          onChange={(e) => {
+                            const newData = { ...structured, signs: e.target.value };
+                            onChange('description', JSON.stringify(newData));
+                          }}
+                          placeholder={isEditing ? "VD: Phòng 102..." : "Trống"}
+                          className="h-8 text-xs disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Vị trí tương quan</Label>
+                        <Input 
+                          disabled={!isEditing}
+                          value={structured.proximity || ''}
+                          onChange={(e) => {
+                            const newData = { ...structured, proximity: e.target.value };
+                            onChange('description', JSON.stringify(newData));
+                          }}
+                          placeholder={isEditing ? "VD: Đối diện thang máy..." : "Trống"}
+                          className="h-8 text-xs disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Mô tả khác</Label>
+                        <textarea 
+                          disabled={!isEditing}
+                          value={structured.notes || ''}
+                          onChange={(e) => {
+                            const newData = { ...structured, notes: e.target.value };
+                            onChange('description', JSON.stringify(newData));
+                          }}
+                          placeholder={isEditing ? "Các đặc điểm nhận diện khác..." : "Chưa có mô tả..."}
+                          className="w-full min-h-[60px] p-2 text-xs bg-background border border-border rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+                    
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button className="font-black text-[10px] uppercase tracking-widest h-9">
+                          Đóng & Ghi nhớ
+                        </Button>
+                      </DialogClose>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              );
+            })()}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tài nguyên hình ảnh</Label>
+            <div className="flex gap-2">
+              <Input 
+                disabled={true}
+                value={data.real_image_url || ''}
+                placeholder="Chưa có hình ảnh..."
+                className="h-9 text-[10px] font-mono bg-muted/20 border-border/50"
+              />
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  
+                  try {
+                    toast.info("Đang tải ảnh lên...");
+                    const { url } = await editorApi.uploadImage(formData);
+                    onChange('real_image_url', url);
+                    toast.success("Tải ảnh thành công!");
+                  } catch (error) {
+                    toast.error("Lỗi khi tải ảnh lên");
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!isEditing}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-9 px-3 shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">upload</span>
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <Separator />
 
       <div>
         <div className="flex justify-between items-center mb-2">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase">Tên gọi khác</h3>
+          <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tên gọi khác</h3>
           {(data.aliases?.length ?? 0) > 0 && (
-            <Badge variant="secondary">{data.aliases?.length} tên</Badge>
+            <Badge variant="secondary">{(data.aliases?.length || 0)} tên</Badge>
           )}
         </div>
 
@@ -466,42 +715,50 @@ function NodeForm({
 
       <Separator />
 
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase">Chi tiết tòa nhà</h3>
-          {hasBuilding && <Badge variant="secondary">Đã thiết lập</Badge>}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-base">corporate_fare</span>
+            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Định danh Tòa nhà</h3>
+          </div>
+          {hasBuilding && <Badge variant="outline" className="h-4 border-primary/30 text-primary bg-primary/5 text-[8px] font-black uppercase tracking-tighter">Connected</Badge>}
         </div>
 
-        {hasBuilding && currentBuilding ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Building2 className="size-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-muted-foreground font-bold uppercase">Tòa nhà trực thuộc</div>
-                <div className="text-sm font-bold truncate">{currentBuilding.name}</div>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={onManageBuilding}
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Select
+              disabled={!isEditing}
+              value={data.building_id?.toString() || "none"}
+              onValueChange={(val) => onChange('building_id', val === "none" ? null : parseInt(val))}
             >
-              Quản lý / Đổi tòa nhà
-            </Button>
+              <SelectTrigger className="h-9 bg-background border-border text-xs">
+                <SelectValue placeholder="Chọn tòa nhà..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">-- Không liên kết tòa nhà --</SelectItem>
+                {buildings.map((b) => (
+                  <SelectItem key={b.id} value={b.id.toString()}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ) : (
           <Button
             variant="outline"
-            className="w-full border-dashed h-auto py-4 flex-col gap-2"
+            size="icon"
+            className="h-9 w-9 bg-background border-border hover:text-primary hover:border-primary transition-all"
             onClick={onManageBuilding}
           >
-            <Building2 className="size-5" />
-            <span className="font-bold">Thiết lập tòa nhà</span>
-            <span className="text-xs font-normal text-muted-foreground">Thêm tầng & bản đồ chi tiết</span>
+            <span className="material-symbols-outlined text-lg">edit_note</span>
           </Button>
+        </div>
+        
+        {currentBuilding && (
+          <div className="p-2 bg-primary/5 rounded border border-primary/10 flex items-center gap-2">
+            <div className="w-1 h-3 bg-primary rounded-full" />
+            <div className="text-[11px] font-bold text-primary truncate flex-1">{currentBuilding.name}</div>
+          </div>
         )}
       </div>
 
@@ -510,9 +767,9 @@ function NodeForm({
           <Separator />
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase">Liên kết tầng</h3>
+              <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Liên kết tầng</h3>
               {(data.linked_node_ids?.length ?? 0) > 0 && (
-                <Badge variant="secondary">{data.linked_node_ids?.length} node</Badge>
+                <Badge variant="secondary">{(data.linked_node_ids?.length || 0)} node</Badge>
               )}
             </div>
 
@@ -585,55 +842,60 @@ function EdgeForm({
   onChange: (field: string, value: unknown) => void;
 }) {
   return (
-    <>
-      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-        <span className="text-xs text-muted-foreground">Kết nối</span>
-        <span className="font-mono font-bold text-sm">
-          #{data.start_node_id} → #{data.end_node_id}
-        </span>
+    <div className="space-y-4">
+      <div className="p-3 bg-muted/30 rounded-lg border border-border/50 flex flex-col gap-2">
+        <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Thông tin kết nối</h3>
+        <div className="flex items-center gap-2 font-mono text-xs text-primary font-black">
+          <span className="opacity-40">NODE</span> #{data.start_node_id}
+          <span className="material-symbols-outlined text-sm opacity-40">trending_flat</span>
+          <span className="opacity-40">NODE</span> #{data.end_node_id}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="text-xs font-bold uppercase mb-1 block">Weight</Label>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Trọng số (Weight)</Label>
           <Input
             type="number"
             disabled={!isEditing}
             value={data.weight || 0}
             onChange={(e) => onChange('weight', parseFloat(e.target.value))}
-            className="font-mono"
+            className="h-9 font-mono text-xs bg-background border-border"
           />
         </div>
-        <div>
-          <Label className="text-xs font-bold uppercase mb-1 block">Type</Label>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Loại đường đi</Label>
           <Select
             disabled={!isEditing}
             value={data.type}
             onValueChange={(value) => onChange('type', value)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="h-9 bg-background border-border text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="walk">Đi bộ</SelectItem>
-              <SelectItem value="stairs">Thang bộ</SelectItem>
-              <SelectItem value="elevator">Thang máy</SelectItem>
+              <SelectItem value="walk">Đi bộ (Walk)</SelectItem>
+              <SelectItem value="stairs">Thang bộ (Stairs)</SelectItem>
+              <SelectItem value="elevator">Thang máy (Elevator)</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="flex items-center justify-between p-3 rounded-lg border">
-        <span className="text-xs font-bold">Đường 2 chiều</span>
+      <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/5">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-foreground/80">Di chuyển 2 chiều</span>
+          <p className="text-[10px] text-muted-foreground">Cho phép di chuyển ngược lại</p>
+        </div>
         <input
           type="checkbox"
           disabled={!isEditing}
           checked={data.bidirectional ?? true}
           onChange={(e) => onChange('bidirectional', e.target.checked)}
-          className="w-4 h-4 accent-primary"
+          className="w-4 h-4 accent-primary rounded border-border"
         />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -650,17 +912,22 @@ function InspectorFooter({
 }) {
   if (isEditing) {
     return (
-      <div className="p-4 border-t border-border grid grid-cols-2 gap-2">
-        <Button variant="outline" onClick={onCancel}>Hủy</Button>
-        <Button onClick={onSave}>Lưu</Button>
+      <div className="p-4 border-t border-border bg-background grid grid-cols-2 gap-2 shrink-0">
+        <Button variant="outline" size="sm" onClick={onCancel} className="h-9 font-black text-[10px] uppercase tracking-widest">Hủy</Button>
+        <Button onClick={onSave} size="sm" className="h-9 font-black text-[10px] uppercase tracking-widest bg-primary hover:bg-primary/90">Lưu thay đổi</Button>
       </div>
     );
   }
 
   return (
-    <div className="p-4 border-t border-border">
-      <Button variant="destructive" onClick={onDelete} className="w-full">
-        Xóa đối tượng
+    <div className="p-4 border-t border-border bg-muted/10 shrink-0">
+      <Button 
+        variant="ghost" 
+        onClick={onDelete} 
+        className="w-full h-9 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-red-600 hover:bg-red-50"
+      >
+        <span className="material-symbols-outlined text-base mr-2">delete</span>
+        Gỡ bỏ đối tượng
       </Button>
     </div>
   );

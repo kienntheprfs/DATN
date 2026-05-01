@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
-import { Footprints } from 'lucide-react';
-import { getFullImageUrl } from '@/services/wayfinding-client';
+import { useState, useEffect, useMemo, useRef } from 'react';
+
+import { UnifiedMapView } from '@/components/features/navigation/UnifiedMapView';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Layers, Navigation2, Maximize2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { wayfindingMapApi } from '@/services/wayfinding-map-api';
-import { MapData, MapNode, Instruction } from '@/types';
-import { MapWithData } from '@/types';
+import { getFullImageUrl } from '@/services/wayfinding-client';
+import { MapData, MapNode, Instruction, MapWithData } from '@/types/wayfinding';
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -14,6 +17,8 @@ interface RouteData {
   type: string;
   start_name: string;
   end_name: string;
+  start_node_id?: number;
+  end_node_id?: number;
   map: MapData;
   floors?: { map_id: number; name: string; floor_level: number | null; path_coords: number[][]; instructions: Instruction[] }[];
   path_coords: number[][];
@@ -29,15 +34,13 @@ interface MiniNavProps {
   routeData: RouteData;
 }
 
-function MiniFloorMap({ 
-  floor, 
-  isActive
-}: { 
-  floor: { map_id: number; name: string; floor_level: number | null; path_coords: number[][]; instructions: Instruction[] };
-  isActive: boolean;
-}) {
+
+
+export function MiniNavigation({ routeData }: MiniNavProps) {
+  const router = useRouter();
   const [allMaps, setAllMaps] = useState<MapWithData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -54,146 +57,23 @@ function MiniFloorMap({
     load();
   }, []);
 
-  const currentFloorMap = allMaps.find(m => m.map.id === floor.map_id) || allMaps[floor.map_id - 1] || allMaps[0];
-  const currentMap = currentFloorMap?.map;
-  const currentNodes = currentFloorMap?.nodes || [];
-  
-  const pathData = useMemo(() => {
-    if (!floor.path_coords || floor.path_coords.length < 2 || !currentNodes.length) return '';
-    
-    const nodeMap = new Map(currentNodes.map(n => [n.id, n]));
-    
-    const floorPathCoords: number[][] = [];
-    for (const coord of floor.path_coords) {
-      const matchingNode = currentNodes.find(n => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2);
-      if (matchingNode) {
-        floorPathCoords.push(coord);
-      }
-    }
-    
-    if (floorPathCoords.length < 2) return '';
-    return `M ${floorPathCoords.map(c => `${c[0]} ${c[1]}`).join(' L ')}`;
-  }, [floor.path_coords, currentNodes]);
-
-  const viewBox = useMemo(() => {
-    if (!floor.path_coords || floor.path_coords.length === 0) return `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`;
-    
-    const xs = floor.path_coords.map(c => c[0]);
-    const ys = floor.path_coords.map(c => c[1]);
-    const pathMinX = Math.min(...xs);
-    const pathMinY = Math.min(...ys);
-    const pathMaxX = Math.max(...xs);
-    const pathMaxY = Math.max(...ys);
-    
-    const centerX = (pathMinX + pathMaxX) / 2;
-    const centerY = (pathMinY + pathMaxY) / 2;
-    const range = Math.max(pathMaxX - pathMinX, pathMaxY - pathMinY) + 100;
-    
-    return `${centerX - range/2} ${centerY - range/2} ${range} ${range}`;
-  }, [floor.path_coords]);
-
-  const startCoord = floor.path_coords?.[0];
-  const endCoord = floor.path_coords?.[floor.path_coords.length - 1];
-  
-  const showStartMarker = useMemo(() => {
-    if (!startCoord || !currentNodes.length) return false;
-    return currentNodes.some(n => Math.abs(n.x - startCoord[0]) < 2 && Math.abs(n.y - startCoord[1]) < 2);
-  }, [startCoord, currentNodes]);
-  
-  const showEndMarker = useMemo(() => {
-    if (!endCoord || !currentNodes.length) return false;
-    return currentNodes.some(n => Math.abs(n.x - endCoord[0]) < 2 && Math.abs(n.y - endCoord[1]) < 2);
-  }, [endCoord, currentNodes]);
-
-  if (!isActive) return null;
-
-  if (loading) {
-    return (
-      <div className="relative bg-muted/30 rounded-lg overflow-hidden flex items-center justify-center h-40">
-        <span className="material-symbols-outlined text-muted-foreground animate-spin">sync</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative bg-muted/30 rounded-lg overflow-hidden" style={{ height: '300px' }}>
-      <svg
-        viewBox={viewBox}
-        className="w-full h-full"
-      >
-        {currentMap && (
-          <image
-            href={getFullImageUrl(currentMap.image_url)}
-            x="0"
-            y="0"
-            width={MAP_WIDTH}
-            height={MAP_HEIGHT}
-            preserveAspectRatio="xMidYMid meet"
-            opacity="0.85"
-          />
-        )}
-
-        {floor.path_coords && floor.path_coords.length > 0 && (
-          <path
-            d={pathData}
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="drop-shadow-lg"
-          />
-        )}
-
-        {showStartMarker && startCoord && (
-          <g>
-            <circle cx={startCoord[0]} cy={startCoord[1]} r="12" fill="#2563eb" />
-            <circle cx={startCoord[0]} cy={startCoord[1]} r="6" fill="white" />
-            <text x={startCoord[0] + 18} y={startCoord[1] + 4} fill="#1e40af" fontSize="11" fontWeight="bold">
-              START
-            </text>
-          </g>
-        )}
-
-        {showEndMarker && endCoord && (
-          <g>
-            <circle cx={endCoord[0]} cy={endCoord[1]} r="12" fill="#dc2626" />
-            <circle cx={endCoord[0]} cy={endCoord[1]} r="6" fill="white" />
-            <text x={endCoord[0] + 18} y={endCoord[1] + 4} fill="#991b1b" fontSize="11" fontWeight="bold">
-              END
-            </text>
-          </g>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-export function MiniNavigation({ routeData }: MiniNavProps) {
   const floors = useMemo(() => {
     if (routeData.floors && routeData.floors.length > 0) {
       return routeData.floors;
     }
+    // Logic fallback to build floors from route_maps if not provided
+    // (Existing logic kept for robustness)
     if (routeData.route_maps && routeData.route_maps.length > 0) {
-      // Dùng path_node_ids để xác định floor
       const pathNodeIds = routeData.path_node_ids || [];
       const fullPath = routeData.path_coords || [];
       
       return routeData.route_maps.map((rm, idx) => {
         const mapId = rm.map?.id;
         const mapFloor = rm.map?.floor_level;
-        
-        // Lấy nodes thuộc floor này
         const floorNodes = rm.nodes || [];
         const floorNodeIds = new Set(floorNodes.map(n => n.id));
-        
-        // Lọc path_node_ids thuộc floor này
         const floorPathNodeIds = pathNodeIds.filter(id => floorNodeIds.has(id));
-        
-        // Map node_id -> index trong path
         const nodeIdToIdx = new Map(pathNodeIds.map((id, i) => [id, i]));
-        
-        // Lấy path_coords theo thứ tự của floorPathNodeIds
         const floorPathCoords: number[][] = [];
         const usedIndices = new Set<number>();
         
@@ -223,111 +103,264 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
     }];
   }, [routeData]);
 
-  const pathNodeIds = routeData.path_node_ids || [];
-  const startNodeId = pathNodeIds[0];
-  
-  // Tìm floor đầu tiên có chứa start node (từ route_maps)
-  const startFloor = useMemo(() => {
-    if (routeData.route_maps && routeData.route_maps.length > 0 && startNodeId) {
-      for (let idx = 0; idx < routeData.route_maps.length; idx++) {
-        const rm = routeData.route_maps[idx];
-        const floorNodeIds = (rm.nodes || []).map(n => Number(n.id));
-        if (floorNodeIds.includes(Number(startNodeId))) {
-          return idx;
-        }
-      }
-    }
-    // Fallback: floor đầu tiên có path_coords
-    return floors.findIndex(f => f.path_coords && f.path_coords.length > 0) || 0;
-  }, [routeData.route_maps, startNodeId]);
-  
-  const [activeFloor, setActiveFloor] = useState(startFloor);
+  // Convert floors to FloorSegment for UnifiedMapView
+  const floorSegments = useMemo(() => {
+    return floors.map((f, idx) => {
+      // Find the index in allMaps that matches f.map_id
+      const allMapsIdx = allMaps.findIndex(m => m.map.id === f.map_id);
+      return {
+        floorIndex: allMapsIdx !== -1 ? allMapsIdx : idx,
+        pathCoords: f.path_coords,
+        instructions: f.instructions || [],
+      };
+    });
+  }, [floors, allMaps]);
+
+  const [activeFloorIdx, setActiveFloorIdx] = useState(0);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (routeData.route_maps && routeData.route_maps.length > 0 && startNodeId) {
-      for (let idx = 0; idx < routeData.route_maps.length; idx++) {
-        const rm = routeData.route_maps[idx];
-        const floorNodeIds = (rm.nodes || []).map(n => Number(n.id));
-        if (floorNodeIds.includes(Number(startNodeId))) {
-          setActiveFloor(idx);
-          return;
+    if (routeData.path_node_ids?.[0] && allMaps.length > 0) {
+      const startNode = allMaps.flatMap(m => m.nodes).find(n => n.id === routeData.path_node_ids[0]);
+      if (startNode) {
+        const floorIdx = allMaps.findIndex(m => m.map.id === startNode.map_id);
+        if (floorIdx !== -1) setActiveFloorIdx(floorIdx);
+      }
+    }
+  }, [routeData.path_node_ids, allMaps]);
+
+  const currentInstructions = useMemo(() => routeData.instructions || [], [routeData]);
+  const activeStep = currentInstructions[currentStep];
+
+  // Auto-center map on current step
+  const centerOnStep = () => {
+    if (activeStep && activeStep.coordinate && viewportRef.current) {
+      const { width, height } = viewportRef.current.getBoundingClientRect();
+      if (width === 0 || height === 0) return; // Wait for layout
+      
+      const [x, y] = activeStep.coordinate;
+      const S = 2.0; // matching scale prop
+      setPosition({
+        x: width / 2 - x * S,
+        y: height / 2 - y * S
+      });
+    }
+  };
+
+  useEffect(() => {
+    centerOnStep();
+    // Add a small delay to handle cases where layout might take a moment
+    const timer = setTimeout(centerOnStep, 100);
+    return () => clearTimeout(timer);
+  }, [activeStep, activeFloorIdx, loading]);
+
+  // Initial floor selection based on first instruction
+  useEffect(() => {
+    if (!loading && activeStep && activeStep.coordinate && allMaps.length > 0) {
+      // Find which map contains this coordinate
+      const [x, y] = activeStep.coordinate;
+      const targetMap = allMaps.find(m => 
+        m.nodes.some(n => Math.abs(n.x - x) < 5 && Math.abs(n.y - y) < 5)
+      );
+      if (targetMap) {
+        const floorIdx = allMaps.findIndex(m => m.map.id === targetMap.map.id);
+        if (floorIdx !== -1 && floorIdx !== activeFloorIdx) {
+          setActiveFloorIdx(floorIdx);
         }
       }
     }
-  }, [routeData.route_maps, startNodeId]);
-  
-  const currentFloor = floors[activeFloor];
-  const estimatedMinutes = Math.ceil(routeData.total_distance_m / 80);
+  }, [loading, activeStep, allMaps]);
+
+  const handleNextStep = () => {
+    if (currentStep < currentInstructions.length - 1) {
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      // Auto switch floor if step coordinate belongs to another floor
+      const coord = currentInstructions[nextStep].coordinate;
+      const targetMap = allMaps.find(m => 
+        m.nodes.some(n => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2)
+      );
+      if (targetMap) {
+        const floorIdx = allMaps.findIndex(m => m.map.id === targetMap.map.id);
+        if (floorIdx !== -1) setActiveFloorIdx(floorIdx);
+      }
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (currentStep > 0) {
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      const coord = currentInstructions[prevStep].coordinate;
+      const targetMap = allMaps.find(m => 
+        m.nodes.some(n => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2)
+      );
+      if (targetMap) {
+        const floorIdx = allMaps.findIndex(m => m.map.id === targetMap.map.id);
+        if (floorIdx !== -1) setActiveFloorIdx(floorIdx);
+      }
+    }
+  };
+
+  const goToNavigation = () => {
+    const params = new URLSearchParams();
+    if (routeData.start_node_id) params.set('start', routeData.start_node_id.toString());
+    if (routeData.end_node_id) params.set('end', routeData.end_node_id.toString());
+    router.push(`/navigation?${params.toString()}`);
+  };
+
+  if (loading) return (
+    <div className="h-64 flex items-center justify-center bg-muted/20 rounded-xl border border-dashed border-border">
+      <Navigation2 className="w-6 h-6 animate-pulse text-muted-foreground" />
+    </div>
+  );
 
   return (
-    <div className="border border-border rounded-xl overflow-hidden bg-card shadow-lg">
-      <div className="p-3 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Footprints className="w-4 h-4 text-primary" />
+    <div className="flex flex-col border border-border rounded-2xl overflow-hidden bg-card shadow-xl max-w-full">
+      {/* Header */}
+      <div className="p-4 bg-gradient-to-br from-primary/5 to-transparent border-b border-border">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="px-1.5 py-0.5 rounded bg-primary/20 text-[10px] font-bold text-primary uppercase tracking-wider">
+                Route Found
+              </div>
+              <span className="text-xs text-muted-foreground font-medium">
+                {Math.round(routeData.total_distance_m)}m • {Math.ceil(routeData.total_distance_m / 80)} min
+              </span>
             </div>
-            <div>
-              <h4 className="font-bold text-sm text-foreground">
-                {routeData.start_name} → {routeData.end_name}
-              </h4>
-              <p className="text-xs text-muted-foreground">
-                ~{estimatedMinutes} phút • {Math.round(routeData.total_distance_m)}m
-              </p>
+            <h4 className="font-bold text-sm truncate text-foreground leading-tight">
+              {routeData.start_name} <span className="text-muted-foreground font-normal mx-1">→</span> {routeData.end_name}
+            </h4>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToNavigation}
+            className="shrink-0 h-8 gap-1.5 rounded-full border-primary/20 hover:bg-primary/5"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-bold">XEM LỚN</span>
+          </Button>
+        </div>
+      </div>
+      {/* Map Viewport */}
+      <div 
+        ref={viewportRef}
+        className="relative h-[350px] bg-slate-950/5 overflow-hidden border-b border-border"
+      >
+        <UnifiedMapView
+          floorMaps={allMaps}
+          floorSegments={floorSegments}
+          currentFloorIndex={activeFloorIdx}
+          scale={2.0}
+          position={position}
+          isDragging={false}
+          svgRef={{ current: null }}
+          getFullImageUrl={getFullImageUrl}
+          renderFloorContent={(idx, is3D) => {
+            const floorSegs = floorSegments.filter(s => s.floorIndex === idx);
+            if (floorSegs.length === 0) return null;
+            
+            const isCurrentStepOnThisFloor = activeStep && activeStep.coordinate && activeFloorIdx === idx;
+            
+            return (
+              <g>
+                {floorSegs.map((seg, sIdx) => (
+                  <path
+                    key={`path-seg-${idx}-${sIdx}`}
+                    d={`M ${seg.pathCoords.map(c => `${c[0]} ${c[1]}`).join(' L ')}`}
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="drop-shadow-lg opacity-80"
+                  />
+                ))}
+                
+                {isCurrentStepOnThisFloor && (
+                  <g>
+                    <circle
+                      cx={activeStep.coordinate[0]}
+                      cy={activeStep.coordinate[1]}
+                      r="12"
+                      fill="#3b82f6"
+                      fillOpacity="0.2"
+                      className="animate-ping"
+                    />
+                    <circle
+                      cx={activeStep.coordinate[0]}
+                      cy={activeStep.coordinate[1]}
+                      r="6"
+                      fill="#ffffff"
+                      stroke="#3b82f6"
+                      strokeWidth="3"
+                      className="drop-shadow-md"
+                    />
+                  </g>
+                )}
+              </g>
+            );
+          }}
+        />
+      </div>
+
+      {/* Step-by-Step Content (Now Outside) */}
+      <div className="bg-background p-4 flex flex-col gap-3">
+         <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+               <div className="text-[10px] uppercase font-black text-muted-foreground tracking-tighter mb-0.5">
+                  Bước {currentStep + 1} / {currentInstructions.length}
+               </div>
+               <div className="text-sm font-bold leading-snug line-clamp-2">
+                  {activeStep?.text || 'Bắt đầu di chuyển'}
+               </div>
+            </div>
+            <div className="flex items-center gap-1">
+               <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-9 w-9 rounded-full border-border hover:bg-muted" 
+                disabled={currentStep === 0}
+                onClick={handlePrevStep}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-9 w-9 rounded-full border-border hover:bg-muted" 
+                disabled={currentStep === currentInstructions.length - 1}
+                onClick={handleNextStep}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>
 
-        {floors.length > 1 && (
-          <div className="flex items-center gap-2 py-2">
-            <span className="text-xs text-amber-600 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs">layers</span>
-              Đường đi qua {floors.length} tầng
-            </span>
-            <div className="flex gap-1 overflow-x-auto">
-              {floors.map((floor, idx) => (
-                <button
-                  key={floor.map_id}
-                  onClick={() => setActiveFloor(idx)}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
-                    activeFloor === idx
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+      {/* Multi-floor Tabs */}
+      {allMaps.length > 1 && (
+        <div className="flex items-center gap-1.5 p-2 bg-muted/20 border-t border-border overflow-x-auto no-scrollbar">
+          <Layers className="w-3.5 h-3.5 text-muted-foreground ml-1 mr-1" />
+          {allMaps.map((m, idx) => {
+            const isActive = activeFloorIdx === idx;
+            return (
+              <button
+                key={m.map.id}
+                onClick={() => setActiveFloorIdx(idx)}
+                className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap
+                  ${isActive 
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105' 
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
-                >
-                  {floor.floor_level === null ? 'Campus' : `Tầng ${floor.floor_level}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <MiniFloorMap 
-        floor={currentFloor} 
-        isActive={true}
-      />
-
-      {currentFloor.instructions && currentFloor.instructions.length > 0 && (
-        <div className="p-3 max-h-50 overflow-y-auto">
-          <div className="space-y-0.5">
-            {currentFloor.instructions.map((inst, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-2 py-1 text-xs"
               >
-                <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-[10px] shrink-0">
-                  {inst.step}
-                </span>
-                <span className="flex-1 text-foreground">{inst.text}</span>
-                {inst.distance_m > 0 && (
-                  <span className="text-muted-foreground font-mono text-[10px] shrink-0">
-                    {inst.distance_m}m
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+                {m.map.floor_level === null ? 'Campus' : `Tầng ${m.map.floor_level}`}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

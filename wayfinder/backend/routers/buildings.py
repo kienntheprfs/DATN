@@ -9,6 +9,7 @@ from sqlmodel import SQLModel
 class BuildingBase(SQLModel):
     name: str
     description: Optional[str] = None
+    real_image_url: Optional[str] = None
 
 # Model dùng để Tạo mới (Client gửi lên)
 class BuildingCreate(BuildingBase):
@@ -18,6 +19,7 @@ class BuildingCreate(BuildingBase):
 class BuildingUpdate(SQLModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    real_image_url: Optional[str] = None
 
 # Model dùng để Trả về (Response) - Có thêm ID
 class BuildingRead(BuildingBase):

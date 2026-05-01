@@ -31,6 +31,7 @@ import {
     Trash2,
     Shield,
     HelpCircle,
+    Navigation,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -75,6 +76,20 @@ const data = {
             title: "Câu hỏi thường gặp",
             url: "/faq",
             icon: HelpCircle,
+            isActive: true,
+            requiresAuth: true,
+            requiresAdmin: true,
+        },
+        {
+            title: "Chỉ đường",
+            url: "/navigation",
+            icon: Navigation,
+            isActive: true,
+        },
+        {
+            title: "Quản lý bản đồ",
+            url: "/navigation/editor",
+            icon: Shield,
             isActive: true,
             requiresAuth: true,
             requiresAdmin: true,
@@ -303,10 +318,10 @@ export function AppSidebar() {
                                         tooltip={item.title}
                                         className="hover:bg-white/15 hover:text-white"
                                     >
-                                        <a href={item.url}>
+                                        <Link href={item.url}>
                                             {item.icon && <item.icon />}
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             );

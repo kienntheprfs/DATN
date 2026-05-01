@@ -120,18 +120,27 @@ def report_missing_route(
 
 
 def find_route_func(
-    from_location: str,
-    to_location: str,
+    from_location: Optional[str] = None,
+    to_location: Optional[str] = None,
+    from_node_id: Optional[int] = None,
+    to_node_id: Optional[int] = None,
 ) -> str:
     """Tìm đường đi từ địa điểm xuất phát đến địa điểm đến (đa tầng).
 
-    IMPORTANT: Đầu vào PHẢI là tên cụ thể của địa điểm thực tế trong trường.
-    - from_location: Phải là tên Phòng/Tòa/Tầng cụ thể (VD: "Phòng 101 Tòa B4", "Thư viện Tầng 1", "Căn tin Khu A"). KHÔNG dùng "vị trí hiện tại", "đây", "tôi đang ở".
-    - to_location: Phải là tên địa điểm cụ thể (VD: "Phòng họp A Tầng 2", "Phòng đào tạo Tòa B3"). KHÔNG dùng "điểm đến", "đó", "nơi đó".
+    IMPORTANT: Bạn có thể truyền tên địa điểm HOẶC ID cụ thể (nếu đã biết từ bước xác nhận trước đó).
+    - from_location: Tên Phòng/Tòa/Tầng (VD: "Phòng 101 Tòa B4").
+    - to_location: Tên địa điểm đến (VD: "Phòng họp A").
+    - from_node_id: ID của node xuất phát (nếu đã có từ bước xác nhận).
+    - to_node_id: ID của node đến (nếu đã có từ bước xác nhận).
 
     Returns:
         JSON string containing route data for frontend rendering.
     """
+    if not from_node_id and not from_location:
+        return json.dumps({"status": "error", "message": "Thiếu thông tin điểm đi."})
+    if not to_node_id and not to_location:
+        return json.dumps({"status": "error", "message": "Thiếu thông tin điểm đến."})
+
     generic_patterns = [
         "vị trí hiện tại",
         "điểm đến",
@@ -145,10 +154,10 @@ def find_route_func(
         "there",
     ]
 
-    from_lower = from_location.lower().strip()
-    to_lower = to_location.lower().strip()
+    from_lower = from_location.lower().strip() if from_location else ""
+    to_lower = to_location.lower().strip() if to_location else ""
 
-    if any(p in from_lower for p in generic_patterns):
+    if from_location and any(p in from_lower for p in generic_patterns):
         return json.dumps(
             {
                 "type": "route",
@@ -159,7 +168,7 @@ def find_route_func(
                 "end_name": to_location,
             }
         )
-    if any(p in to_lower for p in generic_patterns):
+    if to_location and any(p in to_lower for p in generic_patterns):
         return json.dumps(
             {
                 "type": "route",
@@ -171,24 +180,66 @@ def find_route_func(
             }
         )
 
-    try:
-        # Search start location (all floors) - increase limit
-        start_response = requests.get(
-            f"{WAYFINDER_API}/api/aliases/search",
-            params={"q": from_location, "limit": 20},
-            timeout=10,
-        )
-        start_response.raise_for_status()
-        start_results = start_response.json()
 
-        # Search end location (all floors) - increase limit
-        end_response = requests.get(
-            f"{WAYFINDER_API}/api/aliases/search",
-            params={"q": to_location, "limit": 20},
-            timeout=10,
-        )
-        end_response.raise_for_status()
-        end_results = end_response.json()
+    try:
+        # Search start location (if ID not provided)
+        start_results = []
+        if from_node_id:
+            # Get node info to have a display name
+            resp = requests.get(f"{WAYFINDER_API}/api/nodes/{from_node_id}", timeout=5)
+            if resp.status_code == 200:
+                n = resp.json()
+                start_results = [{
+                    "node_id": n["id"],
+                    "name": n["name"],
+                    "score": 100.0,
+                    "map_id": n["map_id"]
+                }]
+                # Try to get building/floor info for display
+                m_resp = requests.get(f"{WAYFINDER_API}/api/maps/{n['map_id']}", timeout=5)
+                if m_resp.status_code == 200:
+                    m = m_resp.json()
+                    start_results[0]["floor"] = m.get("floor_level")
+                    if m.get("building_id"):
+                        b_resp = requests.get(f"{WAYFINDER_API}/api/buildings/{m['building_id']}", timeout=5)
+                        if b_resp.status_code == 200:
+                            start_results[0]["building_name"] = b_resp.json().get("name")
+        else:
+            start_response = requests.get(
+                f"{WAYFINDER_API}/api/aliases/search",
+                params={"q": from_location, "limit": 20},
+                timeout=10,
+            )
+            start_results = start_response.json() if start_response.status_code == 200 else []
+
+        # Search end location (if ID not provided)
+        end_results = []
+        if to_node_id:
+            resp = requests.get(f"{WAYFINDER_API}/api/nodes/{to_node_id}", timeout=5)
+            if resp.status_code == 200:
+                n = resp.json()
+                end_results = [{
+                    "node_id": n["id"],
+                    "name": n["name"],
+                    "score": 100.0,
+                    "map_id": n["map_id"]
+                }]
+                m_resp = requests.get(f"{WAYFINDER_API}/api/maps/{n['map_id']}", timeout=5)
+                if m_resp.status_code == 200:
+                    m = m_resp.json()
+                    end_results[0]["floor"] = m.get("floor_level")
+                    if m.get("building_id"):
+                        b_resp = requests.get(f"{WAYFINDER_API}/api/buildings/{m['building_id']}", timeout=5)
+                        if b_resp.status_code == 200:
+                            end_results[0]["building_name"] = b_resp.json().get("name")
+        else:
+            end_response = requests.get(
+                f"{WAYFINDER_API}/api/aliases/search",
+                params={"q": to_location, "limit": 20},
+                timeout=10,
+            )
+            end_results = end_response.json() if end_response.status_code == 200 else []
+
 
         # Report missing locations if not found in DB
         if not start_results:
@@ -237,60 +288,49 @@ def find_route_func(
                 parts.append(item["building_name"])
             if item.get("floor") is not None:
                 parts.append(f"Tầng {item['floor']}")
+            
+            display = item['name']
             if parts:
-                return f"{item['name']} ({', '.join(parts)})"
-            return item["name"]
+                display += f" ({', '.join(parts)})"
+            
+            # Luôn đính kèm ID để Agent có thể dùng chính xác trong bước sau
+            return f"{display} [ID: {item['node_id']}]"
 
-        # Check if we have multiple candidates - show options for user to confirm
-        if len(start_results) > 1 or len(end_results) > 1:
-            start_opts = [format_location(r) for r in start_results[:5]]
-            end_opts = [format_location(r) for r in end_results[:5]]
 
-            # If we have good match (high score), use it directly
-            if start_results[0].get("score", 0) >= 70 and len(start_results) == 1:
-                start_node_id = start_results[0]["node_id"]
-                start_display = format_location(start_results[0])
-            elif start_results[0].get("score", 0) >= 50:
-                # Show top matches and use the best one
-                start_node_id = start_results[0]["node_id"]
-                start_display = format_location(start_results[0])
-            else:
-                # Low confidence - ask user
-                return json.dumps(
-                    {
-                        "type": "route",
-                        "status": "needs_confirmation",
-                        "message": f"Tìm thấy nhiều địa điểm có thể là '{from_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn.",
-                        "start_name": from_location,
-                        "end_name": to_location,
-                        "start_options": start_opts,
-                        "end_options": end_opts,
-                    }
-                )
+        # Ambiguity check helper
+        def get_best_node(results, location_name):
+            if not results:
+                return None, None, None
+            
+            # If only one result, use it
+            if len(results) == 1:
+                return results[0]["node_id"], format_location(results[0]), None
+            
+            # If multiple results, check if the first one is clearly better
+            score1 = results[0].get("score", 0)
+            score2 = results[1].get("score", 0)
+            
+            # If chênh lệch score >= 20, assume the first one is correct
+            if score1 - score2 >= 20:
+                return results[0]["node_id"], format_location(results[0]), None
+            
+            # Otherwise, it's ambiguous
+            opts = [format_location(r) for r in results[:3]]
+            return None, None, opts
 
-            if end_results[0].get("score", 0) >= 70 and len(end_results) == 1:
-                end_node_id = end_results[0]["node_id"]
-                end_display = format_location(end_results[0])
-            elif end_results[0].get("score", 0) >= 50:
-                end_node_id = end_results[0]["node_id"]
-                end_display = format_location(end_results[0])
-            else:
-                return json.dumps(
-                    {
-                        "type": "route",
-                        "status": "needs_confirmation",
-                        "message": f"Tìm thấy nhiều địa điểm có thể là '{to_location}'. Vui lòng xác nhận hoặc cung cấp thông tin cụ thể hơn.",
-                        "start_name": start_display,
-                        "end_name": to_location,
-                        "start_options": [start_display],
-                        "end_options": end_opts,
-                    }
-                )
-        else:
-            start_node_id = start_results[0]["node_id"]
-            end_node_id = end_results[0]["node_id"]
-            start_display = format_location(start_results[0])
-            end_display = format_location(end_results[0])
+        start_node_id, start_display, start_opts = get_best_node(start_results, from_location)
+        end_node_id, end_display, end_opts = get_best_node(end_results, to_location)
+
+        if not start_node_id or not end_node_id:
+            return json.dumps({
+                "type": "route",
+                "status": "needs_confirmation",
+                "message": "Tìm thấy nhiều địa điểm phù hợp. Vui lòng chọn địa điểm chính xác:",
+                "start_name": from_location,
+                "end_name": to_location,
+                "start_options": start_opts if not start_node_id else [start_display],
+                "end_options": end_opts if not end_node_id else [end_display],
+            })
 
         # Find route (multi-floor)
         route_response = requests.get(
@@ -424,6 +464,55 @@ def find_route_func(
             }
         )
 
+def guess_location_by_description_func(description: str) -> str:
+    """Gợi ý vị trí dựa trên mô tả hoặc tên (Sử dụng fuzzy matching). 
+    Dùng khi người dùng mô tả vị trí của họ (VD: "Tôi đang ở gần thang máy tòa B4")."""
+    try:
+        response = requests.get(
+            f"{WAYFINDER_API}/api/locations/guess",
+            params={"query": description, "limit": 5},
+            timeout=10,
+        )
+        if response.status_code == 200:
+            results = response.json()
+            if not results:
+                return "Không tìm thấy địa điểm nào khớp với mô tả của bạn."
+            
+            return json.dumps({
+                "type": "location_guess",
+                "status": "success",
+                "results": results
+            }, ensure_ascii=False)
+        return "Lỗi khi tìm kiếm địa điểm."
+    except Exception as e:
+        return f"Lỗi kết nối: {str(e)}"
+
+def get_landmark_images_func() -> str:
+    """Lấy danh sách các địa điểm nổi bật có hình ảnh thực tế để người dùng nhận diện vị trí.
+    Dùng khi người dùng không biết mình đang ở đâu và cần gợi ý bằng hình ảnh."""
+    try:
+        response = requests.get(
+            f"{WAYFINDER_API}/api/locations/landmarks",
+            timeout=10,
+        )
+        if response.status_code == 200:
+            results = response.json()
+            return json.dumps({
+                "type": "landmarks",
+                "status": "success",
+                "landmarks": results
+            }, ensure_ascii=False)
+        return "Lỗi khi lấy danh sách địa điểm nổi bật."
+    except Exception as e:
+        return f"Lỗi kết nối: {str(e)}"
+
+guess_location_by_description: Any = tool(guess_location_by_description_func)
+guess_location_by_description.name = "GuessLocationByDescription"
+
+get_landmark_images: Any = tool(get_landmark_images_func)
+get_landmark_images.name = "GetLandmarkImages"
+
+
 
 find_route: Any = tool(find_route_func)
 find_route.name = "FindRoute"
@@ -434,4 +523,10 @@ report_missing_location_tool.name = "ReportMissingLocation"
 report_missing_route_tool: Any = tool(report_missing_route)
 report_missing_route_tool.name = "ReportMissingRoute"
 
-map_tools = [find_route, report_missing_location_tool, report_missing_route_tool]
+map_tools = [
+    find_route, 
+    report_missing_location_tool, 
+    report_missing_route_tool,
+    guess_location_by_description,
+    get_landmark_images
+]

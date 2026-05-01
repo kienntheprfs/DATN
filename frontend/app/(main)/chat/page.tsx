@@ -331,6 +331,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 										voiceThreadId={voice.threadId || undefined}
 										voiceState={voice.state}
 										readOnly={isReadOnly}
+										sendMessage={handleSendMessage}
 									/>
 								</div>
 							</div>

@@ -12,7 +12,7 @@ export const buildingApi = {
         return res.data;
     },
 
-    create: async (data: { name: string; description?: string }) => {
+    create: async (data: { name: string; description?: string; real_image_url?: string }) => {
         const res = await apiClient.post<Building>("/wayfinder/api/buildings", data);
         return res.data;
     },

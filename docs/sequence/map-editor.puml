@@ -1,0 +1,34 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Quản trị viên" as Admin
+participant "Giao diện Biên tập Bản đồ" as UI
+participant "Backend Server" as Backend
+database "Database Bản đồ\n(Graph Data)" as MapDB
+
+Admin -> UI : Thêm/Sửa Điểm mốc (Node) & Đoạn đường (Edge)
+activate UI
+
+UI -> UI : Hiển thị thay đổi trực quan (Preview)
+
+Admin -> UI : Nhấn "Lưu và triển khai"
+UI -> Backend : Gửi mảng dữ liệu Nodes & Edges mới
+activate Backend
+
+Backend -> Backend : Kiểm tra tính hợp lệ của đồ thị\n(Xác thực các liên kết)
+
+Backend -> MapDB : Cập nhật CSDL Không gian
+activate MapDB
+MapDB --> Backend : Xác nhận cập nhật thành công
+deactivate MapDB
+
+Backend -> Backend : Build lại Cache ma trận đồ thị\n(để thuật toán tìm đường chạy nhanh hơn)
+
+Backend --> UI : Thông báo Triển khai thành công
+deactivate Backend
+
+UI --> Admin : Cập nhật trạng thái hệ thống chỉ đường
+deactivate UI
+@enduml
