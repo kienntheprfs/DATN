@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select, delete, Relationship
 from sqlalchemy.orm import selectinload
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 
 # Đảm bảo import đủ các model
 from backend.models.entities import Node, Map, Alias, Edge, Building
@@ -11,9 +11,6 @@ from backend.models.entities import Node, Map, Alias, Edge, Building
 router = APIRouter()
 
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 # --- SCHEMAS (DTO) ---

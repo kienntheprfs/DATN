@@ -4,15 +4,12 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from datetime import datetime
 
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from backend.models.entities import MissingRoute
 
 router = APIRouter()
 
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 class MissingRouteCreate(BaseModel):

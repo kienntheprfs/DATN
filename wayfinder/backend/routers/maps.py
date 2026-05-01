@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlmodel import Session, select
 
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 
 # Import đúng các model mới
 from backend.models.entities import Map, Building, Edge, Node
@@ -20,9 +20,6 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 # =========================================================================

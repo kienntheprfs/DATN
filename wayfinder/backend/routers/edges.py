@@ -2,15 +2,12 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from backend.models.entities import Edge, Map, Node
 from backend.services.geo import polyline_length, calculate_edge_weight, TYPE_FACTORS
 
 router = APIRouter()
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 # --- SCHEMAS ---
 class EdgeIn(BaseModel):

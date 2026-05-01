@@ -47,16 +47,20 @@ export default defineConfig({
                         if (sourcePath.includes("node_modules") || sourcePath.includes(".next/")) {
                             return false;
                         }
-                        // Next.js app router: webpack://_N_E/app/... hoặc có thể là absolute path như D:/Code/...
-                        // Chấp nhận mọi đường dẫn trong frontend/
+                        
+                        // Chấp nhận mọi file trong thư mục frontend/ ngoại trừ tests
+                        const normalizedPath = sourcePath.replace(/\\/g, '/');
+                        
+                        // Chấp nhận các file từ app, components, hooks, lib, services, stores
+                        // Bỏ tiền tố /frontend/ để khớp cả đường dẫn URL và file local
                         return (
-                            sourcePath.includes("frontend") ||
-                            (sourcePath.includes("/app/") && !sourcePath.includes("node_modules")) ||
-                            (sourcePath.includes("/components/") && !sourcePath.includes("node_modules")) ||
-                            (sourcePath.includes("/hooks/") && !sourcePath.includes("node_modules")) ||
-                            (sourcePath.includes("/lib/") && !sourcePath.includes("node_modules")) ||
-                            (sourcePath.includes("/stores/") && !sourcePath.includes("node_modules")) ||
-                            (sourcePath.includes("/services/") && !sourcePath.includes("node_modules"))
+                            normalizedPath.includes('app/') ||
+                            normalizedPath.includes('components/') ||
+                            normalizedPath.includes('hooks/') ||
+                            normalizedPath.includes('lib/') ||
+                            normalizedPath.includes('services/') ||
+                            normalizedPath.includes('stores/') ||
+                            normalizedPath.includes('localhost:3000') // Chấp nhận cả URL từ dev server
                         );
                     },
                 },

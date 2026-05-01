@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from backend.models.entities import Building  # Import model Building gốc của bạn
 from typing import Optional, List
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from sqlmodel import SQLModel
 
 # Base class chứa các field chung
@@ -27,9 +27,6 @@ class BuildingRead(BuildingBase):
 
 router = APIRouter()
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 # ==========================================================

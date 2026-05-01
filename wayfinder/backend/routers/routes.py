@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 import networkx as nx
 
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from backend.models.entities import Map, Node, Edge, Alias
 
 from backend.services.nlp import normalize_name, extract_a_b
@@ -114,9 +114,6 @@ def _clear_graph_cache():
 
 
 # --- DEPENDENCY ---
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 # --- MODELS ---

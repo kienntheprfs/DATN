@@ -3,14 +3,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, or_
 from rapidfuzz import process, fuzz
 from unidecode import unidecode
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from backend.models.entities import Node, Building, Alias
 
 router = APIRouter()
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 @router.get("/landmarks")
 def get_landmarks(session: Session = Depends(get_session)):

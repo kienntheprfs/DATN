@@ -5,15 +5,12 @@ from sqlmodel import Session, select
 from datetime import datetime, date
 from rapidfuzz import fuzz, process
 
-from backend.core.db import engine
+from backend.core.db import engine, get_session
 from backend.models.entities import Event, Node
 
 router = APIRouter()
 
 
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 class EventCreate(BaseModel):
