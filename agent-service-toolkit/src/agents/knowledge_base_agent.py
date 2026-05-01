@@ -49,10 +49,11 @@ lightrag_service: LightRAGService = LightRAGService()
 # DEFINING TOOLS
 # ==============================================================================
 class UnifiedDocument:
-    def __init__(self, content: str, source_type: str, doc_id: str):
+    def __init__(self, content: str, source_type: str, doc_id: str, score: float = 0.0):
         self.content = content
         self.source_type = source_type
         self.doc_id = doc_id
+        self.score = score
 
 
 @tool("lookup_hcmut_info", response_format="content_and_artifact")
@@ -199,38 +200,15 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         #  -------------
 
         # 5. PRIORITY 3: Cả cache và FAQ đều miss → CHẠY DOC + LIGHTRAG
-        task_qdrant = retriever_service.search(
-            query=query,
-            collection_name=cache_namespace,
-            top_k=5,
-            precomputed_query_vec=query_vector,
-        )
-        task_lightrag = lightrag_service.query_data(query=query, mode=lightrag_mode, chunk_top_k=5)
+        lightrag_rerank_enabled = getattr(settings, "LIGHTRAG_RERANK_ENABLED", False)
 
-        qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
-
-        # 6. XỬ LÝ CHUNKS (GỘP & RERANK)
-        unified_chunks: List[UnifiedDocument] = []
-
-        for doc in qdrant_docs:
-            unified_chunks.append(
-                UnifiedDocument(content=doc.content, source_type="Normal", doc_id=str(doc.doc_id))
-            )
-
-        for chunk in lightrag_result.chunks:
-            unified_chunks.append(
-                UnifiedDocument(content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id)
-            )
-
-        output_lines = []
-        artifacts = []
-
-        # 7. Thêm FAQ vào pool nếu có kết quả (không phải exact match)
+        # Thêm FAQ vào pool nếu có kết quả (không phải exact match)
+        faq_chunks: List[UnifiedDocument] = []
         if faq_results:
             for faq in faq_results:
                 if faq.score >= FAQ_EXACT_MATCH_THRESHOLD:
                     continue
-                unified_chunks.append(
+                faq_chunks.append(
                     UnifiedDocument(
                         content=f"[FAQ] {faq.content}\nAnswer: {faq.answer or ''}",
                         source_type="FAQ",
@@ -238,14 +216,96 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                     )
                 )
 
-        # 8. Rerank toàn bộ pool hỗn hợp (Documents)
-        if unified_chunks:
-            # Lưu ý: Pass unified_chunks vào reranker_service của bạn.
-            # Đảm bảo reranker_service đọc được thuộc tính `content` từ object truyền vào.
-            reranked_docs = await reranker_service.rerank(
-                query=query, documents=unified_chunks, top_n=5
+        output_lines = []
+        artifacts = []
+        reranked_docs: List[UnifiedDocument] = []
+
+        if lightrag_rerank_enabled:
+            # LightRAG đã rerank sẵn → 2 luồng song song:
+            # Luồng A: LightRAG query
+            # Luồng B: Retrieve Qdrant → Rerank Qdrant + FAQ
+            async def run_qdrant_rerank():
+                qdrant_docs = await retriever_service.search(
+                    query=query,
+                    collection_name=cache_namespace,
+                    top_k=5,
+                    precomputed_query_vec=query_vector,
+                )
+                qdrant_unified = [
+                    UnifiedDocument(
+                        content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)
+                    )
+                    for doc in qdrant_docs
+                ]
+                docs_to_rerank = qdrant_unified + faq_chunks
+                return (
+                    await reranker_service.rerank(query=query, documents=docs_to_rerank, top_n=5)
+                    if docs_to_rerank
+                    else []
+                )
+
+            task_lightrag_query = lightrag_service.query_data(
+                query=query, mode=lightrag_mode, chunk_top_k=5
+            )
+            task_qdrant_rerank = run_qdrant_rerank()
+
+            lightrag_result, reranked_qdrant = await asyncio.gather(
+                task_lightrag_query, task_qdrant_rerank
             )
 
+            # Gộp LightRAG (đã có rerank_score) + Qdrant đã rerank
+            all_scored: List[UnifiedDocument] = []
+            for chunk in lightrag_result.chunks:
+                score = chunk.rerank_score if chunk.rerank_score is not None else 0.0
+                all_scored.append(
+                    UnifiedDocument(
+                        content=chunk.content,
+                        source_type="Formal",
+                        doc_id=chunk.chunk_id,
+                        score=score,
+                    )
+                )
+            all_scored.extend(reranked_qdrant)
+
+            all_scored.sort(key=lambda x: x.score, reverse=True)
+            reranked_docs = all_scored[:5]
+        else:
+            # LightRAG chưa rerank → song song retrieve, sau đó gộp rerank
+            task_qdrant = retriever_service.search(
+                query=query,
+                collection_name=cache_namespace,
+                top_k=5,
+                precomputed_query_vec=query_vector,
+            )
+            task_lightrag = lightrag_service.query_data(
+                query=query, mode=lightrag_mode, chunk_top_k=5
+            )
+
+            qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
+
+            unified_chunks: List[UnifiedDocument] = []
+            for doc in qdrant_docs:
+                unified_chunks.append(
+                    UnifiedDocument(
+                        content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)
+                    )
+                )
+            for chunk in lightrag_result.chunks:
+                unified_chunks.append(
+                    UnifiedDocument(
+                        content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id
+                    )
+                )
+            unified_chunks.extend(faq_chunks)
+
+            reranked_docs = (
+                await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
+                if unified_chunks
+                else []
+            )
+
+        # Format output
+        if reranked_docs:
             output_lines.append(
                 f"### THÔNG TIN TỪ VĂN BẢN ({len(reranked_docs)} đoạn phù hợp nhất):"
             )
@@ -255,7 +315,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                 )
                 artifacts.append(
                     {
-                        "doc_id": doc.doc_id,  # Hoặc chunk.chunk_id tuỳ cấu trúc của bạn
+                        "doc_id": doc.doc_id,
                         "source_type": getattr(doc, "source_type", "Normal"),
                     }
                 )
@@ -350,7 +410,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
     except Exception as e:
         logger.exception("Lỗi trong quá trình truy xuất dữ liệu")
-        return f"Database Error: {str(e)}"
+        return f"Database Error: {str(e)}", []
 
 
 # OLD TOOL: NOT INTEGRATE WITH LIGHTRAG
@@ -469,18 +529,14 @@ class AgentState(MessagesState):
     pass
 
 
-async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    m_with_tools = m.bind_tools(tools)
-
-    sys_msg = SystemMessage(
-        content="""
+content = """
     Bạn là trợ lý ảo AI của trường Đại học Bách Khoa TP.HCM (HCMUT).
 
     QUY TRÌNH SUY LUẬN (AGENTIC FLOW):
     0. TỪ CHỐI câu hỏi không liên quan tới ngữ cảnh trường đại học và việc hỗ trợ thông tin trường.
-    
-    1. **Bước 1: Luôn khởi đầu bằng `lookup_hcmut_info`.**
+    Nếu là chào hỏi thông thường thì trực tiếp phản hồi, kết thúc không gọi tool.
+
+    1. **Bước 1: Nếu là câu hỏi thông tin, khởi đầu bằng `lookup_hcmut_info`.**
     
     2. **Bước 2: Đánh giá kết quả (Self-Reflection):**
        - Đọc kỹ kết quả trả về từ tool nội bộ.
@@ -489,8 +545,32 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
        - NẾU tài liệu KHÔNG LIÊN QUAN hoặc không đủ để đưa ra câu trả lời chính xác -> BẠN KHÔNG ĐƯỢC TRẢ LỜI NGAY. Bắt buộc phải gọi công cụ `tavily_search_results_json` để tìm kiếm trên internet.
     
     3. **Bước 3: Tổng hợp:**
-       - Nếu phải dùng Web Search, hãy trả lời kèm cảnh báo: "⚠️ Thông tin tham khảo từ internet".
+       - Nếu phải dùng `tavily_search_results_json`, BẮT BUỘC PHẢI kèm cảnh báo: "⚠️ Thông tin tham khảo từ internet".
        - Nếu cả 2 nguồn đều bế tắc, hãy xin lỗi người dùng và nói không có thông tin.
+
+    LƯU Ý QUAN TRỌNG:
+    - KHÔNG BỊA ĐẶT thông tin.
+    """
+
+
+async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
+    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    m_with_tools = m.bind_tools(tools)
+
+    sys_msg = SystemMessage(
+        content="""
+    Bạn là chatbot hỏi đáp thông minh, chỉ trả lời đúng nội dung câu hỏi, không thêm bất kỳ thông tin dư thừa nào.
+
+    QUY TRÌNH SUY LUẬN (AGENTIC FLOW):
+    0. TỪ CHỐI câu hỏi không liên quan tới ngữ cảnh trường đại học và việc hỗ trợ thông tin trường.
+
+    1. **Bước 1: Nếu là câu hỏi thông tin, khởi đầu bằng `lookup_hcmut_info`.**
+    
+    2. **Bước 2: Đánh giá kết quả (Self-Reflection):**
+       - Đọc kỹ kết quả trả về từ tool nội bộ.
+       - Đánh giá nội dung cung cấp từ `lookup_hcmut_info` có đủ để trả lời câu hỏi không.
+       - NẾU tài liệu có ĐỦ THÔNG TIN trả lời đúng câu hỏi -> Trả lời người dùng thật chính xác.
+       - NẾU tài liệu KHÔNG LIÊN QUAN hoặc không đủ để đưa ra câu trả lời chính xác -> hãy xin lỗi người dùng và nói không có thông tin.
 
     LƯU Ý QUAN TRỌNG:
     - KHÔNG BỊA ĐẶT thông tin.

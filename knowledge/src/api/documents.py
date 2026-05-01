@@ -310,7 +310,7 @@ async def delete_document(
     service = DocumentService(db)
 
     # Import here to avoid circular import
-    from src.models.models import DocumentStatus
+    from src.models.models import DocumentStatus, ProcessingStatus
 
     # Detect document type if not explicitly specified
     if is_formal_doc is True:
@@ -318,6 +318,21 @@ async def delete_document(
         formal_doc = await service.formal_doc_repo.get_by_id(document_id)
         if not formal_doc:
             raise HTTPException(status_code=404, detail="Formal document not found")
+
+        if formal_doc.lightrag_track_id and service.lightrag.enabled:
+            try:
+                track_result = await service.lightrag.get_track_result(formal_doc.lightrag_track_id)
+                if isinstance(track_result, dict):
+                    status_summary = track_result.get("status_summary", {})
+                    if status_summary.get("Processing", 0) > 0 or status_summary.get("Pending", 0) > 0:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes."
+                        )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
 
         # Sync from LightRAG to get latest status
         try:
@@ -346,6 +361,12 @@ async def delete_document(
             raise HTTPException(status_code=404, detail="Document not found")
 
         # Check current status
+        if normal_doc.processing_status in [ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete document while it is being processed. Please wait until processing completes."
+            )
+
         if normal_doc.status == DocumentStatus.DELETED:
             raise HTTPException(
                 status_code=400, detail="Document has already been deleted"
@@ -408,6 +429,21 @@ async def delete_document(
             detail="Ambiguous document id. Please set is_formal_doc=true/false explicitly.",
         )
     if formal_doc:
+        if formal_doc.lightrag_track_id and service.lightrag.enabled:
+            try:
+                track_result = await service.lightrag.get_track_result(formal_doc.lightrag_track_id)
+                if isinstance(track_result, dict):
+                    status_summary = track_result.get("status_summary", {})
+                    if status_summary.get("Processing", 0) > 0 or status_summary.get("Pending", 0) > 0:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes."
+                        )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
         # Sync from LightRAG to get latest status
         try:
             await service._sync_formal_doc_from_lightrag(formal_doc)
@@ -429,6 +465,12 @@ async def delete_document(
         }
     elif normal_doc:
         # Same logic as explicit normal doc deletion
+        if normal_doc.processing_status in [ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete document while it is being processed. Please wait until processing completes."
+            )
+
         if normal_doc.status == DocumentStatus.DELETED:
             raise HTTPException(
                 status_code=400, detail="Document has already been deleted"
