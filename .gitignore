@@ -1,8 +1,13 @@
 <<<<<<< HEAD
 knowledge/uploads
 knowledge/diagrams
+knowledge/tests
 test_linh_tinh
 
+.agent-service-toolkit/tests
+agent-service-toolkit/tests
+
+frontend/tests
 # Streamlit and sqlite
 .streamlit/secrets.toml
 checkpoints.db

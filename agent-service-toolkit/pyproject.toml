@@ -79,6 +79,9 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "mypy",
+    # RAGAS evaluation framework
+    "ragas>=0.2.0",
+    "datasets>=2.0.0",
 ]
 
 # Group for the minimal dependencies to run just the client and Streamlit app.
@@ -100,6 +103,7 @@ extend-select = ["I", "U"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.pytest_env]

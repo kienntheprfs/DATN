@@ -10,6 +10,13 @@ const coverageDir = path.join(process.cwd(), 'coverage');
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: [
+    '**/*.spec.ts',
+  ],
+  timeout: 60000,
+  expect: {
+    timeout: 10000,
+  },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -27,7 +34,6 @@ export default defineConfig({
         lcov: true,
         html: true,
         sourceFilter: (sourcePath: string) => {
-          // Chỉ lấy báo cáo cho phần source code thực tế (app, components, hooks, lib...)
           return sourcePath.includes('frontend/app/') ||
             sourcePath.includes('frontend/components/') ||
             sourcePath.includes('frontend/hooks/') ||
@@ -37,8 +43,11 @@ export default defineConfig({
     }]
   ],
   use: {
-    // Bật trace (lịch sử snapshot) cho mọi lần chạy để luôn lưu lại bằng chứng test
     trace: 'on',
+    baseURL: 'http://localhost:3000',
+    extraHTTPHeaders: {
+      'Accept': 'application/json',
+    },
   },
   projects: [
     {
