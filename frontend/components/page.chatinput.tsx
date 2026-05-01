@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +53,11 @@ export function ChatInput({
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(authService.isAuthenticated());
+  }, []);
 
   const toggleQueryMode = () => {
     if (!authService.isAuthenticated()) {
@@ -99,7 +104,6 @@ export function ChatInput({
 
   const isVoiceConnected = voiceState === "connected";
   const isDeepMode = queryMode === "deep";
-  const isLoggedIn = typeof window !== "undefined" && authService.isAuthenticated();
 
   return (
     <TooltipProvider>

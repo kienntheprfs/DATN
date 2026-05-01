@@ -6,33 +6,26 @@ autonumber
 actor "Người dùng" as User
 participant "Giao diện (UI)" as UI
 participant "Backend Server" as Backend
-participant "AI Agent (LLM)" as Agent
 database "Database Sự kiện" as EventDB
 
-User -> UI : Nhập "Có sự kiện gì tuần sau không?"
+User -> UI : Nhập câu hỏi tìm kiếm sự kiện (vd: "Tuần sau có gì?")
 activate UI
 
-UI -> Backend : Gửi câu hỏi văn bản
+UI -> Backend : Gửi yêu cầu truy vấn
 activate Backend
 
-Backend -> Agent : Gửi ngữ cảnh hội thoại
-activate Agent
+Backend -> Backend : Phân tích yêu cầu &\ntrích xuất tham số (thời gian, từ khóa)
 
-Agent -> Agent : Suy luận (Reasoning) \nQuyết định gọi Tool (Search_Events)
-    
-Agent -> EventDB : Thực thi truy vấn sự kiện (Tham số: tuần sau)
+Backend -> EventDB : Truy vấn dữ liệu sự kiện
 activate EventDB
-EventDB --> Agent : Trả về dữ liệu thô (Tên, Địa điểm, Thời gian)
+EventDB --> Backend : Trả về dữ liệu thô (Tên, Địa điểm, Thời gian)
 deactivate EventDB
 
-Agent -> Agent : Tổng hợp dữ liệu thành câu trả lời tự nhiên \nThêm câu hỏi: "Bạn có muốn tôi chỉ đường tới đó không?"
-    
-Agent --> Backend : Trả về chuỗi văn bản hoàn chỉnh
-deactivate Agent
+Backend -> Backend : Định dạng danh sách sự kiện &\nđính kèm gợi ý: "Bạn có muốn chỉ đường tới đó không?"
 
-Backend --> UI : Trả về nội dung phản hồi
+Backend --> UI : Trả về chuỗi văn bản phản hồi hoàn chỉnh
 deactivate Backend
 
-UI --> User : Hiển thị câu trả lời dạng văn bản chat
+UI --> User : Hiển thị danh sách sự kiện & Câu hỏi gợi ý
 deactivate UI
 @enduml

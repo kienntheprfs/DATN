@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import NavigationContent from "./navigation-content";
 
 export default function Navigation() {
-  return <NavigationContent />;
+  return (
+    <Suspense fallback={<div>Loading navigation...</div>}>
+      <NavigationContent />
+    </Suspense>
+  );
 }

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Navigation } from "lucide-react";
 import { RatingButtons } from "./RatingButtons";
 import { MiniNavigation } from "./MapPreview";
+import { LandmarkCarousel } from "./LandmarkCarousel";
 
 interface ToolCall {
 	id: string;
@@ -61,6 +62,7 @@ interface ChatWindowProps {
 	voiceThreadId?: string;
 	voiceState?: string;
 	readOnly?: boolean;
+	sendMessage?: (message: string) => void;
 	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string }) => void;
 }
 
@@ -347,7 +349,23 @@ interface GroupedMessages {
 	routeData?: RouteData;
 }
 
-export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode, isListening, currentTools = [], partialText, threadId, agentId, lastRunId, voiceThreadId, voiceState, readOnly = false }: ChatWindowProps) {
+export function ChatWindow({ 
+	messages, 
+	error, 
+	isStreaming, 
+	isTyping, 
+	isVoiceMode, 
+	isListening, 
+	currentTools = [], 
+	partialText, 
+	threadId, 
+	agentId, 
+	lastRunId, 
+	voiceThreadId, 
+	voiceState, 
+	readOnly = false,
+	sendMessage
+}: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	
@@ -445,6 +463,40 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 			return lastGroup.routeData;
 		}
 
+		return null;
+	}, [groupedMessages, currentTools]);
+
+	const landmarkData = useMemo(() => {
+		const parseLandmarks = (content: string) => {
+			try {
+				const parsed = JSON.parse(content);
+				if (Array.isArray(parsed)) return parsed;
+				if (parsed.landmarks && Array.isArray(parsed.landmarks)) return parsed.landmarks;
+				if (parsed.results && Array.isArray(parsed.results)) return parsed.results;
+				return null;
+			} catch {
+				return null;
+			}
+		};
+
+		if (currentTools.length > 0) {
+			const landmarkTool = currentTools.find(
+				t => (t.name === 'GetLandmarkImages' || t.name === 'GuessLocationByDescription') && t.status === 'done'
+			);
+			if (landmarkTool?.content) {
+				return parseLandmarks(landmarkTool.content);
+			}
+		}
+		
+		const lastGroup = groupedMessages.filter(g => g.role === "assistant").pop();
+		if (lastGroup?.toolMessages) {
+			const landmarkToolMsg = lastGroup.toolMessages.find(
+				m => m.toolName === 'GetLandmarkImages' || m.toolName === 'GuessLocationByDescription'
+			);
+			if (landmarkToolMsg?.content) {
+				return parseLandmarks(landmarkToolMsg.content);
+			}
+		}
 		return null;
 	}, [groupedMessages, currentTools]);
 
@@ -583,6 +635,24 @@ export function ChatWindow({ messages, error, isStreaming, isTyping, isVoiceMode
 					</div>
 					<div className="flex-1 max-w-full">
 						<MiniNavigation routeData={routeDataForDisplay} />
+					</div>
+				</div>
+			)}
+
+			{landmarkData && (
+				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+						<Bot className="size-6" />
+					</div>
+					<div className="flex-1 max-w-full">
+						<LandmarkCarousel 
+							landmarks={landmarkData} 
+							onConfirm={(landmark) => {
+								if (sendMessage) {
+									sendMessage(`Tôi đang ở ${landmark.name}`);
+								}
+							}}
+						/>
 					</div>
 				</div>
 			)}

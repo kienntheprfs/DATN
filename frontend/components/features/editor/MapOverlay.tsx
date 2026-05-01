@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { 
   Select, 
   SelectContent, 
@@ -17,7 +18,6 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { UploadIcon, FolderOpenIcon, Loader2Icon, ImageIcon } from "lucide-react";
 
 interface MapOverlayProps {
   onUploadSuccess: (mapData: MapData) => void;
@@ -53,32 +53,36 @@ export const MapOverlay = ({ onUploadSuccess }: MapOverlayProps) => {
 
   if (loading) {
     return (
-      <div className="absolute inset-0 z-50 flex items-center justify-center bg-muted/80 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2Icon className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Đang tải...</p>
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Đang đồng bộ dữ liệu...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl font-bold">Quản lý Bản đồ</CardTitle>
-          <CardDescription>Chọn bản đồ có sẵn hoặc tải lên bản đồ mới</CardDescription>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-500">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-hidden border-border/60 shadow-2xl flex flex-col">
+        <CardHeader className="bg-muted/30 border-b border-border py-6 shrink-0">
+          <div className="flex items-center gap-3 justify-center mb-1">
+            <span className="material-symbols-outlined text-primary text-3xl">map</span>
+            <CardTitle className="text-xl font-black uppercase tracking-tight text-foreground/80">Hệ thống Quản lý Bản đồ</CardTitle>
+          </div>
+          <CardDescription className="text-center text-[11px] font-medium uppercase tracking-widest opacity-60">Chọn phiên bản hoặc thiết lập không gian làm việc mới</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="flex-1 overflow-y-auto p-8 space-y-10">
           {maps.length > 0 && (
             <ExistingMapSection maps={maps} onSelect={onUploadSuccess} />
           )}
 
-          <div className="relative">
-            <Separator />
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs font-medium text-muted-foreground">
-              Hoặc tải mới
+          <div className="relative flex items-center gap-4">
+            <Separator className="flex-1" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 bg-background px-4">
+              Khởi tạo không gian mới
             </span>
+            <Separator className="flex-1" />
           </div>
 
           <UploadMapForm onSuccess={onUploadSuccess} />
@@ -103,26 +107,38 @@ const ExistingMapSection = ({ maps, onSelect }: { maps: MapData[]; onSelect: (m:
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <FolderOpenIcon className="w-4 h-4" />
-        Mở bản đồ đã lưu
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-primary text-xl">folder_open</span>
+        <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Kho lưu trữ bản đồ</h3>
       </div>
-      <div className="flex gap-3">
-        <Select value={selectedId} onValueChange={setSelectedId}>
-          <SelectTrigger className="flex-1">
-            <SelectValue placeholder="Chọn bản đồ..." />
-          </SelectTrigger>
-          <SelectContent>
-            {maps.map((map) => (
-              <SelectItem key={map.id} value={map.id.toString()}>
-                {map.name} ({map.building_id ? `Tòa #${map.building_id}` : "Campus"})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button onClick={handleSelect} disabled={!selectedId}>
-          Mở Map
+      <div className="flex gap-3 items-end">
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-[10px] font-bold uppercase opacity-50 ml-1">Danh sách bản đồ hiện có</Label>
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger className="h-11 bg-muted/20 border-border text-sm font-medium">
+              <SelectValue placeholder="Chọn bản đồ..." />
+            </SelectTrigger>
+            <SelectContent>
+              {maps.map((map) => (
+                <SelectItem key={map.id} value={map.id.toString()} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{map.name}</span>
+                    <Badge variant="outline" className="text-[9px] h-4 border-primary/20 text-primary/70 font-mono">
+                      {map.building_id ? `B-${map.building_id}` : "CAMPUS"}
+                    </Badge>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button 
+          onClick={handleSelect} 
+          disabled={!selectedId}
+          className="h-11 px-6 bg-primary font-black uppercase tracking-widest text-[11px] shadow-lg shadow-primary/20 hover:shadow-none transition-all"
+        >
+          Kích hoạt
         </Button>
       </div>
     </div>
@@ -226,56 +242,64 @@ const UploadMapForm = ({ onSuccess }: { onSuccess: (m: MapData) => void }) => {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <UploadIcon className="w-4 h-4" />
-        Tải lên bản đồ mới
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-primary text-xl">cloud_upload</span>
+        <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Tải lên tài nguyên mới</h3>
       </div>
 
       <div
         onClick={() => fileInputRef.current?.click()}
-        className={`relative h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors overflow-hidden ${
+        className={`group relative h-48 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden ${
           previewUrl
-            ? "border-primary bg-muted"
-            : "border-muted-foreground/30 hover:border-primary hover:bg-muted/50"
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/30"
         }`}
       >
         {previewUrl ? (
           <>
-            <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-              <span className="text-white font-medium text-sm">Bấm để đổi ảnh</span>
+            <img src={previewUrl} alt="Preview" className="w-full h-full object-contain p-4 transition-transform group-hover:scale-105" />
+            <div className="absolute inset-0 bg-primary/60 backdrop-blur-[2px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-2 bg-white text-primary px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-tighter shadow-xl">
+                <span className="material-symbols-outlined text-sm">cached</span>
+                Thay đổi tài nguyên
+              </div>
             </div>
           </>
         ) : (
-          <div className="text-center p-4">
-            <ImageIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm font-medium text-muted-foreground">Chọn file ảnh bản đồ</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">(PNG, JPG, SVG)</p>
+          <div className="text-center p-6 space-y-3">
+            <div className="w-16 h-16 rounded-full bg-muted mx-auto flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+              <span className="material-symbols-outlined text-3xl text-muted-foreground group-hover:text-primary transition-colors">add_photo_alternate</span>
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-tight text-foreground/70">Chọn tệp tin hình ảnh</p>
+              <p className="text-[10px] text-muted-foreground/60 font-medium mt-1">Định dạng hỗ trợ: PNG, JPG, SVG (Tối đa 10MB)</p>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="map-name">Tên bản đồ *</Label>
-        <Input
-          id="map-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="VD: Tầng 1 - Tòa A"
-        />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+        <div className="space-y-1.5 md:col-span-2">
+          <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Định danh bản đồ *</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="VD: Tầng 1 - Tòa A"
+            className="h-10 bg-background border-border text-sm font-bold"
+          />
+        </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Tòa nhà</Label>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Thuộc Tòa nhà</Label>
           <Select value={buildingId} onValueChange={setBuildingId}>
-            <SelectTrigger>
+            <SelectTrigger className="h-10 bg-background border-border text-xs font-bold">
               <SelectValue placeholder="-- Campus --" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="none" className="text-xs font-medium">-- Khu vực Campus --</SelectItem>
               {buildings.map((b) => (
-                <SelectItem key={b.id} value={b.id.toString()}>
+                <SelectItem key={b.id} value={b.id.toString()} className="text-xs font-medium">
                   {b.name}
                 </SelectItem>
               ))}
@@ -283,25 +307,24 @@ const UploadMapForm = ({ onSuccess }: { onSuccess: (m: MapData) => void }) => {
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label>Tầng số (Auto)</Label>
-          <Input value={floor} readOnly placeholder="-" className="bg-muted" />
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Tỉ lệ quy đổi (Scale)</Label>
+          <div className="relative">
+            <Input
+              type="number"
+              step="0.1"
+              value={scale}
+              onChange={(e) => setScale(e.target.value)}
+              className="h-10 bg-background border-border text-xs font-mono font-bold pr-10"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-muted-foreground opacity-30">PX/M</span>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="scale">Tỉ lệ (Scale)</Label>
-        <Input
-          id="scale"
-          type="number"
-          step="0.1"
-          value={scale}
-          onChange={(e) => setScale(e.target.value)}
-        />
-      </div>
-
       {error && (
-        <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+        <div className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 p-3 rounded-lg flex items-center gap-2">
+          <span className="material-symbols-outlined text-sm">error</span>
           {error}
         </div>
       )}
@@ -309,18 +332,18 @@ const UploadMapForm = ({ onSuccess }: { onSuccess: (m: MapData) => void }) => {
       <Button
         onClick={handleUpload}
         disabled={isProcessing || !selectedFile}
-        className="w-full"
+        className="w-full h-12 bg-primary font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-primary/20 hover:shadow-none transition-all disabled:opacity-50"
       >
         {isProcessing ? (
-          <>
-            <Loader2Icon className="w-4 h-4 mr-2 animate-spin" />
-            Đang tải lên...
-          </>
+          <div className="flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" />
+            Đang xử lý dữ liệu...
+          </div>
         ) : (
-          <>
-            <UploadIcon className="w-4 h-4 mr-2" />
-            Xác nhận tải lên
-          </>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base">publish</span>
+            Xác nhận thiết lập
+          </div>
         )}
       </Button>
 

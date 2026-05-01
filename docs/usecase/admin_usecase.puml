@@ -1,57 +1,65 @@
 @startuml
 left to right direction
+skinparam monochrome true
+skinparam shadowing false
 skinparam packageStyle rectangle
-skinparam usecase {
-  BackgroundColor LightCyan
-  BorderColor DarkCyan
-  ArrowColor DimGray
+
+actor "Quản trị viên" as Admin
+
+rectangle "Hệ thống Quản trị BK-TBOT (Admin Portal)" {
+    
+    usecase "Đăng nhập hệ thống" as UC_Login
+
+    package "Phân hệ Quản lý Tri thức" {
+        usecase "Quản lý Tài liệu (Thêm/Xóa File)" as UC_Doc
+        usecase "Quản lý Hỏi - Đáp (CRUD FAQ)" as UC_FAQ
+        usecase "Cập nhật & Đồng bộ tri thức AI" as UC_Sync
+        usecase "Thử nghiệm Chatbot" as UC_Test
+    }
+
+    package "Phân hệ Quản lý Bản đồ" {
+        usecase "Quản lý Điểm mốc (Node)" as UC_Node
+        usecase "Quản lý Đoạn đường (Edge)" as UC_Edge
+        usecase "Lưu và Triển khai đồ thị" as UC_DeployMap
+    }
+
+    package "Phân hệ Giám sát & Thống kê" {
+        usecase "Xem Dashboard Tổng quan" as UC_Dash
+        usecase "Theo dõi Chủ đề phổ biến" as UC_Topics
+        usecase "Xử lý Câu hỏi chưa có câu trả lời" as UC_Unanswered
+        usecase "Quản lý Phản hồi & Đánh giá" as UC_Feedback
+        usecase "Giám sát dịch vụ tìm đường" as UC_MapErr
+    }
+
+    package "Phân hệ Hệ thống" {
+        usecase "Quản lý Tài khoản (Thêm/Khóa/Phân quyền)" as UC_Account
+    }
+    
+    ' Định nghĩa quan hệ Include (Bắt buộc phải đăng nhập)
+    UC_Doc .u.> UC_Login : <<include>>
+    UC_Node .u.> UC_Login : <<include>>
+    UC_Dash .u.> UC_Login : <<include>>
+    UC_Account .u.> UC_Login : <<include>>
 }
-skinparam actor {
-  BackgroundColor Azure
-  BorderColor DarkCyan
-}
 
-actor "Quản trị viên\n(Admin)" as Admin
+' Kết nối Actor với các Use Case
+Admin --> UC_Login
 
-rectangle "Web Portal Quản trị (Admin Portal)" {
-  
-  ' --- Nhóm Xác thực ---
-  usecase "Đăng nhập\ntài khoản Admin" as UC_AdminLogin
-  
-  ' --- Nhóm Quản lý Dữ liệu ---
-  package "Quản lý Dữ liệu" {
-    usecase "Quản lý tri thức\n(Tài liệu, QA)" as UC_ManageKnowledge
-    usecase "Quản lý bản đồ\n(Điểm mốc, tuyến đường)" as UC_ManageMap
-  }
-  
-  ' --- Nhóm Thống kê & Theo dõi ---
-  package "Thống kê & Theo dõi" {
-    usecase "Xem bảng điều khiển\ntổng quan (Dashboard)" as UC_Dashboard
-    usecase "Theo dõi chủ đề\ncâu hỏi phổ biến" as UC_TrackTopics
-    usecase "Theo dõi câu hỏi\nchưa trả lời được" as UC_TrackUnanswered
-    usecase "Quản lý phản hồi,\nđánh giá của người dùng" as UC_TrackFeedback
-    usecase "Theo dõi tình trạng\nbản đồ và tìm đường" as UC_TrackMapStatus
-  }
-}
+Admin --> UC_Doc
+Admin --> UC_FAQ
+Admin --> UC_Sync
+Admin --> UC_Test
 
-' --- Quan hệ giữa Admin và các Use Case ---
+Admin --> UC_Node
+Admin --> UC_Edge
+Admin --> UC_DeployMap
 
-Admin --> UC_AdminLogin
+Admin --> UC_Dash
+Admin --> UC_Topics
+Admin --> UC_Unanswered
+Admin --> UC_Feedback
+Admin --> UC_MapErr
 
-Admin --> UC_ManageKnowledge
-Admin --> UC_ManageMap
-
-Admin --> UC_Dashboard
-Admin --> UC_TrackTopics
-Admin --> UC_TrackUnanswered
-Admin --> UC_TrackFeedback
-Admin --> UC_TrackMapStatus
-
-' --- (Tùy chọn) Thể hiện luồng chuyển hướng ---
-' Admin có thể từ Dashboard đi đến các màn hình chi tiết
-UC_Dashboard ..> UC_TrackTopics : <<extend>>
-UC_Dashboard ..> UC_TrackUnanswered : <<extend>>
-UC_Dashboard ..> UC_TrackFeedback : <<extend>>
-UC_Dashboard ..> UC_TrackMapStatus : <<extend>>
+Admin --> UC_Account
 
 @enduml

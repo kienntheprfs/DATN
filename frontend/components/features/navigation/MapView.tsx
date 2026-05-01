@@ -176,7 +176,7 @@ export function MapView({
                 stroke="white"
                 strokeWidth={2}
               />
-              {node.name && (
+              {node.name && node.name !== 'New Node' && (
                 <text
                   x={node.x}
                   y={node.y - 15}

@@ -4,18 +4,9 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from backend.core.db import engine
 from backend.models.entities import Edge, Map, Node
-from backend.services.geo import polyline_length 
+from backend.services.geo import polyline_length, calculate_edge_weight, TYPE_FACTORS
 
 router = APIRouter()
-
-# Factor nên define constant để dễ quản lý
-TYPE_FACTORS = {
-    "walk": 1.0,
-    "stairs": 2.0,      
-    "elevator": 1.5,    # Tăng nhẹ vì thời gian chờ
-    "escalator": 1.0,   
-    "restricted": 999.0 
-}
 
 def get_session():
     with Session(engine) as session:
@@ -46,20 +37,6 @@ class EdgeUpdate(BaseModel):
     type: Optional[str] = None
     polyline: Optional[List[List[float]]] = None
     bidirectional: Optional[bool] = None
-
-# --- HELPER FUNCTION ---
-# Tính weight chuẩn dựa trên Polyline, Type và Scale Map
-def calculate_edge_weight(
-    polyline: List[List[float]], 
-    type: str, 
-    map_scale: float
-) -> float:
-    factor = TYPE_FACTORS.get(type, 1.0)
-    # Hàm tính độ dài pixels (Giả sử bạn đã viết)
-    pixel_len = polyline_length(polyline) 
-    # Tính weight: (Độ dài px * scale) * factor
-    return (pixel_len * map_scale) * factor
-
 
 @router.post("", response_model=EdgeOut)
 def create_edge(payload: EdgeIn, session: Session = Depends(get_session)):

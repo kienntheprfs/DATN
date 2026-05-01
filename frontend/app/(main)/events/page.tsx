@@ -22,6 +22,7 @@ import { eventsApi } from '@/services/events-api';
 import { locationApi } from '@/services/location-api';
 import { Event, EventCreate } from '@/types';
 import { LocationSuggestion } from '@/types/wayfinding';
+import { useConfirmStore } from '@/stores/confirm.store';
 import { toast } from 'sonner';
 
 const CATEGORIES = [
@@ -203,6 +204,7 @@ function NodeSelector({
 }
 
 export default function EventsPage() {
+  const confirm = useConfirmStore((state) => state.confirm);
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,7 +309,13 @@ export default function EventsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn xóa sự kiện này?')) return;
+    const confirmed = await confirm({
+      title: "Xác nhận xóa sự kiện",
+      description: "Bạn có chắc muốn xóa sự kiện này?",
+      variant: 'destructive'
+    });
+
+    if (!confirmed) return;
     try {
       await eventsApi.delete(id);
       loadEvents();

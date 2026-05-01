@@ -55,4 +55,13 @@ export const editorApi = {
     });
     return res.data;
   },
+
+  uploadImage: async (formData: FormData) => {
+    const res = await apiClient.post<{ url: string }>("/wayfinder/api/uploads/image", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
 };

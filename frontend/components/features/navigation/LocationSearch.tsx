@@ -62,12 +62,14 @@ export function LocationSearch({
 
   useEffect(() => {
     if (!query.trim()) {
-      setSuggestions(allLocations);
+      setSuggestions(allLocations.filter(loc => loc.name !== 'New Node'));
     } else {
       const q = query.toLowerCase().trim();
       const filtered = allLocations.filter(loc => 
-        loc.name.toLowerCase().includes(q) ||
-        (loc.node_type && loc.node_type.toLowerCase().includes(q))
+        loc.name !== 'New Node' && (
+          loc.name.toLowerCase().includes(q) ||
+          (loc.node_type && loc.node_type.toLowerCase().includes(q))
+        )
       );
       setSuggestions(filtered.slice(0, 10));
     }
@@ -137,10 +139,16 @@ export function LocationSearch({
               <div className="flex items-center gap-2">
                 <span>{getIcon(loc.node_type)}</span>
                 <div className="flex flex-col">
-                  <span className="text-sm">{loc.name}</span>
-                  {loc.floor !== undefined && (
-                    <span className="text-xs text-muted-foreground">Tầng {loc.floor}</span>
-                  )}
+                  <span className="text-sm font-medium">{loc.name}</span>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    {loc.building_name && (
+                      <>
+                        <span>{loc.building_name}</span>
+                        <span>•</span>
+                      </>
+                    )}
+                    <span>{loc.floor !== null && loc.floor !== undefined ? `Tầng ${loc.floor}` : 'Campus'}</span>
+                  </div>
                 </div>
               </div>
             </div>

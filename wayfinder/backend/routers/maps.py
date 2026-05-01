@@ -8,7 +8,8 @@ from sqlmodel import Session, select
 from backend.core.db import engine
 
 # Import đúng các model mới
-from backend.models.entities import Map, Building
+from backend.models.entities import Map, Building, Edge, Node
+from backend.services.geo import calculate_edge_weight
 
 router = APIRouter()
 
@@ -113,10 +114,27 @@ def update_map(map_id: int, payload: Map, session: Session = Depends(get_session
 
     # Cập nhật các field từ payload (chỉ những field không None)
     update_data = payload.model_dump(exclude_unset=True)
+    
+    # Kiểm tra xem có đổi scale_ratio không
+    old_scale = n.scale_ratio
+    new_scale = update_data.get("scale_ratio")
+    
     for field, value in update_data.items():
         setattr(n, field, value)
 
     session.add(n)
+    
+    # Nếu scale thay đổi, tính lại tất cả weight của các edge thuộc map này
+    if new_scale is not None and new_scale != old_scale:
+        # Lấy tất cả các node thuộc map này
+        # Sau đó lấy tất cả các edge nối từ các node đó
+        statement = select(Edge).join(Node, Edge.start_node_id == Node.id).where(Node.map_id == map_id)
+        edges = session.exec(statement).all()
+        
+        for edge in edges:
+            edge.weight = calculate_edge_weight(edge.polyline, edge.type, new_scale)
+            session.add(edge)
+
     session.commit()
     session.refresh(n)
     return n
@@ -164,8 +182,7 @@ def delete_map(map_id: int, session: Session = Depends(get_session)):
     if not m:
         raise HTTPException(status_code=404, detail="Map không tồn tại.")
 
-    # Xử lý xóa file ảnh
-    # DB lưu: "uploads/filename.png" -> Cần ghép với "data" để thành "data/uploads/filename.png"
+    # Xử lý xóa file ảnh vật lý
     if m.image_url:
         full_path = os.path.join(DATA_DIR, m.image_url)
         if os.path.exists(full_path):
@@ -174,6 +191,27 @@ def delete_map(map_id: int, session: Session = Depends(get_session)):
             except Exception as e:
                 print(f"Warning: Không thể xóa file ảnh {full_path}: {e}")
 
+    # Trước khi xóa map, ta cần xóa các Node và Edge thuộc về map này
+    # Nếu không, DB sẽ báo lỗi NotNullViolation cho cột map_id của Node
+    from sqlmodel import delete as sql_delete
+    from backend.models.entities import Alias
+
+    # 1. Xóa Edges nối tới/từ các node của map này
+    # Lấy danh sách ID của các node thuộc map này
+    node_ids_stmt = select(Node.id).where(Node.map_id == map_id)
+    node_ids = session.exec(node_ids_stmt).all()
+
+    if node_ids:
+        # Xóa Aliases của các node này
+        session.exec(sql_delete(Alias).where(Alias.node_id.in_(node_ids)))
+        
+        # Xóa Edges nối tới hoặc từ các node này
+        session.exec(sql_delete(Edge).where((Edge.start_node_id.in_(node_ids)) | (Edge.end_node_id.in_(node_ids))))
+        
+        # Xóa Nodes
+        session.exec(sql_delete(Node).where(Node.map_id == map_id))
+
+    # Xóa Map
     session.delete(m)
     session.commit()
-    return {"message": "Đã xóa map và file ảnh thành công", "id": map_id}
+    return {"message": "Đã xóa map và toàn bộ dữ liệu liên quan thành công", "id": map_id}

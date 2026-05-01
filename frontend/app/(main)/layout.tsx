@@ -1,21 +1,23 @@
-import { Inter } from "next/font/google";
+import { Be_Vietnam_Pro } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app.sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
 import "@/app/globals.css";
 import { AppHeader } from "@/components/app.header";
 import { AgentProvider } from "@/contexts/agent-context";
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 
-const inter = Inter({ 
+const beVietnamPro = Be_Vietnam_Pro({ 
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
   subsets: ["latin", "vietnamese"],
   variable: "--font-sans",
 });
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi" className={inter.variable}>
+    <html lang="vi" className={beVietnamPro.variable}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -40,6 +42,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </main>
 
                 <Toaster />
+                <ConfirmProvider />
 
               </SidebarProvider>
             </AgentProvider>

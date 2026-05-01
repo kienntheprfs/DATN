@@ -1,0 +1,53 @@
+@startuml
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam usecase {
+    BackgroundColor white
+    BorderColor black
+}
+
+actor "Người dùng khách" as Guest
+actor "Người dùng\nđã đăng nhập" as LoggedIn
+
+' Kế thừa Actor
+LoggedIn -up-|> Guest
+
+rectangle "Phân hệ Người dùng (Hệ thống BK-TBOT)" {
+    
+    usecase "Xác thực danh tính\n(Login/Register)" as UC_Auth
+    
+    ' Nhóm giao tiếp trừu tượng
+    usecase "Tương tác với hệ thống" as UC_ChatBase
+    usecase "Hỏi đáp thông tin\n(Chế độ thường)" as UC_Normal
+    usecase "Hỏi đáp chuyên sâu\n(Deep mode)" as UC_Deep
+    usecase "Tra cứu sự kiện" as UC_Event
+    
+    ' Kế thừa Use Case
+    UC_Normal -up-|> UC_ChatBase
+    UC_Deep -up-|> UC_ChatBase
+    UC_Event -up-|> UC_ChatBase
+    
+    ' Tính năng mở rộng của Sự kiện
+    usecase "Yêu cầu chỉ đường" as UC_Map
+    note right of UC_Event : Extension Point:\nCó nhu cầu di chuyển
+    UC_Map .up.> UC_Event : <<extend>>
+    
+    usecase "Quản lý lịch sử hội thoại" as UC_History
+    
+    ' Note để xử lý Voice/Rate gọn gàng
+    note "Tích hợp sẵn (Tùy chọn):\n1. Tương tác giọng nói\n2. Đánh giá câu trả lời" as N1
+    N1 .. UC_ChatBase
+}
+
+' Phân quyền Guest
+Guest --> UC_Auth
+Guest --> UC_Normal
+Guest --> UC_Event
+Guest --> UC_Map
+
+' Phân quyền Logged In (Tự động có quyền của Guest)
+LoggedIn --> UC_Deep
+LoggedIn --> UC_History
+
+@enduml

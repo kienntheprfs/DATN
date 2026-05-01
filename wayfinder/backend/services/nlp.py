@@ -2,14 +2,15 @@ from typing import Optional, Tuple
 import re
 def normalize_name(text: str) -> str:
     """
-    Chuẩn hóa chuỗi: chuyển về chữ thường, bỏ dấu tiếng Việt (tùy chọn),
+    Chuẩn hóa chuỗi: chuyển về chữ thường, thay ký tự đặc biệt bằng khoảng trắng,
     xóa khoảng trắng thừa.
     """
     if not text:
         return ""
     text = text.lower().strip()
-    # Logic bỏ dấu tiếng Việt (nếu muốn search không dấu)
-    # text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode("utf-8")
+    # Thay thế gạch ngang, chấm, phẩy bằng khoảng trắng để search linh hoạt (VD: A4-201 -> a4 201)
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 def extract_a_b(q: str) -> Tuple[Optional[str], Optional[str]]:
