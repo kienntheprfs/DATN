@@ -86,8 +86,19 @@ export function UploadModal({ isOpen, onClose, onUploaded }: UploadModalProps) {
     onSuccess: () => {
       toast.success("Đã gửi tài liệu vào hàng đợi xử lý thành công.");
       queryClient.invalidateQueries({ queryKey: ["admin-knowledge-documents"] });
-      setProcessingLabel("Hoàn tất xử lý.");
       onUploaded?.();
+      
+      // Đóng modal sau khi upload thành công
+      setFiles([]);
+      setExpandedFileIdx(null);
+      setProgress(0);
+      setProcessingLabel("Đang chuẩn bị...");
+      onClose();
+      
+      // Reset mutation state after closing
+      setTimeout(() => {
+        uploadMutation.reset();
+      }, 300);
     },
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "Không thể tải lên tài liệu.";
@@ -131,6 +142,10 @@ export function UploadModal({ isOpen, onClose, onUploaded }: UploadModalProps) {
   };
 
   const handleClose = () => {
+    if (uploadMutation.isPending) {
+      toast.info("Upload đang chạy, vui lòng chờ hoàn tất.");
+      return;
+    }
     resetModalState();
     onClose();
   };
@@ -152,8 +167,15 @@ export function UploadModal({ isOpen, onClose, onUploaded }: UploadModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white w-200 shadow-2xl border border-border-color flex flex-col max-h-[90vh]" style={{ borderRadius: 0 }}>
+    <div 
+      className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm"
+      onClick={handleClose}
+    >
+      <div 
+        className="bg-white w-200 shadow-2xl border border-border-color flex flex-col max-h-[90vh]" 
+        style={{ borderRadius: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-color bg-slate-50/50 shrink-0">
           <h2 className="font-heading font-semibold text-lg text-text-main">
