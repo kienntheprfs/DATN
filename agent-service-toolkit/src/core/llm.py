@@ -90,10 +90,11 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             raise ValueError("Azure OpenAI API key and endpoint must be configured")
 
         return AzureChatOpenAI(
+            api_key=settings.AZURE_OPENAI_API_KEY,
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
             deployment_name=settings.AZURE_OPENAI_API_MODEL_NAME,
             api_version=settings.AZURE_OPENAI_API_VERSION,
-            temperature=0.5,
+            # temperature=0.5,
             streaming=True,
             timeout=60,
             max_retries=3,

@@ -29,7 +29,8 @@ class LightRAGChunk(BaseModel):
     chunk_id: str
     content: str
     file_path: Optional[str] = "Unknown"
-    score: float = 1.0
+    rerank_score: Optional[float] = None
+    
 
 
 class LightRAGResult(BaseModel):

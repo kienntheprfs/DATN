@@ -21,7 +21,7 @@ class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
 
     GPT_5_NANO = "gpt-5-nano"
-    GPT_5_MINI = "gpt-5-mini"
+    GPT_5_MINI = "gpt-5.4-mini"
     GPT_5_1 = "gpt-5.1"
 
 
@@ -30,6 +30,7 @@ class AzureOpenAIModelName(StrEnum):
 
     AZURE_GPT_4O = "azure-gpt-4o"
     AZURE_GPT_4O_MINI = "azure-gpt-4o-mini"
+    AZURE_GPT_5_MINI = "azure-gpt-5.4-mini"
 
 
 class DeepseekModelName(StrEnum):

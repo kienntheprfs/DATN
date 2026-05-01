@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     LIGHTRAG_BASE_URL: str | None = "http://localhost:9621"
     LIGHTRAG_API_KEY: str | None = None
     LIGHTRAG_QUERY_PATH: str = "/query/data"
+    LIGHTRAG_RERANK_ENABLED: bool = False
     # LIGHTRAG_TRACK_PATH: str = "/documents/track_status/{track_id}"
     # LIGHTRAG_DELETE_PATH: str = "/documents/delete_document"
 
@@ -129,7 +130,7 @@ class Settings(BaseSettings):
     # Used to invalidate cache when a KB is updated (upload/delete/re-index).
     SEM_CACHE_KB_VERSION_KEY_PREFIX: str = "kb_sem_cache:kb_version"
     SEM_CACHE_NAMESPACE: str = "kb_2"
-    SEM_CACHE_MIN_SCORE: float = 0.88
+    SEM_CACHE_MIN_SCORE: float = 0.75
     SEM_CACHE_TOP_K: int = 3
     SEM_CACHE_TTL_SECONDS: int = 86400
     SEM_CACHE_VECTOR_DIM: int = 3072
@@ -178,7 +179,7 @@ class Settings(BaseSettings):
     POSTGRES_APPLICATION_NAME: str = "agent-service-toolkit"
     POSTGRES_MIN_CONNECTIONS_PER_POOL: int = 1
     POSTGRES_MAX_CONNECTIONS_PER_POOL: int = 1
-    
+
     POSTGRES_SSL_MODE: str = "disable"
 
     # MongoDB Configuration
@@ -285,7 +286,7 @@ class Settings(BaseSettings):
                             raise ValueError(f"Invalid AZURE_OPENAI_DEPLOYMENT_MAP JSON: {e}")
 
                     # Validate required deployments exist
-                    required_models = {"gpt-4o", "gpt-4o-mini"}
+                    required_models = {"gpt-4o", "gpt-4o-mini", "gpt-5.4-mini"}
                     missing_models = required_models - set(self.AZURE_OPENAI_DEPLOYMENT_MAP.keys())
                     if missing_models:
                         raise ValueError(f"Missing required Azure deployments: {missing_models}")
