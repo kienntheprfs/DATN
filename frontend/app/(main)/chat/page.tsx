@@ -59,8 +59,14 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	});
 
 	const citations = useMemo(() => {
-		const allCitations: Array<{ file_name: string; s3_url: string; text_preview: string; source_type: string }> = [];
-		messages.forEach((msg) => {
+		const allCitations: Array<{ file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string; is_faq?: boolean; faq_source?: string }> = [];
+		
+		// Find index of last user message
+		const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === "user");
+		const startIndex = lastUserMsgIndex === -1 ? 0 : messages.length - 1 - lastUserMsgIndex;
+
+		// Only process messages from the last user message onwards
+		messages.slice(startIndex).forEach((msg) => {
 			if (msg.citations && msg.citations.length > 0) {
 				msg.citations.forEach((cite) => {
 					if (!allCitations.some((c) => c.file_name === cite.file_name)) {
@@ -71,6 +77,106 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		});
 		return allCitations;
 	}, [messages]);
+
+	// Parse toolChunks from both currentTools and messages history
+	const toolChunks = useMemo(() => {
+		const chunks: { source: string; content: string }[] = [];
+		const processedContents = new Set<string>();
+
+		const stripMarkdown = (s: string) => {
+			if (!s) return "";
+			return s
+				.replace(/(\*\*|__)(.*?)\1/g, "$2") // Bold
+				.replace(/(\*|_)(.*?)\1/g, "$2") // Italic
+				.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") // Links
+				.replace(/`([^`]+)`/g, "$1") // Inline code
+				.replace(/^#+\s+/gm, "") // Headers
+				.replace(/^\s*[\-\*\+•]\s+/gm, "") // Leading bullets
+				.replace(/\s+/g, " ") // Normalize internal whitespace
+				.trim();
+		};
+
+		const processContent = (content: string, name: string) => {
+			if (!content || processedContents.has(content)) return;
+			processedContents.add(content);
+
+			// Try to parse as JSON first (like in chat-window.tsx)
+			try {
+				const parsed = JSON.parse(content);
+				if (parsed.results && Array.isArray(parsed.results)) {
+					parsed.results.forEach((result: any) => {
+						const resContent = result.content || result.snippet;
+						if (resContent) {
+							chunks.push({
+								source: result.title || name,
+								content: stripMarkdown(resContent),
+							});
+						}
+					});
+					return;
+				}
+			} catch (e) {
+				// Not JSON, continue with text parsing
+			}
+
+			// Format: "[Nguồn: Normal | Điểm: 0.30]: nội dung..."
+			const parts = content.split(/\[Nguồn:\s*/);
+			parts.slice(1).forEach((part) => {
+				const match = part.match(/([^|\]]+)\s*\|[^\]]*\]:\s*([\s\S]+)/);
+				if (match) {
+					const chunkContent = stripMarkdown(match[2]);
+					if (chunkContent) {
+						chunks.push({
+							source: match[1].trim(),
+							content: chunkContent,
+						});
+					}
+				}
+			});
+		};
+
+		// Process current streaming tools
+		currentTools.forEach((tool) => {
+			if (tool.status === "done" && tool.content) {
+				processContent(tool.content, tool.name);
+			}
+		});
+
+		// Process historical tool messages - only from the latest user turn
+		const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === "user");
+		const startIndex = lastUserMsgIndex === -1 ? 0 : messages.length - 1 - lastUserMsgIndex;
+
+		messages.slice(startIndex).forEach((msg) => {
+			if (msg.msgType === "tool" && msg.content) {
+				const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+				processContent(content, msg.toolName || "tool");
+			}
+		});
+
+		return chunks;
+	}, [currentTools, messages]);
+
+	const toolContents = useMemo(() => {
+		const contents: Record<string, string> = {};
+		messages.forEach((msg) => {
+			if (msg.msgType === "tool" && msg.content) {
+				const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+				const key = msg.toolName || msg.id;
+				contents[key] = content;
+			}
+		});
+		return contents;
+	}, [messages]);
+
+	useEffect(() => {
+		if (citations && citations.length > 0 && !isDocumentPanelOpen) {
+			setIsDocumentPanelOpen(true);
+		}
+		
+		if (isReadOnly && citations && citations.length > 0 && !isDocumentPanelOpen) {
+			setIsDocumentPanelOpen(true);
+		}
+	}, [citations, isReadOnly, isDocumentPanelOpen]);
 
 	const routeData = useMemo(() => {
 		const routeTool = currentTools.find((tool) => {
@@ -234,7 +340,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 						<>
 							<ResizableHandle withHandle />
 							<ResizablePanel defaultSize={50}>
-								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} citations={citations} routeData={routeData} />
+								<DocumentPanel onClose={() => setIsDocumentPanelOpen(false)} citations={citations} routeData={routeData} toolChunks={toolChunks} />
 							</ResizablePanel>
 						</>
 					)}

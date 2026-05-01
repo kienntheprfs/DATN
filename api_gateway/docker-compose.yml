@@ -5,8 +5,15 @@ services:
     container_name: api_gateway_apisix
     ports:
       - "8002:9080"
-    env_file:
-      - .env
+    environment:
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://host.docker.internal:8008}
+      AUTH_UPSTREAM_ADDR: ${AUTH_UPSTREAM_ADDR:-host.docker.internal:8008}
+      AGENT_UPSTREAM_ADDR: ${AGENT_UPSTREAM_ADDR:-host.docker.internal:8001}
+      KNOWLEDGE_UPSTREAM_ADDR: ${KNOWLEDGE_UPSTREAM_ADDR:-host.docker.internal:8000}
+      WAYFINDER_UPSTREAM_ADDR: ${WAYFINDER_UPSTREAM_ADDR:-host.docker.internal:8004}
+      DASHBOARD_UPSTREAM_ADDR: ${DASHBOARD_UPSTREAM_ADDR:-host.docker.internal:8007}
+      VOICE_UPSTREAM_ADDR: ${VOICE_UPSTREAM_ADDR:-host.docker.internal:7860}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-my-default-secret}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

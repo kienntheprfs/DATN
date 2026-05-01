@@ -28,14 +28,41 @@ export const helpers = {
     }
   },
 
+  // Navigate to auth page with fallback paths
+  async gotoAuth(page: Page): Promise<boolean> {
+    const authUrls = [
+      `${TEST_CONSTANTS.BASE_URL}/auth`,
+      `${TEST_CONSTANTS.BASE_URL}/standalone/auth`
+    ];
+    
+    for (const url of authUrls) {
+      try {
+        await page.goto(url, { timeout: 15000 });
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(2000);
+        
+        // Check if we got the auth page
+        const h1 = page.locator('h1');
+        if (await h1.count() > 0) {
+          const text = await h1.textContent().catch(() => '');
+          if (text?.includes('BK-TBOT')) {
+            return true;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  },
+
   // Use real credentials to log into the application
   async loginWithCredentials(
     page: Page, 
     email = process.env.TEST_USER_EMAIL || 'admin@example.com', 
     password = process.env.TEST_USER_PASSWORD || 'admin123'
   ): Promise<void> {
-    await page.goto(`${TEST_CONSTANTS.BASE_URL}/auth`);
-    await this.waitForPageLoad(page);
+    await this.gotoAuth(page);
     
     await page.locator('#email').fill(email);
     await page.locator('#password').fill(password);
@@ -90,7 +117,7 @@ export const helpers = {
   // Wait for page load with fallback
   async waitForPageLoad(page: Page, timeout: number = 10000): Promise<void> {
     try {
-      await page.waitForLoadState('networkidle', { timeout });
+      await page.waitForLoadState('domcontentloaded', { timeout });
     } catch (error) {
       // Fallback to just wait for body
       await page.waitForSelector('body', { timeout: 5000 });

@@ -1,0 +1,36 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Người dùng" as User
+participant "Giao diện (Chat/Map)" as UI
+participant "Backend Server" as Backend
+database "Database Bản đồ\n(Hình ảnh sơ đồ, Tọa độ, Đồ thị)" as MapDB
+
+User -> UI : Yêu cầu tìm đường (Điểm A -> Điểm B)
+activate UI
+
+UI -> Backend : Gửi thông tin Điểm đi, Điểm đến
+activate Backend
+
+Backend -> MapDB : Truy vấn dữ liệu không gian\n(Hình ảnh sơ đồ khu vực tương ứng)
+activate MapDB
+MapDB --> Backend : Trả về URL hình ảnh & Dữ liệu các Node/Edge
+deactivate MapDB
+
+Backend -> Backend : Chạy thuật toán tìm đường (Dijkstra/A*...)\ndựa trên đồ thị quản trị viên đã vẽ
+Backend -> Backend : Đóng gói dữ liệu lộ trình
+
+Backend --> UI : Trả về dữ liệu (URL Hình ảnh + Tọa độ đường đi JSON)
+deactivate Backend
+
+alt Thao tác từ khung Chat
+    UI -> UI : Vẽ đồ họa lộ trình đè lên Hình ảnh bản đồ
+    UI --> User : Hiển thị Mini-map & text hướng dẫn sơ lược
+else Thao tác từ trang Bản đồ
+    UI -> UI : Vẽ lộ trình chi tiết trên bản đồ lớn
+    UI --> User : Hiển thị Lộ trình trực quan & Step-by-step
+end
+deactivate UI
+@enduml

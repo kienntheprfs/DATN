@@ -2,21 +2,17 @@ import { test as base, expect, type Page, type Route } from '@playwright/test';
 import { addCoverageReport } from 'monocart-reporter';
 
 // Mở rộng base test để tự động thu thập V8 coverage
+// Luôn bật coverage khi chạy test (không cần COVERAGE=true)
 export const test = base.extend<{ autoTestFixture: void }>({
   autoTestFixture: [async ({ page }, use) => {
-    // Chỉ thu thập coverage khi có biến môi trường COVERAGE=true
-    if (process.env.COVERAGE === 'true') {
-      await Promise.all([
-        page.coverage.startJSCoverage({ resetOnNavigation: false })
-      ]);
-      await use();
-      const [jsCoverage] = await Promise.all([
-        page.coverage.stopJSCoverage()
-      ]);
-      await addCoverageReport([...jsCoverage], test.info());
-    } else {
-      await use();
-    }
+    await Promise.all([
+      page.coverage.startJSCoverage({ resetOnNavigation: false })
+    ]);
+    await use();
+    const [jsCoverage] = await Promise.all([
+      page.coverage.stopJSCoverage()
+    ]);
+    await addCoverageReport([...jsCoverage], test.info());
   }, { scope: 'test', auto: true }]
 });
 

@@ -57,6 +57,7 @@ export interface StreamChunk {
 	toolCallId?: string;
 	raw?: unknown;
 	run_id?: string;
+	data?: unknown;
 }
 
 export class AgentClientError extends Error {
@@ -203,6 +204,11 @@ export const agentClient = {
 							yield {
 								type: "token" as const,
 								content: parsed.content,
+							};
+						} else if (parsed.type === "citations_ready") {
+							yield {
+								type: "citations_ready" as const,
+								data: parsed.content,
 							};
 						} else if (parsed.type === "error") {
 							yield {

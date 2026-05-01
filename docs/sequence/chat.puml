@@ -1,0 +1,58 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+
+actor "Người dùng" as User
+participant "Giao diện (UI)" as UI
+participant "Backend Server" as Backend
+participant "Speech-to-Text" as STT
+participant "AI Engine (LLM/RAG)" as AI
+participant "Text-to-Speech" as TTS
+database "Cơ sở dữ liệu" as DB
+
+User -> UI : Gửi yêu cầu (Văn bản / Giọng nói)
+activate UI
+
+alt Sử dụng tìm kiếm bằng giọng nói
+    UI -> STT : Gửi luồng âm thanh
+    activate STT
+    STT --> UI : Trả về văn bản
+    deactivate STT
+end
+
+UI -> Backend : Gửi nội dung văn bản & Cờ đánh dấu (Loại đầu vào, Mode)
+activate Backend
+
+alt Người dùng đã đăng nhập & Chế độ Deepmode được bật
+    Backend -> DB : Kiểm tra phiên đăng nhập (Token)
+    activate DB
+    DB --> Backend : Xác thực hợp lệ
+    deactivate DB
+    Backend -> AI : Truy vấn chuyên sâu (RAG/Tác vụ phức tạp)
+    activate AI
+    AI --> Backend : Trả về phản hồi chi tiết & Trích dẫn
+    deactivate AI
+else Chế độ thường
+    Backend -> AI : Truy vấn thông tin cơ bản
+    activate AI
+    AI --> Backend : Trả về phản hồi tiêu chuẩn
+    deactivate AI
+end
+
+alt Sử dụng tìm kiếm bằng giọng nói
+    Backend -> TTS : Chuyển đổi phản hồi thành âm thanh
+    activate TTS
+    TTS --> Backend : Trả về luồng âm thanh (Audio file/stream)
+    deactivate TTS
+    
+    Backend --> UI : Trả về kết quả (Âm thanh + Text + Nguồn)
+    UI --> User : Phát âm thanh phản hồi & Hiển thị text lên màn hình
+else Đầu vào là Văn bản
+    Backend --> UI : Trả về kết quả (Text + Nguồn)
+    UI --> User : Hiển thị phản hồi lên màn hình
+end
+
+deactivate Backend
+deactivate UI
+@enduml
