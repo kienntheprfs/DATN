@@ -8,6 +8,7 @@ import "@/app/globals.css";
 import { AppHeader } from "@/components/app.header";
 import { AgentProvider } from "@/contexts/agent-context";
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
+import { GlobalToast } from "@/components/global-toast";
 
 const beVietnamPro = Be_Vietnam_Pro({ 
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
@@ -27,7 +28,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <TooltipProvider>
           <ReactQueryProvider>
             <AgentProvider>
-              <SidebarProvider>
+              <SidebarProvider style={{ "--sidebar-width": "16.25rem" } as React.CSSProperties}>
                 
                 <AppSidebar />
                 
@@ -41,6 +42,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   
                 </main>
 
+                <GlobalToast />
                 <Toaster />
                 <ConfirmProvider />
 

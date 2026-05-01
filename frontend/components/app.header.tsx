@@ -28,9 +28,17 @@ const routeDictionary: Record<string, string> = {
 	dashboard: "Bảng điều khiển",
 	history: "Lịch sử tra cứu",
 	settings: "Cấu hình hệ thống",
-	knowledge: "Kho văn bản",
+	knowledge: "Cơ sở tri thức",
 	navigation: "Tìm đường",
 	chat: "Trò chuyện với AI",
+	// Admin routes
+	admin: "Quản trị",
+	topic: "Phân tích Chủ đề",
+	rating: "Đánh giá người dùng",
+	"pinned-post": "Quản lý Bài ghim",
+	"missing-in-map": "Dữ liệu Bản đồ Thiếu",
+	editor: "Chỉnh sửa bản đồ",
+	faq: "Câu hỏi thường gặp",
 };
 
 function StatusBadge() {
