@@ -36,6 +36,9 @@ def is_admin_only_route(method: str, path: str) -> bool:
     if path.startswith("/wayfinder/") and method != "GET":
         return True
 
+    if path.startswith("/agent/token-limit-usage/") and method == "GET":
+        return True
+
     return False
 
 

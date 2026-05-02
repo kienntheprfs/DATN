@@ -37,7 +37,17 @@ routes:
       - /auth/login
       - /auth/google
       - /auth/refresh
-      - /auth/forward-auth
+      # - /auth/forward-auth 
+    plugins:
+      limit-count:
+        count: 10
+        time_window: 60
+        rejected_code: 429
+        rejected_msg: "Too many authentication requests. Please try again later."
+        key_type: var
+        key: "remote_addr"
+        policy: local
+        show_limit_quota_header: true
     upstream_id: u-auth
 
   - id: docs-public
@@ -110,7 +120,15 @@ routes:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
       proxy-buffering:
         disable_proxy_buffering: true
-        
+      limit-count:
+        count: 20
+        time_window: 60
+        rejected_code: 429
+        rejected_msg: "Too many streaming requests. Please try again later."
+        key_type: var
+        key: "remote_addr"
+        policy: local
+        show_limit_quota_header: true
     upstream_id: u-agent-stream
 
   - id: agent-info-public
@@ -139,6 +157,24 @@ routes:
         headers:
           set:
             X-Internal-Secret: "${{INTERNAL_SECRET}}"
+    upstream_id: u-agent
+
+  - id: agent-token-limit-usage-admin
+    priority: 110
+    methods: ["GET"]
+    uri: /agent/token-limit-usage/*
+    plugins:
+      proxy-rewrite:
+        regex_uri: ["^/agent/(.*)", "/$1"]
+        headers:
+          set:
+            X-Internal-Secret: "${{INTERNAL_SECRET}}"
+      forward-auth:
+        uri: "${{AUTH_SERVICE_URL}}/auth/forward-auth"
+        request_headers: ["Authorization"]
+        upstream_headers: ["X-User-Id", "X-User-Email", "X-User-Roles"]
+        timeout: 5000
+        status_on_error: 503
     upstream_id: u-agent
 
   - id: kb-protected
@@ -255,6 +291,19 @@ routes:
       proxy-rewrite:
         uri: /health
     upstream_id: u-voice
+
+global_rules:
+  - id: global-rate-limit
+    plugins:
+      limit-count:
+        count: 30
+        time_window: 60
+        rejected_code: 429
+        rejected_msg: "Too many requests. Rate limit exceeded."
+        key_type: var
+        key: "remote_addr"
+        policy: local
+        show_limit_quota_header: true
 
 upstreams:
   - id: u-auth

@@ -24,6 +24,8 @@ from langsmith import Client as LangsmithClient
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info, load_agent
 from core import settings
+from core.token_limiter import token_limiter
+from fastapi import Request
 from memory import initialize_database, initialize_store
 from schema import (
     ChatHistory,
@@ -205,10 +207,16 @@ async def _handle_input(
 
     return kwargs, run_id
 
+# token limit usage retrieving api endpoint 
+@router.get("/token-limit-usage/{client_id}")
+async def get_token_limit_usage(client_id: str) -> Any:
+    return token_limiter.get_limit_usage(client_id)
+    
 
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
 async def invoke(
+    request: Request,  
     user_input: UserInput,
     background_tasks: BackgroundTasks,
     agent_id: str = DEFAULT_AGENT,
@@ -228,6 +236,10 @@ async def invoke(
     # you'd want to include it. You could update the API to return a list of ChatMessages
     # in that case.
     agent: AgentGraph = get_agent(agent_id)
+
+    client_id = chat_service.user_id or request.client.host if request.client else "unknown"
+    token_limiter.check_limit(client_id)
+    logger.info(f"Client ID: {client_id}")
 
     valid_thread_id = await chat_service.get_or_create_thread(
         thread_id=user_input.thread_id,
@@ -253,6 +265,13 @@ async def invoke(
             raise ValueError(f"Unexpected response type: {response_type}")
 
         output.run_id = str(run_id)
+
+        # Track token usage
+        if hasattr(output, "usage_metadata") and output.usage_metadata:
+            tokens = output.usage_metadata.get("total_tokens", 0)
+            if tokens > 0:
+                token_limiter.add_usage(client_id, tokens)
+
         return output
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
@@ -297,9 +316,11 @@ async def message_generator(
     # THÊM MỚI: Khởi tạo hàng đợi trung chuyển và tập hợp quản lý task ngầm
     queue = asyncio.Queue()
     background_tasks = set()
+    total_request_tokens = 0
 
     # THÊM MỚI: Bọc toàn bộ logic LangGraph gốc vào một hàm bất đồng bộ
     async def _run_graph():
+        nonlocal total_request_tokens
         try:
             # Process streamed events from the graph and yield messages over the SSE stream.
             async for stream_event in agent.astream(
@@ -435,6 +456,12 @@ async def message_generator(
                     # Drop them.
                     if not isinstance(msg, AIMessageChunk):
                         continue
+                        
+                    if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                        tokens = msg.usage_metadata.get("total_tokens", 0)
+                        if tokens > 0:
+                            total_request_tokens = tokens
+
                     content = remove_tool_calls(msg.content)
                     if content:
                         # Empty content in the context of OpenAI usually means
@@ -453,6 +480,11 @@ async def message_generator(
                 f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
             )
         finally:
+            # Add token usage
+            if total_request_tokens > 0:
+                token_limiter.add_usage(user_id, total_request_tokens)
+            
+
             # THÊM MỚI: Đợi các task lấy link S3 hoàn tất (nếu có) trước khi đóng stream
             if background_tasks:
                 await asyncio.gather(*background_tasks, return_exceptions=True)
@@ -633,6 +665,7 @@ def _sse_response_example() -> dict[int | str, Any]:
 )
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
+    request: Request,  
     user_input: StreamInput,
     background_tasks: BackgroundTasks,
     chat_service: ChatService = Depends(get_chat_service),
@@ -648,6 +681,10 @@ async def stream(
 
     Set `stream_tokens=false` to return intermediate messages but not token-by-token.
     """
+    client_id = chat_service.user_id or request.client.host if request.client else "unknown"
+    token_limiter.check_limit(client_id)
+    logger.info(f"Client ID: {client_id}")
+
     valid_thread_id = await chat_service.get_or_create_thread(
         thread_id=user_input.thread_id,
         user_query=user_input.message,
