@@ -2,6 +2,7 @@ import time
 from typing import Dict, List, Tuple
 from fastapi import HTTPException
 import logging
+from core import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,5 +52,5 @@ class TokenRateLimiter:
         
         self.usage_data[client_id].append((current_time, tokens))
 
-# Default limit: 100,000 tokens per minute
-token_limiter = TokenRateLimiter(max_tokens=100000, time_window=60)
+# Default limit: see settings.py
+token_limiter = TokenRateLimiter(max_tokens=settings.MAX_TOKENS_PER_TIME_WINDOW, time_window=settings.TIME_WINDOW)

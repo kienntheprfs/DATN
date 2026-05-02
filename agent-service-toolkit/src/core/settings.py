@@ -141,6 +141,9 @@ class Settings(BaseSettings):
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
 
+    MAX_TOKENS_PER_TIME_WINDOW: int = 50000
+    TIME_WINDOW: int = 60
+
     # Set openai compatible api, mainly used for proof of concept
     COMPATIBLE_MODEL: str | None = None
     COMPATIBLE_API_KEY: SecretStr | None = None
