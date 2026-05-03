@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     AUTH_SECRET: SecretStr | None = None
+    TOPIC_MODELING_ADMIN_TOKEN: SecretStr | None = None
 
     OPENAI_API_KEY: SecretStr | None = None
     DEEPSEEK_API_KEY: SecretStr | None = None

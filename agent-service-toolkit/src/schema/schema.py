@@ -205,3 +205,22 @@ class ThreadListResponse(BaseModel):
 # Định nghĩa payload nhận vào khi update title
 class UpdateTitleRequest(BaseModel):
     new_title: str = Field(..., min_length=1, description="Tiêu đề mới của hội thoại")
+
+
+class AdminConversationMessage(BaseModel):
+    """One normalized conversation message for admin export."""
+
+    thread_id: str
+    user_id: str
+    type: Literal["human", "ai", "tool", "custom"]
+    content: str
+    timestamp: datetime | None = None
+
+
+class AdminConversationMessagesResponse(BaseModel):
+    """Paginated message export payload for internal admin consumers."""
+
+    messages: list[AdminConversationMessage]
+    page: int
+    page_size: int
+    has_more: bool

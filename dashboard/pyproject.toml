@@ -16,6 +16,16 @@ dependencies = [
 	"dotenv>=0.9.9",
 	"celery>=5.4.0",
 	"redis>=5.0.0",
+	"sentence-transformers>=2.2.0",
+	"scikit-learn>=1.4.0",
+	"spacy>=3.8.13",
+	"underthesea>=6.0.0",
+	"pandas>=2.0.0",
+	"httpx>=0.27.0",
+	"flower>=2.0.1",
+	"langgraph-checkpoint-postgres>=2.0.13",
+	"langchain-core>=1.0.0",
+	"psycopg[binary,pool]>=3.2.4",
 ]
 
 [dependency-groups]

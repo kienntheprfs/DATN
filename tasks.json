@@ -66,7 +66,7 @@
 		{
 			"label": "Start Dashboard Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/dashboard && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8007",
+			"command": "cd /d ${workspaceFolder}/dashboard && cd docker/ && docker compose up -d && cd .. && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8007",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		

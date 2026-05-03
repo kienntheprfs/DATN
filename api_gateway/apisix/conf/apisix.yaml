@@ -296,7 +296,7 @@ global_rules:
   - id: global-rate-limit
     plugins:
       limit-count:
-        count: 30
+        count: 60
         time_window: 60
         rejected_code: 429
         rejected_msg: "Too many requests. Rate limit exceeded."

@@ -10,7 +10,9 @@ from schema.schema import (
     StreamInput,
     UserInput,
     ThreadListResponse,
-    UpdateTitleRequest
+    UpdateTitleRequest,
+    AdminConversationMessage,
+    AdminConversationMessagesResponse,
 )
 
 __all__ = [
@@ -24,4 +26,6 @@ __all__ = [
     "FeedbackResponse",
     "ChatHistoryInput",
     "ChatHistory",
+    "AdminConversationMessage",
+    "AdminConversationMessagesResponse",
 ]

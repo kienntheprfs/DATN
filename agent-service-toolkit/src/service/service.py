@@ -8,6 +8,7 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.routing import APIRoute
@@ -28,6 +29,8 @@ from core.token_limiter import token_limiter
 from fastapi import Request
 from memory import initialize_database, initialize_store
 from schema import (
+    AdminConversationMessage,
+    AdminConversationMessagesResponse,
     ChatHistory,
     ChatHistoryInput,
     ChatMessage,
@@ -39,6 +42,7 @@ from schema import (
     ThreadListResponse,
     UpdateTitleRequest,
 )
+from schema.conversation import Conversation
 from service.utils import (
     convert_message_content_to_string,
     langchain_to_chat_message,
@@ -48,7 +52,7 @@ from repositories.chat_repo import ChatRepository
 from service.chat_service import ChatService
 from service.dependencies import get_chat_service
 from rag_utils.reference import reference_service
-from core.database import AsyncSessionLocal
+from core.database import AsyncSessionLocal, get_db
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -70,6 +74,24 @@ def verify_bearer(
         return
     auth_secret = settings.AUTH_SECRET.get_secret_value()
     if not http_auth or http_auth.credentials != auth_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+def verify_topic_modeling_admin_token(
+    http_auth: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(HTTPBearer(description="Provide topic modeling admin token.", auto_error=False)),
+    ],
+) -> None:
+    token_setting = settings.TOPIC_MODELING_ADMIN_TOKEN or settings.AUTH_SECRET
+    if token_setting is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin token is not configured",
+        )
+
+    expected_token = token_setting.get_secret_value()
+    if not http_auth or http_auth.credentials != expected_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 
@@ -858,6 +880,118 @@ async def health_check():
             health_status["langfuse"] = "disconnected"
 
     return health_status
+
+
+def _parse_iso_datetime(raw: str) -> datetime:
+    value = raw.strip()
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+@app.get(
+    "/admin/conversations/messages",
+    response_model=AdminConversationMessagesResponse,
+    # dependencies=[Depends(verify_topic_modeling_admin_token)],
+)
+async def get_admin_conversation_messages(
+    from_ts: datetime = Query(..., description="UTC lower-bound timestamp (inclusive)."),
+    to_ts: datetime = Query(..., description="UTC upper-bound timestamp (exclusive)."),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+) -> AdminConversationMessagesResponse:
+    """Read-only export of human messages for dashboard topic modeling."""
+    if from_ts.tzinfo is None:
+        from_ts = from_ts.replace(tzinfo=timezone.utc)
+    else:
+        from_ts = from_ts.astimezone(timezone.utc)
+    if to_ts.tzinfo is None:
+        to_ts = to_ts.replace(tzinfo=timezone.utc)
+    else:
+        to_ts = to_ts.astimezone(timezone.utc)
+
+    if to_ts <= from_ts:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="to_ts must be greater than from_ts",
+        )
+
+    # Fetch candidate conversations first, then normalize/filter human messages from checkpoints.
+    conversation_stmt = (
+        select(Conversation)
+        .where(Conversation.is_archived == False)
+        .order_by(Conversation.updated_at.desc())
+        .limit(2000)
+    )
+    conversation_result = await db.execute(conversation_stmt)
+    conversations = list(conversation_result.scalars().all())
+
+    agent: AgentGraph = get_agent(DEFAULT_AGENT)
+    collected: list[AdminConversationMessage] = []
+
+    for conversation in conversations:
+        try:
+            state_snapshot = await agent.aget_state(
+                config=RunnableConfig(configurable={"thread_id": conversation.id})
+            )
+            messages: list[AnyMessage] = state_snapshot.values.get("messages", [])
+        except Exception:
+            logger.warning("failed to load messages for thread_id=%s", conversation.id)
+            continue
+
+        for message in messages:
+            if not isinstance(message, HumanMessage):
+                continue
+
+            chat_message = langchain_to_chat_message(message)
+            raw_timestamp = chat_message.timestamp
+            if raw_timestamp:
+                try:
+                    msg_ts = _parse_iso_datetime(raw_timestamp)
+                except ValueError:
+                    msg_ts = conversation.updated_at
+            else:
+                msg_ts = conversation.updated_at
+
+            if msg_ts is None:
+                continue
+            if msg_ts.tzinfo is None:
+                msg_ts = msg_ts.replace(tzinfo=timezone.utc)
+            else:
+                msg_ts = msg_ts.astimezone(timezone.utc)
+
+            if not (from_ts <= msg_ts < to_ts):
+                continue
+
+            collected.append(
+                AdminConversationMessage(
+                    thread_id=conversation.id,
+                    user_id=conversation.user_id,
+                    type=chat_message.type,
+                    content=chat_message.content,
+                    timestamp=msg_ts,
+                )
+            )
+
+    collected.sort(
+        key=lambda item: item.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+    offset = (page - 1) * page_size
+    page_items = collected[offset : offset + page_size]
+    has_more = (offset + page_size) < len(collected)
+
+    return AdminConversationMessagesResponse(
+        messages=page_items,
+        page=page,
+        page_size=page_size,
+        has_more=has_more,
+    )
 
 
 app.include_router(router)
