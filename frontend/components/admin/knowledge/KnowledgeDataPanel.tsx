@@ -46,6 +46,7 @@ function mapDocument(item: Awaited<ReturnType<typeof knowledgeService.listAdminD
     documentType: item.document_type || (item.is_formal_doc ? "Formal document" : "Văn bản"),
     tags: item.tags?.length ? item.tags : item.is_formal_doc ? ["Formal"] : ["Normal"],
     isFormalDoc: item.is_formal_doc,
+    processingStatus: item.processing_status,
     fileName: item.title,
     fileUrl: knowledgeService.getDocumentFileUrl(item.id, item.is_formal_doc, false),
     downloadUrl: knowledgeService.getDocumentFileUrl(item.id, item.is_formal_doc, true),
