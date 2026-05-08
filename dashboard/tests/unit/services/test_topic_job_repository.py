@@ -24,11 +24,9 @@ async def test_create_job_if_no_active_succeeds_when_no_active_job(
 ) -> None:
     job, created = await TopicJobRepository.create_job_if_no_active(
         test_db_session,
-        topic_type="missing_knowledge",
         time_range="7d",
     )
     assert created is True
-    assert job.topic_type == "missing_knowledge"
     assert job.time_range == "7d"
     assert job.status == JobStatus.PENDING.value
 
@@ -39,7 +37,6 @@ async def test_create_job_if_no_active_raises_conflict_when_active_exists(
 ) -> None:
     existing, _ = await TopicJobRepository.create_job_if_no_active(
         test_db_session,
-        topic_type="missing_knowledge",
         time_range="7d",
     )
     await test_db_session.commit()
@@ -47,7 +44,6 @@ async def test_create_job_if_no_active_raises_conflict_when_active_exists(
     with pytest.raises(JobConflictError) as exc_info:
         await TopicJobRepository.create_job_if_no_active(
             test_db_session,
-            topic_type="missing_knowledge",
             time_range="14d",
         )
     assert exc_info.value.job_id == existing.id
@@ -57,7 +53,6 @@ async def test_create_job_if_no_active_raises_conflict_when_active_exists(
 async def test_get_active_job_returns_pending_job(test_db_session: AsyncSession) -> None:
     job, _ = await TopicJobRepository.create_job_if_no_active(
         test_db_session,
-        topic_type="missing_knowledge",
         time_range="7d",
     )
     await test_db_session.commit()
@@ -71,7 +66,6 @@ async def test_get_active_job_returns_pending_job(test_db_session: AsyncSession)
 async def test_get_latest_returns_most_recent(test_db_session: AsyncSession) -> None:
     job1, _ = await TopicJobRepository.create_job_if_no_active(
         test_db_session,
-        topic_type="missing_knowledge",
         time_range="7d",
     )
     await TopicJobRepository.mark_succeeded(test_db_session, job1)
@@ -79,7 +73,6 @@ async def test_get_latest_returns_most_recent(test_db_session: AsyncSession) -> 
 
     job2, _ = await TopicJobRepository.create_job_if_no_active(
         test_db_session,
-        topic_type="popular_questions",
         time_range="14d",
     )
     await test_db_session.commit()

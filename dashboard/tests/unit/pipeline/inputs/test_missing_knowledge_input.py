@@ -20,9 +20,9 @@ class _FakeSession:
         assert "from_ts" in params
         assert "to_ts" in params
         return _FakeResult([
-            ("Cau hoi 1",),
-            ("Cau hoi 2",),
-            (None,),
+            ("Cau hoi 1", datetime.now()),
+            ("Cau hoi 2", datetime.now()),
+            (None, None),
         ])
 
 
@@ -34,4 +34,6 @@ async def test_fetch_returns_queries_only() -> None:
         datetime.now(timezone.utc),
         datetime.now(timezone.utc),
     )
-    assert docs == ["Cau hoi 1", "Cau hoi 2"]
+    assert len(docs) == 2
+    assert docs[0][0] == "Cau hoi 1"
+    assert docs[1][0] == "Cau hoi 2"

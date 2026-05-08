@@ -29,7 +29,6 @@ class _FakeSession:
 async def test_trigger_job_enqueues_background_task(monkeypatch) -> None:
     fake_job = SimpleNamespace(
         id=uuid4(),
-        topic_type=TopicType.MISSING_KNOWLEDGE.value,
         time_range=TimeRange.DAYS_7.value,
         status="pending",
         stage="pending",
@@ -39,7 +38,7 @@ async def test_trigger_job_enqueues_background_task(monkeypatch) -> None:
         updated_at=None,
     )
 
-    async def fake_create_job_if_no_active(db, topic_type, time_range):
+    async def fake_create_job_if_no_active(db, time_range):
         return fake_job, True
 
     from src.repositories import topic_job_repository
@@ -53,7 +52,6 @@ async def test_trigger_job_enqueues_background_task(monkeypatch) -> None:
     background_tasks = _FakeBackgroundTasks()
     job, created = await TopicJobService.trigger_job(
         db=_FakeSession(),
-        topic_type=TopicType.MISSING_KNOWLEDGE,
         time_range=TimeRange.DAYS_7,
         background_tasks=background_tasks,
         db_session_factory=lambda: _FakeSession(),
