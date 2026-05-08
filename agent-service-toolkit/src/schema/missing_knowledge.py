@@ -8,7 +8,7 @@ class MissingKnowledgeLog(Base):
     __table_args__ = {"schema": "agent_schema"}
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, index=True, nullable=False)
+    # user_id = Column(String, index=True, nullable=False)
     thread_id = Column(String, index=True, nullable=False)
     query = Column(String, nullable=False)
     

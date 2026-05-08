@@ -99,6 +99,10 @@ class QdrantHybridRetriever:
             for point in results.points:
                 payload = point.payload or {}
 
+                logger.info(
+                    f"Retrieved Chunk | ID: {point.id} | Score: {point.score:.4f} | "
+                )
+
                 # Payload do KM ghi: doc_id, content, chunk_index, type, metadata (tasks.py / celery process_batch)
                 item = RetrievedChunk(
                     chunk_id=str(point.id),

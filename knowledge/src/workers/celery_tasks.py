@@ -59,7 +59,13 @@ from src.services.ingestion import IngestionService
 from src.services.vector_db import VectorDBService
 from src.services.file_storage import get_storage
 from src.services.faq_gen import FAQGeneration
-from src.models.models import ProcessingStatus, FAQ, FAQQuestionVariant, FAQSource, DocumentStatus
+from src.models.models import (
+    ProcessingStatus,
+    FAQ,
+    FAQQuestionVariant,
+    FAQSource,
+    DocumentStatus,
+)
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -525,6 +531,20 @@ def finalize_ingestion(
             # Update document status to COMPLETED
             await repo.update_processing_status(document_id, ProcessingStatus.COMPLETED)
             await db.commit()
+
+            # Invalidate semantic cache now that document is fully processed
+            try:
+                from src.services.semantic_cache_notifier import semantic_cache_notifier
+
+                collection_name = metadata.get("collection_name")
+                if collection_name:
+                    await semantic_cache_notifier.notify_kb_changed(
+                        namespace=collection_name
+                    )
+            except Exception as cache_error:
+                logger.warning(
+                    f"Failed to notify semantic cache invalidation: {cache_error}"
+                )
 
             logger.info(
                 f"✅ Document ingestion COMPLETED: "
@@ -1211,6 +1231,7 @@ def delete_document_task(
     Raises:
         Exception: On deletion failure (will trigger retry, then error handler)
     """
+
     async def _logic() -> Dict[str, Any]:
         logger.info(
             f"Starting document deletion: document_id={document_id}, "

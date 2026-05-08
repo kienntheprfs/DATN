@@ -18,11 +18,37 @@ from datetime import datetime, timezone
 from core import get_model, settings
 from rag_utils.retriever import QdrantHybridRetriever
 from rag_utils.reranker import BaseReranker, JinaReranker
-from rag_utils.lightrag_service import LightRAGService
+from rag_utils.lightrag_service import LightRAGService, LightRAGResult
 from rag_utils.semantic_cache import semantic_cache_service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+async def _safe_cache_upsert(
+    query_text: str,
+    response_text: str,
+    artifacts: list,
+    dense_vector: list,
+    query_mode: str,
+    kb_version: Any,
+    namespace: str,
+):
+    """Fire-and-forget cache write with error handling."""
+    try:
+        await semantic_cache_service.upsert(
+            query_text=query_text,
+            response_text=response_text,
+            artifacts=artifacts,
+            dense_vector=dense_vector,
+            query_mode=query_mode,
+            kb_version=kb_version,
+            namespace=namespace,
+        )
+        logger.info("semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version)
+    except Exception:
+        logger.exception("semantic_cache_write_failed")
+
 
 # ==============================================================================
 # CONFIGURATION
@@ -200,7 +226,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         #  -------------
 
         # 5. PRIORITY 3: Cả cache và FAQ đều miss → CHẠY DOC + LIGHTRAG
-        lightrag_rerank_enabled = getattr(settings, "LIGHTRAG_RERANK_ENABLED", False)
+        # lightrag_rerank_enabled = getattr(settings, "LIGHTRAG_RERANK_ENABLED", False)
 
         # Thêm FAQ vào pool nếu có kết quả (không phải exact match)
         faq_chunks: List[UnifiedDocument] = []
@@ -220,89 +246,124 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         artifacts = []
         reranked_docs: List[UnifiedDocument] = []
 
-        if lightrag_rerank_enabled:
-            # LightRAG đã rerank sẵn → 2 luồng song song:
-            # Luồng A: LightRAG query
-            # Luồng B: Retrieve Qdrant → Rerank Qdrant + FAQ
-            async def run_qdrant_rerank():
-                qdrant_docs = await retriever_service.search(
+        # if lightrag_rerank_enabled:
+        #     # LightRAG đã rerank sẵn → 2 luồng song song:
+        #     # Luồng A: LightRAG query
+        #     # Luồng B: Retrieve Qdrant → Rerank Qdrant + FAQ
+        #     async def run_qdrant_rerank():
+        #         qdrant_docs = await retriever_service.search(
+        #             query=query,
+        #             collection_name=cache_namespace,
+        #             top_k=5,
+        #             precomputed_query_vec=query_vector,
+        #         )
+        #         qdrant_unified = [
+        #             UnifiedDocument(
+        #                 content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)
+        #             )
+        #             for doc in qdrant_docs
+        #         ]
+        #         docs_to_rerank = qdrant_unified + faq_chunks
+        #         if not docs_to_rerank:
+        #             return []
+
+        #         reranked_docs = await reranker_service.rerank(
+        #             query=query,
+        #             documents=docs_to_rerank,
+        #             top_n=5
+        #         )
+
+        #         # ===== DEBUG PRINT =====
+        #         print("\n===== RERANK RESULT =====")
+        #         for i, doc in enumerate(reranked_docs):
+        #             print(f"{i+1}. source={doc.source_type}, id={doc.doc_id}")
+        #             print(doc.content[:200])  # in 200 ký tự đầu
+        #             print("------------------------")
+
+        #         return reranked_docs
+
+        #     task_lightrag_query = lightrag_service.query_data(
+        #         query=query, mode=lightrag_mode, chunk_top_k=5
+        #     )
+        #     task_qdrant_rerank = run_qdrant_rerank()
+
+        #     lightrag_result, reranked_qdrant = await asyncio.gather(
+        #         task_lightrag_query, task_qdrant_rerank
+        #     )
+        #     print(reranked_qdrant)
+
+        #     # Gộp LightRAG (đã có rerank_score) + Qdrant đã rerank
+        #     all_scored: List[UnifiedDocument] = []
+        #     for chunk in lightrag_result.chunks:
+        #         score = chunk.rerank_score if chunk.rerank_score is not None else 0.0
+        #         all_scored.append(
+        #             UnifiedDocument(
+        #                 content=chunk.content,
+        #                 source_type="Formal",
+        #                 doc_id=chunk.chunk_id,
+        #                 score=score,
+        #             )
+        #         )
+        #     all_scored.extend(reranked_qdrant)
+
+        #     all_scored.sort(key=lambda x: x.score, reverse=True)
+        #     reranked_docs = all_scored[:5]
+        # else:
+        # LightRAG chưa rerank → song song retrieve, sau đó gộp rerank
+        # Xử lý LightRAG có thể fail hoặc chưa enable
+        async def safe_qdrant_search():
+            try:
+                return await retriever_service.search(
                     query=query,
                     collection_name=cache_namespace,
-                    top_k=5,
+                    top_k=10,
                     precomputed_query_vec=query_vector,
                 )
-                qdrant_unified = [
-                    UnifiedDocument(
-                        content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)
+            except Exception as e:
+                logger.error(f"Qdrant search failed: {e}")
+                return []
+
+        async def safe_lightrag_query():
+            try:
+                if not lightrag_service.base_url:
+                    logger.warning(
+                        "LightRAG is not enabled (base_url not set). Skipping LightRAG query."
                     )
-                    for doc in qdrant_docs
-                ]
-                docs_to_rerank = qdrant_unified + faq_chunks
-                return (
-                    await reranker_service.rerank(query=query, documents=docs_to_rerank, top_n=5)
-                    if docs_to_rerank
-                    else []
+                    return LightRAGResult()
+                return await lightrag_service.query_data(
+                    query=query, mode=lightrag_mode, chunk_top_k=10
                 )
+            except Exception as e:
+                logger.warning(f"LightRAG query failed: {e}. Continuing with Qdrant results only.")
+                return LightRAGResult()
 
-            task_lightrag_query = lightrag_service.query_data(
-                query=query, mode=lightrag_mode, chunk_top_k=5
+        task_qdrant = safe_qdrant_search()
+        task_lightrag = safe_lightrag_query()
+
+        qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
+
+        # Log số lượng kết quả từ mỗi nguồn
+        logger.info(
+            f"Retrieval summary | Qdrant: {len(qdrant_docs)} chunks | "
+            f"LightRAG: {len(lightrag_result.chunks)} chunks | FAQ: {len(faq_chunks)} chunks"
+        )
+
+        unified_chunks: List[UnifiedDocument] = []
+        for doc in qdrant_docs:
+            unified_chunks.append(
+                UnifiedDocument(content=doc.content, source_type="Normal", doc_id=str(doc.doc_id))
             )
-            task_qdrant_rerank = run_qdrant_rerank()
-
-            lightrag_result, reranked_qdrant = await asyncio.gather(
-                task_lightrag_query, task_qdrant_rerank
+        for chunk in lightrag_result.chunks:
+            unified_chunks.append(
+                UnifiedDocument(content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id)
             )
+        unified_chunks.extend(faq_chunks)
 
-            # Gộp LightRAG (đã có rerank_score) + Qdrant đã rerank
-            all_scored: List[UnifiedDocument] = []
-            for chunk in lightrag_result.chunks:
-                score = chunk.rerank_score if chunk.rerank_score is not None else 0.0
-                all_scored.append(
-                    UnifiedDocument(
-                        content=chunk.content,
-                        source_type="Formal",
-                        doc_id=chunk.chunk_id,
-                        score=score,
-                    )
-                )
-            all_scored.extend(reranked_qdrant)
-
-            all_scored.sort(key=lambda x: x.score, reverse=True)
-            reranked_docs = all_scored[:5]
-        else:
-            # LightRAG chưa rerank → song song retrieve, sau đó gộp rerank
-            task_qdrant = retriever_service.search(
-                query=query,
-                collection_name=cache_namespace,
-                top_k=5,
-                precomputed_query_vec=query_vector,
-            )
-            task_lightrag = lightrag_service.query_data(
-                query=query, mode=lightrag_mode, chunk_top_k=5
-            )
-
-            qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
-
-            unified_chunks: List[UnifiedDocument] = []
-            for doc in qdrant_docs:
-                unified_chunks.append(
-                    UnifiedDocument(
-                        content=doc.content, source_type="Normal", doc_id=str(doc.doc_id)
-                    )
-                )
-            for chunk in lightrag_result.chunks:
-                unified_chunks.append(
-                    UnifiedDocument(
-                        content=chunk.content, source_type="Formal", doc_id=chunk.chunk_id
-                    )
-                )
-            unified_chunks.extend(faq_chunks)
-
-            reranked_docs = (
-                await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
-                if unified_chunks
-                else []
-            )
+        reranked_docs = (
+            await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
+            if unified_chunks
+            else []
+        )
 
         # Format output
         if reranked_docs:
@@ -373,8 +434,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         if not output_lines:
             output_text = "SYSTEM_NOTE: Không tìm thấy thông tin phù hợp trong cả Vector DB và Knowledge Graph."
             if cached_dense_vector:
-                try:
-                    await semantic_cache_service.upsert(
+                asyncio.create_task(
+                    _safe_cache_upsert(
                         query_text=query,
                         response_text=output_text,
                         artifacts=[],
@@ -383,17 +444,13 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                         kb_version=kb_version,
                         namespace=cache_namespace,
                     )
-                    logger.info(
-                        "semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version
-                    )
-                except Exception:
-                    logger.exception("semantic_cache_write_failed")
+                )
             return output_text
 
         output_text = "\n".join(output_lines)
         if cached_dense_vector:
-            try:
-                await semantic_cache_service.upsert(
+            asyncio.create_task(
+                _safe_cache_upsert(
                     query_text=query,
                     response_text=output_text,
                     artifacts=artifacts,
@@ -402,9 +459,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                     kb_version=kb_version,
                     namespace=cache_namespace,
                 )
-                logger.info("semantic_cache_write mode=%s kb_version=%s", query_mode, kb_version)
-            except Exception:
-                logger.exception("semantic_cache_write_failed")
+            )
 
         return output_text, artifacts
 
@@ -469,22 +524,55 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 #         return f"Database Error: {str(e)}"
 
 # Tool 2: Web Search (Tavily)
+# web_search_tool = TavilySearch(
+#     tavily_api_key=settings.TAVILY_API_KEY,
+#     max_results=3,
+#     topic="general",
+# )
+
 web_search_tool = TavilySearch(
     tavily_api_key=settings.TAVILY_API_KEY,
-    max_results=3,
+    max_results=5,
     topic="general",
+    include_domains=[
+        "hcmut.edu.vn",
+        "www.hcmut.edu.vn",
+        "aao.hcmut.edu.vn",
+        "e-learning.hcmut.edu.vn",
+        "lms.hcmut.edu.vn",
+        "mybk.hcmut.edu.vn",
+        "oisp.hcmut.edu.vn",
+        "tuyensinh.hcmut.edu.vn",
+        "lib.hcmut.edu.vn",
+        "ioffice.hcmut.edu.vn",
+        "imp.hcmut.edu.vn",
+        # Các khoa
+        "fme.hcmut.edu.vn",
+        "che.hcmut.edu.vn",
+        "fce.hcmut.edu.vn",
+        "dee.hcmut.edu.vn",
+        "cse.hcmut.edu.vn",
+        "fas.hcmut.edu.vn",
+        "fenr.hcmut.edu.vn",
+        "geopet.hcmut.edu.vn",
+        "sim.hcmut.edu.vn",
+        # Thêm một số subdomain khác nếu cần
+        "ura.hcmut.edu.vn",
+        "bk-innovation.hcmut.edu.vn",
+    ],
+    # days=365  # hoặc 180
 )
 
 
 # --- Helper chạy ngầm lưu lại câu hỏi bị thiếu kiến thức---
-async def background_log_missing_knowledge(user_id: str, thread_id: str, query: str):
+async def background_log_missing_knowledge(thread_id: str, query: str):
     """Mở một session DB độc lập để lưu log mà không chặn luồng chính."""
     from core.database import AsyncSessionLocal
     from repositories.missing_knowledge_repo import MissingKnowledgeRepository
 
     async with AsyncSessionLocal() as db:
         repo = MissingKnowledgeRepository(db)
-        await repo.log_missing_query(user_id=user_id, thread_id=thread_id, query=query)
+        await repo.log_missing_query(thread_id=thread_id, query=query)
         logger.info(f"Background task: Logged missing knowledge for query: '{query}'")
 
 
@@ -503,9 +591,7 @@ async def tavily_search_results_json(query: str, config: RunnableConfig):
 
     # 2. FIRE-AND-FORGET: Đẩy việc ghi DB ra một task chạy ngầm
     # Agent sẽ đi tiếp ngay lập tức mà không cần đợi DB lưu xong
-    asyncio.create_task(
-        background_log_missing_knowledge(user_id=user_id, thread_id=thread_id, query=query)
-    )
+    asyncio.create_task(background_log_missing_knowledge(thread_id=thread_id, query=query))
 
     # 3. Kích hoạt tool Web Search thật (Đã định nghĩa web_search_tool từ trước)
     try:
@@ -576,6 +662,33 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
     - KHÔNG BỊA ĐẶT thông tin.
     """
     )
+
+    # sys_msg = SystemMessage(
+    #     content="""
+    # Bạn là trợ lý ảo AI chính thức của trường Đại học Bách Khoa TP.HCM (HCMUT).
+    # Nhiệm vụ duy nhất của bạn là tổng hợp thông tin từ cơ sở dữ liệu để trả lời người dùng.
+
+    # --- QUY TẮC QUAN TRỌNG NHẤT ---
+    # BẠN CHỈ ĐƯỢC PHÉP trả lời dựa trên nội dung công cụ `lookup_hcmut_info` hoặc `tavily_search_results_json` cung cấp. TUYỆT ĐỐI KHÔNG sử dụng kiến thức bên ngoài để suy diễn, đoán mò hay điền vào chỗ trống.
+
+    # --- QUY TRÌNH SUY LUẬN (AGENTIC FLOW) ---
+    # 0. TỪ CHỐI câu hỏi không liên quan tới ngữ cảnh trường đại học. Nếu là lời chào, hãy chào lại lịch sự.
+    # 1. KHỞI ĐẦU: Luôn sử dụng tool `lookup_hcmut_info` để tra cứu thông tin HCMUT.
+    # 2. ĐÁNH GIÁ TÀI LIỆU (Self-Reflection):
+    # - Phân tích kỹ câu hỏi của người dùng.
+    # - Soi xét các đoạn văn bản (Document Chunks) và đồ thị tri thức (Knowledge Graph) trả về từ tool.
+    # - Trích xuất thông tin (facts) khớp CHÍNH XÁC với câu hỏi.
+    # - LƯU Ý: CHÚ Ý ĐẾN TỪ KHÓA CHỈ ĐỐI TƯỢNG/ VẬT THỂ cụ thể trong câu hỏi, nếu nội dung KHÔNG ĐÚNG TUYỆT ĐỐI trả lời trực tiếp cho đối tượng của câu hỏi thì phải phân tích kỹ quan hệ. Ví dụ bạn tìm được thông tin chung chung, nhưng câu hỏi hỏi cụ thể một đối tượng sinh viên ngành A thì chỉ khi có căn cứ thông tin đó nói về A bạn mới được sử dụng. Nếu không XEM NHƯ KHÔNG CÓ THÔNG TIN)
+    # 3. QUYẾT ĐỊNH TRẢ LỜI:
+    # - NẾU TÌM THẤY THÔNG TIN: Tổng hợp thành câu trả lời mạch lạc, chia đoạn rõ ràng.
+    # - NẾU KHÔNG TÌM THẤY: Bạn phải ngay lập tức gọi tool `tavily_search_results_json` để tìm kiếm trên web.
+    # - NẾU TAVILY CŨNG KHÔNG CÓ: Xin lỗi người dùng và khẳng định bạn chưa có đủ thông tin để trả lời chính xác.
+
+    # --- ĐỊNH DẠNG ĐẦU RA ---
+    # - Trình bày bằng Markdown (dùng in đậm, gạch đầu dòng để dễ đọc).
+    # - Nếu dùng Tavily Search, bắt buộc chèn dòng này ở cuối: "⚠️ *Lưu ý: Thông tin này được tìm kiếm từ internet để tham khảo.*"
+    # """
+    # )
 
     # Đảm bảo System Message luôn ở đầu
     current_messages = list(state["messages"])
@@ -670,6 +783,13 @@ def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
     if "lookup_hcmut_info" in current_tool_calls:
         if "tavily_search_results_json" in past_tools_called:
             logger.info(f"END: Không có chiều ngược lại")
+            return "handle_error"
+
+    # --- RULE 3: BLOCK LOOP LOOKUP ---
+    # Nếu muốn gọi lookup_hcmut_info, mà trước đó đã gọi lookup trong lượt này -> CẤM
+    if "lookup_hcmut_info" in current_tool_calls:
+        if "lookup_hcmut_info" in past_tools_called:
+            logger.info(f"END: lookup_hcmut_info đã gọi trước đó trong lượt này")
             return "handle_error"
 
     # Nếu hợp lệ -> Cho phép đi vào node Tools
