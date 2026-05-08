@@ -91,7 +91,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
     # Lấy query_mode từ config (mặc định là 'normal' nếu API không truyền)
     query_mode = str(config.get("configurable", {}).get("query_mode", "normal")).strip().lower()
 
-    logger.info(f"CALL TOOL: lookup_hcmut_info | QUERY: {query} | MODE: {query_mode}")
+    _t_tool_start = asyncio.get_event_loop().time()
+    logger.info("CALL TOOL: lookup_hcmut_info | QUERY: %s | MODE: %s", query, query_mode)
 
     configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
     kb_id = configurable.get("kb_id")
@@ -107,13 +108,88 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
     try:
         # 1. Encode query trước (cần cho cả cache và FAQ)
+        _t0 = asyncio.get_event_loop().time()
         query_vector = await retriever_service.encoder.encode_query(query)
         cached_dense_vector = query_vector.get("dense")
+        logger.info("perf_encode | %.3fs", asyncio.get_event_loop().time() - _t0)
 
-        # 2. CHẠY SONG SONG: CACHE + FAQ (Cơ chế Short-Circuit)
+        # 2. Lấy kb_version (cần trước khi tạo cache task)
+        _t0 = asyncio.get_event_loop().time()
         kb_version = await semantic_cache_service.get_kb_version(namespace=cache_namespace)
 
-        # Bọc coroutine vào asyncio.Task để có thể chủ động hủy (cancel) giải phóng tài nguyên
+        # ---------------------------------------------------------------
+        # KHỞI ĐỘNG SỚM (Speculative Execution):
+        # Tạo CẢ 4 task ngay sau encode — tất cả chạy song song.
+        # Qdrant + LightRAG không cần đợi cache/FAQ miss nữa.
+        # Nếu cache/FAQ hit → cancel Qdrant + LightRAG để giải phóng tài nguyên.
+        # ---------------------------------------------------------------
+        LIGHTRAG_HARD_TIMEOUT = 8.0  # giây
+
+        async def _qdrant_search_coro():
+            _t_qdrant = asyncio.get_event_loop().time()
+            try:
+                result = await retriever_service.search(
+                    query=query,
+                    collection_name=cache_namespace,
+                    top_k=10,
+                    precomputed_query_vec=query_vector,
+                )
+                logger.info(
+                    "perf_qdrant | %.3fs | chunks=%d",
+                    asyncio.get_event_loop().time() - _t_qdrant,
+                    len(result),
+                )
+                return result
+            except Exception as e:
+                logger.error(
+                    "Qdrant search failed (%.3fs): %s",
+                    asyncio.get_event_loop().time() - _t_qdrant,
+                    e,
+                )
+                return []
+
+        async def _lightrag_query_coro():
+            if not lightrag_service.base_url:
+                logger.warning("LightRAG is not enabled (base_url not set). Skipping.")
+                return LightRAGResult()
+            _t_lightrag = asyncio.get_event_loop().time()
+            try:
+                result = await asyncio.wait_for(
+                    lightrag_service.query_data(
+                        query=query,
+                        mode=lightrag_mode,
+                        chunk_top_k=10,
+                        only_need_context=True,  # Bỏ qua LLM synthesis phía server → nhanh hơn nhiều
+                    ),
+                    timeout=LIGHTRAG_HARD_TIMEOUT,
+                )
+                logger.info(
+                    "perf_lightrag | %.3fs | mode=%s chunks=%d entities=%d rels=%d",
+                    asyncio.get_event_loop().time() - _t_lightrag,
+                    lightrag_mode,
+                    len(result.chunks),
+                    len(result.entities),
+                    len(result.relationships),
+                )
+                return result
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "perf_lightrag | %.3fs | TIMEOUT (hard_limit=%.1fs) mode=%s",
+                    asyncio.get_event_loop().time() - _t_lightrag,
+                    LIGHTRAG_HARD_TIMEOUT,
+                    lightrag_mode,
+                )
+                return LightRAGResult()
+            except Exception as e:
+                logger.warning(
+                    "perf_lightrag | %.3fs | ERROR=%s",
+                    asyncio.get_event_loop().time() - _t_lightrag,
+                    e,
+                )
+                return LightRAGResult()
+
+        # Tạo tất cả 4 task cùng lúc — bắt đầu chạy ngay
+        _t0_retrieve = asyncio.get_event_loop().time()
         task_cache = asyncio.create_task(
             semantic_cache_service.search(
                 dense_vector=cached_dense_vector,
@@ -131,6 +207,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                 precomputed_dense_vec=cached_dense_vector,
             )
         )
+        task_qdrant = asyncio.create_task(_qdrant_search_coro())
+        task_lightrag = asyncio.create_task(_lightrag_query_coro())
 
         pending = {task_cache, task_faq}
         cache_hit = None
@@ -139,17 +217,15 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         MAX_WAIT_TIME = 2  # Giây
         start_time = asyncio.get_event_loop().time()
 
-        # Vòng lặp xử lý ngay khi có task hoàn thành đầu tiên
+        # Vòng lặp short-circuit: chỉ theo dõi cache+FAQ
+        # Qdrant + LightRAG đang chạy nền trong suốt thời gian này
         while pending:
-            # Tính toán thời gian còn lại
             elapsed = asyncio.get_event_loop().time() - start_time
             remaining = MAX_WAIT_TIME - elapsed
 
             # Hết giờ -> Hủy các task đang treo và thoát vòng lặp
             if remaining <= 0:
-                logger.warning(
-                    "TIMEOUT: Tra cứu Cache/FAQ vượt quá giới hạn thời gian. Đang bỏ qua..."
-                )
+                logger.warning("TIMEOUT: Tra cứu Cache/FAQ vượt quá giới hạn thời gian. Đang bỏ qua...")
                 for p in pending:
                     p.cancel()
                 break
@@ -163,7 +239,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                     # 3. NẾU LÀ TASK CACHE
                     if task == task_cache:
                         cache_hit = result
-                        # PRIORITY 1: Cache hit -> Hủy task FAQ và return ngay
+                        # PRIORITY 1: Cache hit → hủy TẤT CẢ task (kể cả qdrant+lightrag nền)
                         if cache_hit and cache_hit.response_text:
                             logger.info(
                                 "semantic_cache_hit mode=%s similarity=%.4f kb_version=%s key=%s",
@@ -172,15 +248,20 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                                 kb_version,
                                 cache_hit.cache_key,
                             )
-                            # Hủy task còn lại để giải phóng kết nối DB/CPU
+                            logger.info(
+                                "perf_tool_total | %.3fs | exit=cache_hit",
+                                asyncio.get_event_loop().time() - _t_tool_start,
+                            )
                             for p in pending:
                                 p.cancel()
+                            task_qdrant.cancel()
+                            task_lightrag.cancel()
                             return cache_hit.response_text, cache_hit.artifacts
 
                     # 4. NẾU LÀ TASK FAQ
                     elif task == task_faq:
                         faq_results = result
-                        # PRIORITY 2: FAQ EXACT MATCH -> Hủy task Cache và return ngay
+                        # PRIORITY 2: FAQ EXACT MATCH → hủy TẤT CẢ task
                         if faq_results and faq_results[0].score >= FAQ_EXACT_MATCH_THRESHOLD:
                             best_faq = faq_results[0]
                             faq_answer = best_faq.answer or best_faq.content
@@ -200,7 +281,9 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                                     "score": best_faq.score,
                                     "is_faq": True,
                                     "faq_source": faq_source,
-                                    **({"faq_id": best_faq.faq_id} if not best_faq.doc_id else {}),
+                                    **({
+                                        "faq_id": best_faq.faq_id
+                                    } if not best_faq.doc_id else {}),
                                     "reference_url": best_faq.metadata.get("reference_url")
                                     if best_faq.metadata
                                     else None,
@@ -209,8 +292,14 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
                             output_text = f"### CÂU HỎI THƯỜNG GẶP (FAQ):\n- [FAQ | Điểm: {best_faq.score:.2f}]: {faq_answer}"
 
+                            logger.info(
+                                "perf_tool_total | %.3fs | exit=faq_exact_match",
+                                asyncio.get_event_loop().time() - _t_tool_start,
+                            )
                             for p in pending:
                                 p.cancel()
+                            task_qdrant.cancel()
+                            task_lightrag.cancel()
                             return output_text, artifacts
 
                 except Exception as e:
@@ -218,16 +307,17 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                         f"Lỗi trong quá trình chạy song song (Task: {task.get_name()})"
                     )
 
-        # Nếu vòng lặp while kết thúc, nghĩa là cả 2 task đều đã chạy xong
-        # nhưng KHÔNG có kết quả nào thỏa mãn điều kiện Early Return.
+        # Cache+FAQ đều miss → await kết quả Qdrant + LightRAG
+        # (2 task này đã chạy từ sau encode, overlap với toàn bộ phase cache/FAQ)
         logger.info("semantic_cache_miss mode=%s kb_version=%s", query_mode, kb_version)
         if faq_results:
-            logger.info(f"FAQ_SEARCH results={len(faq_results)} top_score={faq_results[0].score}")
-        #  -------------
-
-        # 5. PRIORITY 3: Cả cache và FAQ đều miss → CHẠY DOC + LIGHTRAG
-        # lightrag_rerank_enabled = getattr(settings, "LIGHTRAG_RERANK_ENABLED", False)
-
+            logger.info("FAQ_SEARCH results=%d top_score=%.3f", len(faq_results), faq_results[0].score)
+        logger.info(
+            "perf_cache_faq_phase | %.3fs | result=miss cache_hit=%s faq_count=%d",
+            asyncio.get_event_loop().time() - _t0,
+            bool(cache_hit),
+            len(faq_results) if faq_results else 0,
+        )
         # Thêm FAQ vào pool nếu có kết quả (không phải exact match)
         faq_chunks: List[UnifiedDocument] = []
         if faq_results:
@@ -309,38 +399,16 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         #     all_scored.sort(key=lambda x: x.score, reverse=True)
         #     reranked_docs = all_scored[:5]
         # else:
-        # LightRAG chưa rerank → song song retrieve, sau đó gộp rerank
-        # Xử lý LightRAG có thể fail hoặc chưa enable
-        async def safe_qdrant_search():
-            try:
-                return await retriever_service.search(
-                    query=query,
-                    collection_name=cache_namespace,
-                    top_k=10,
-                    precomputed_query_vec=query_vector,
-                )
-            except Exception as e:
-                logger.error(f"Qdrant search failed: {e}")
-                return []
-
-        async def safe_lightrag_query():
-            try:
-                if not lightrag_service.base_url:
-                    logger.warning(
-                        "LightRAG is not enabled (base_url not set). Skipping LightRAG query."
-                    )
-                    return LightRAGResult()
-                return await lightrag_service.query_data(
-                    query=query, mode=lightrag_mode, chunk_top_k=10
-                )
-            except Exception as e:
-                logger.warning(f"LightRAG query failed: {e}. Continuing with Qdrant results only.")
-                return LightRAGResult()
-
-        task_qdrant = safe_qdrant_search()
-        task_lightrag = safe_lightrag_query()
-
+        # 5. PRIORITY 3: Cache+FAQ miss → chờ Qdrant + LightRAG (đã chạy nền từ sau encode)
+        # task_qdrant và task_lightrag đã được khởi động từ bước tạo task → phần lớn
+        # thời gian overlap với phase cache/FAQ → tiết kiệm đáng kể TTFT.
         qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
+        logger.info(
+            "perf_retrieve_total | %.3fs | qdrant=%d lightrag=%d (đã chạy nền từ sau encode)",
+            asyncio.get_event_loop().time() - _t0_retrieve,
+            len(qdrant_docs),
+            len(lightrag_result.chunks),
+        )
 
         # Log số lượng kết quả từ mỗi nguồn
         logger.info(
@@ -359,10 +427,17 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
             )
         unified_chunks.extend(faq_chunks)
 
+        _t0 = asyncio.get_event_loop().time()
         reranked_docs = (
             await reranker_service.rerank(query=query, documents=unified_chunks, top_n=5)
             if unified_chunks
             else []
+        )
+        logger.info(
+            "perf_rerank | %.3fs | input=%d output=%d",
+            asyncio.get_event_loop().time() - _t0,
+            len(unified_chunks),
+            len(reranked_docs),
         )
 
         # Format output
@@ -445,9 +520,19 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                         namespace=cache_namespace,
                     )
                 )
+            logger.info(
+                "perf_tool_total | %.3fs | exit=no_result",
+                asyncio.get_event_loop().time() - _t_tool_start,
+            )
             return output_text
 
         output_text = "\n".join(output_lines)
+        logger.info(
+            "perf_tool_total | %.3fs | exit=ok reranked=%d mode=%s",
+            asyncio.get_event_loop().time() - _t_tool_start,
+            len(reranked_docs),
+            query_mode,
+        )
         if cached_dense_vector:
             asyncio.create_task(
                 _safe_cache_upsert(
@@ -645,21 +730,36 @@ async def call_model(state: AgentState, config: RunnableConfig) -> AgentState:
 
     sys_msg = SystemMessage(
         content="""
-    Bạn là chatbot hỏi đáp thông minh, chỉ trả lời đúng nội dung câu hỏi, không thêm bất kỳ thông tin dư thừa nào.
+    Bạn là chatbot hỏi đáp chính thức của trường Đại học Bách Khoa TP.HCM (HCMUT).
 
-    QUY TRÌNH SUY LUẬN (AGENTIC FLOW):
-    0. TỪ CHỐI câu hỏi không liên quan tới ngữ cảnh trường đại học và việc hỗ trợ thông tin trường.
+    ══════════════════════════════════════════
+    QUY TẮC SỐ 1 — QUAN TRỌNG NHẤT (KHÔNG ĐƯỢC VI PHẠM):
+    ══════════════════════════════════════════
+    Bạn CHỈ được phép TRÍCH XUẤT thông tin có sẵn từ nội dung tool trả về.
+    TUYỆT ĐỐI KHÔNG:
+    - Suy diễn, đoán mò, hay điền vào chỗ trống bằng kiến thức nội tại.
+    - Gom nhiều chunk rời rạc lại để tự rút ra kết luận mới không có trong chunk nào.
+    - Diễn giải lại theo ý hiểu của bạn nếu chunk không nói rõ điều đó.
+    - Dùng ngữ cảnh câu hỏi để "suy ra" thông tin chưa xuất hiện trong kết quả trả về.
 
-    1. **Bước 1: Nếu là câu hỏi thông tin, khởi đầu bằng `lookup_hcmut_info`.**
-    
-    2. **Bước 2: Đánh giá kết quả (Self-Reflection):**
-       - Đọc kỹ kết quả trả về từ tool nội bộ.
-       - Đánh giá nội dung cung cấp từ `lookup_hcmut_info` có đủ để trả lời câu hỏi không.
-       - NẾU tài liệu có ĐỦ THÔNG TIN trả lời đúng câu hỏi -> Trả lời người dùng thật chính xác.
-       - NẾU tài liệu KHÔNG LIÊN QUAN hoặc không đủ để đưa ra câu trả lời chính xác -> hãy xin lỗi người dùng và nói không có thông tin.
+    Nếu câu trả lời KHÔNG có sẵn rõ ràng trong chunk → thông báo không tìm thấy, KHÔNG tự tổng hợp.
 
-    LƯU Ý QUAN TRỌNG:
-    - KHÔNG BỊA ĐẶT thông tin.
+    ══════════════════════════════════════════
+    QUY TRÌNH SUY LUẬN:
+    ══════════════════════════════════════════
+    0. Câu hỏi không liên quan đến trường/sinh viên → TỪ CHỐI, không gọi tool.
+       Lời chào → chào lại, không gọi tool.
+
+    1. Câu hỏi thông tin → gọi `lookup_hcmut_info` trước tiên.
+
+    2. Đọc từng chunk kết quả và KIỂM TRA: chunk này có nói TRỰC TIẾP đến đối tượng trong câu hỏi không?
+       - CÓ thông tin trực tiếp → trích xuất và trả lời (giữ nguyên ý, không diễn dịch thêm).
+       - KHÔNG có thông tin trực tiếp, hoặc chunk chỉ nói chung chung không khớp cụ thể
+         → BẮT BUỘC gọi `tavily_search_results_json`. KHÔNG xin lỗi hay tự trả lời ở bước này.
+
+    3. Sau khi có kết quả Tavily:
+       - Trả lời dựa trên nội dung Tavily + BẮT BUỘC kèm: "⚠️ Thông tin tham khảo từ internet".
+       - Tavily cũng không có → xin lỗi, không bịa.
     """
     )
 
@@ -785,12 +885,12 @@ def route_tools(state: AgentState) -> Literal["tools", "__end__"]:
             logger.info(f"END: Không có chiều ngược lại")
             return "handle_error"
 
-    # --- RULE 3: BLOCK LOOP LOOKUP ---
-    # Nếu muốn gọi lookup_hcmut_info, mà trước đó đã gọi lookup trong lượt này -> CẤM
-    if "lookup_hcmut_info" in current_tool_calls:
-        if "lookup_hcmut_info" in past_tools_called:
-            logger.info(f"END: lookup_hcmut_info đã gọi trước đó trong lượt này")
-            return "handle_error"
+    # # --- RULE 3: BLOCK LOOP LOOKUP ---
+    # # Nếu muốn gọi lookup_hcmut_info, mà trước đó đã gọi lookup trong lượt này -> CẤM
+    # if "lookup_hcmut_info" in current_tool_calls:
+    #     if "lookup_hcmut_info" in past_tools_called:
+    #         logger.info(f"END: lookup_hcmut_info đã gọi trước đó trong lượt này")
+    #         return "handle_error"
 
     # Nếu hợp lệ -> Cho phép đi vào node Tools
     return "tools"
