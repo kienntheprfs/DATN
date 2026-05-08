@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     EMBEDDING_API_VERSION: str | None = None
 
     # Reranker
+    # Chọn backend: "bge" (local, không cần API) hoặc "jina" (cloud API)
+    RERANKER_BACKEND: str = "bge"
     JINA_API_KEY: str | None = None
     JINA_API_URL: str | None = None
 

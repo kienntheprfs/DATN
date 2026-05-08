@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 # --- Project imports ---
 from core import get_model, settings
 from rag_utils.retriever import QdrantHybridRetriever
-from rag_utils.reranker import BaseReranker, JinaReranker
+from rag_utils.reranker import BaseReranker, get_reranker
 from rag_utils.lightrag_service import LightRAGService, LightRAGResult
 from rag_utils.semantic_cache import semantic_cache_service
 
@@ -67,7 +67,7 @@ FAQ_EXACT_MATCH_THRESHOLD = 0.78  # Ngưỡng rất cao -> return trực tiếp
 # INIT SERVICES
 # ==============================================================================
 retriever_service = QdrantHybridRetriever()
-reranker_service: BaseReranker = JinaReranker()
+reranker_service: BaseReranker = get_reranker()
 lightrag_service: LightRAGService = LightRAGService()
 
 
