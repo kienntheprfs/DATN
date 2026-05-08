@@ -38,8 +38,12 @@ class BaseReranker(ABC):
 # ==========================================
 class JinaReranker(BaseReranker):
     def __init__(self):
-        self.api_key = settings.JINA_API_KEY
-        self.url = settings.JINA_API_URL
+        if not settings.JINA_API_URL:
+            raise ValueError("JINA_API_URL chưa được cấu hình trong settings/.env")
+        if not settings.JINA_API_KEY:
+            raise ValueError("JINA_API_KEY chưa được cấu hình trong settings/.env")
+        self.url: str = settings.JINA_API_URL
+        self.api_key: str = settings.JINA_API_KEY
         # Persistent client — tái sử dụng TCP connection
         self._client = httpx.AsyncClient(timeout=15.0)
 
