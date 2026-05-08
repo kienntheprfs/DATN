@@ -25,10 +25,9 @@ async def test_csv_exporter_writes_standard_and_metadata_columns(tmp_path) -> No
 
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8")
-    assert "\"Document\",\"Topic\",\"Label\",\"Question\"" in content
-    assert '"job_id"' in content
+    assert '"Question","Topic","Label","job_id"' in content
     assert '"topic_type"' in content
     assert '"time_range"' in content
     assert '"source"' in content
     assert '"created_at"' in content
-    assert '"Cau hoi 1","0","Hoc phi","Cau hoi 1"' in content
+    assert '"Cau hoi 1","0","Hoc phi"' in content

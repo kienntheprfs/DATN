@@ -37,3 +37,24 @@ def test_to_utc_converts_from_gmt7_to_utc() -> None:
     result = to_utc(gmt7)
     assert result.tzinfo == timezone.utc
     assert result.hour == 5
+    assert result.hour == 5
+
+def test_parse_time_range_remaining_cases() -> None:
+    # 14 days
+    s, e = parse_time_range(TimeRange.DAYS_14)
+    assert 14 * 86400 - 5 <= (e - s).total_seconds() <= 14 * 86400 + 5
+    
+    # 30 days
+    s, e = parse_time_range(TimeRange.DAYS_30)
+    assert 30 * 86400 - 5 <= (e - s).total_seconds() <= 30 * 86400 + 5
+    
+    # Fallback/Default
+    s, e = parse_time_range("invalid")
+    assert 7 * 86400 - 5 <= (e - s).total_seconds() <= 7 * 86400 + 5
+
+def test_to_utc_naive():
+    naive = datetime(2024, 1, 1, 10, 0)
+    res = to_utc(naive)
+    assert res.tzinfo == timezone.utc
+    # 10:00 GMT+7 is 03:00 UTC
+    assert res.hour == 3
