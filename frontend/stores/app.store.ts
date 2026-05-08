@@ -63,29 +63,28 @@ export const useAppStore = create<AppState>()(
       },
 
       refreshHistory: async () => {
-        set({ history: [], currentPage: 1, hasMoreHistory: true });
         const state = get();
-        if (!state.isLoadingHistory) {
-          set({ isLoadingHistory: true });
-          try {
-            const response = await agentClient.getThreads(5, 0);
-            const newFetchedItems: HistoryItem[] = response.items.map((thread) => ({
-              id: thread.id,
-              title: thread.title || "Cuộc trò chuyện mới",
-              url: `/chat?thread_id=${thread.id}`,
-              updatedAt: thread.updated_at || undefined,
-              preview: thread.title || "",
-            }));
-            set({
-              history: newFetchedItems,
-              currentPage: 2,
-              isLoadingHistory: false,
-              hasMoreHistory: response.items.length === 5
-            });
-          } catch (error) {
-            console.error("Lỗi khi tải lịch sử:", error);
-            set({ isLoadingHistory: false });
-          }
+        // Prevent concurrent refresh; keep existing history visible while fetching
+        if (state.isLoadingHistory) return;
+        set({ isLoadingHistory: true, currentPage: 1, hasMoreHistory: true });
+        try {
+          const response = await agentClient.getThreads(5, 0);
+          const newFetchedItems: HistoryItem[] = response.items.map((thread) => ({
+            id: thread.id,
+            title: thread.title || "Cuộc trò chuyện mới",
+            url: `/chat?thread_id=${thread.id}`,
+            updatedAt: thread.updated_at || undefined,
+            preview: thread.title || "",
+          }));
+          set({
+            history: newFetchedItems,
+            currentPage: 2,
+            isLoadingHistory: false,
+            hasMoreHistory: response.items.length === 5
+          });
+        } catch (error) {
+          console.error("Lỗi khi tải lịch sử:", error);
+          set({ isLoadingHistory: false });
         }
       },
 

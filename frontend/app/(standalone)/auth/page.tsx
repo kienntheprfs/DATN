@@ -38,6 +38,9 @@ function AuthForm() {
 		if (searchParams.get("redirected") === "true") {
 			toast.warning("Vui lòng đăng nhập để sử dụng tính năng này");
 		}
+		if (searchParams.get("error") === "expired") {
+			toast.error("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại!");
+		}
 	}, [searchParams]);
 
 	const clearErrors = () => setErrors({});

@@ -92,6 +92,7 @@ export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
     <div 
       className="w-full h-full relative overflow-hidden" 
       style={{ perspective: is3D ? '1500px' : 'none' }}
+      id="map-container"
     >
       <div 
         className="w-full h-full absolute inset-0 transition-transform duration-700 ease-in-out"

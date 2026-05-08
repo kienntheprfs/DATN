@@ -10,6 +10,7 @@ import { toast } from "sonner";
 export interface Document {
   id: string;
   status?: string | null;
+  processingStatus?: string | null;
   code: string;
   title: string;
   summary: string;
@@ -164,27 +165,35 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
                 </td>
                 <td className="px-6 whitespace-nowrap text-right text-sm font-medium align-top">
                   {(() => {
+                    const isProcessing = doc.processingStatus === "pending" || doc.processingStatus === "processing";
                     const isDeletePending = doc.status === "delete_pending";
                     const isDeleteFailed = doc.status === "delete_failed";
                     const isDeletingNow = deletingDocumentId === doc.id;
-                    const deleteIcon = isDeletePending || isDeletingNow
+
+                    const isLoading = isProcessing || isDeletePending || isDeletingNow;
+
+                    const deleteIcon = isLoading
                       ? "hourglass_top"
                       : isDeleteFailed
                         ? "refresh"
                         : "delete";
-                    const deleteTitle = isDeletePending
-                      ? "Đang chờ xóa tài liệu"
-                      : isDeleteFailed
-                        ? "Xóa thất bại, bấm để thử lại"
-                        : "Xóa tài liệu";
-                    const deleteButtonClass = isDeletePending
-                      ? "text-amber-600 transition-colors"
+
+                    const deleteTitle = isProcessing
+                      ? "Tài liệu đang được xử lý AI"
+                      : isDeletePending
+                        ? "Đang chờ xóa tài liệu"
+                        : isDeleteFailed
+                          ? "Xóa thất bại, bấm để thử lại"
+                          : "Xóa tài liệu";
+
+                    const deleteButtonClass = isLoading
+                      ? "text-amber-600 transition-colors animate-pulse"
                       : isDeleteFailed
                         ? "text-orange-500 hover:text-orange-700 transition-colors"
                         : "text-slate-400 hover:text-red-600 transition-colors";
 
                     return (
-                  <div className={`${isDeletePending ? "visible" : "invisible group-hover:visible"} flex items-center justify-end gap-2`}>
+                  <div className={`${isLoading ? "visible" : "invisible group-hover:visible"} flex items-center justify-end gap-2`}>
                     <button
                       className="text-slate-400 hover:text-primary transition-colors"
                       title="Xem chi tiết"
@@ -216,9 +225,13 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
                     <button
                       className={deleteButtonClass}
                       title={deleteTitle}
-                      disabled={isDeletePending || isDeletingNow}
+                      disabled={isLoading}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isProcessing) {
+                          toast.info("Tài liệu đang được xử lý AI. Vui lòng đợi.");
+                          return;
+                        }
                         if (isDeletePending) {
                           toast.info("Tài liệu đang chờ xóa. Vui lòng đợi xử lý hoàn tất.");
                           return;

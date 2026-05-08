@@ -9,6 +9,15 @@ Documentation này mô tả chi tiết strategy để testing hệ thống DATN 
 
 ## Table of Contents
 
+### Specialized Testing Documents
+- [Master Test Strategy Overview & Tech Stack](./test-strategy-overview.md)
+- [UI Unit Test Strategy](./ui-unit-test-strategy.md)
+- [Wayfinder Test Strategy](./wayfinder-test-strategy.md)
+- [Integration Test Strategy](./integration-test-strategy.md)
+- [End-to-End (E2E) Test Strategy](./e2e-test-strategy.md)
+- [Detailed Testing Plan](./testing-plan.md)
+
+### Main Content
 - [AI Accuracy Testing](#1-ai-accuracy-testing)
 - [System Testing](#2-system-testing)
 - [Test Environment Setup](#3-test-environment-setup)

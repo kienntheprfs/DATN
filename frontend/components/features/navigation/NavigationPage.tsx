@@ -673,6 +673,7 @@ export default function NavigationPage() {
                 disabled={loading || !startNodeId || !endNodeId}
                 className="w-full"
                 size="lg"
+                data-testid="find-route-btn"
               >
                 {loading ? (
                   <>
@@ -691,6 +692,7 @@ export default function NavigationPage() {
                 variant="secondary"
                 onClick={handleRefreshCache}
                 className="w-full"
+                data-testid="refresh-cache-btn"
               >
                 <RefreshCw className="size-4" />
                 Refresh Map Cache
@@ -736,6 +738,7 @@ export default function NavigationPage() {
                               ? 'bg-accent border-l-4 border-primary'
                               : 'hover:bg-muted border-l-4 border-transparent'
                             } transition-colors`}
+                          data-testid="instruction-item"
                         >
                           <div className="flex flex-col items-center">
                             <div className={`p-2 rounded-full ${instruction.action === 'start' || instruction.action === 'arrive'
@@ -1217,6 +1220,7 @@ export default function NavigationPage() {
                                 ? 'bg-accent'
                                 : 'hover:bg-muted'
                               } transition-colors`}
+                            data-testid="instruction-item"
                           >
                             <div className="flex flex-col items-center">
                               <div className={`p-1.5 rounded-full ${instruction.action === 'start' || instruction.action === 'arrive'

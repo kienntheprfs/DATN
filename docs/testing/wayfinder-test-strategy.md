@@ -1,136 +1,71 @@
-# Test Strategy - Wayfinder
+# Chiến lược Kiểm thử Wayfinder (Wayfinder Test Strategy)
 
-## 1. Overview
+Tài liệu này chi tiết chiến lược kiểm thử cho module Wayfinder - dịch vụ chỉ đường trong khuôn viên trường. Mục tiêu chính là đảm bảo độ tin cậy của thuật toán tìm đường, tính chính xác của dữ liệu bản đồ và hiệu năng của API.
 
-| Item | Description |
-|------|------------|
-| Project | Wayfinder - Indoor Navigation Service |
-| Test Framework | pytest |
-| Test Type | Unit Tests, Integration Tests |
-| API Base | http://localhost:8004 |
+## 1. Mục tiêu & Chỉ số (Goals & Metrics)
 
-## 2. Test Scope
+| Chỉ số | Mục tiêu | Trạng thái hiện tại |
+|--------|----------|-------------------|
+| **Code Coverage (Core Routers)** | > 80% | **85% - 96%** |
+| **Pass Rate** | 100% | 100% |
+| **Thời gian phản hồi API** | < 2s | ~500ms |
 
-### 2.1 Route Logic (RL)
-- Angle calculation between points
-- Turn action determination (straight, left, right)
-- Path geometry calculations
+## 2. Các cấp độ kiểm thử (Testing Levels)
 
-### 2.2 Geo Service (GS)
-- Polyline length calculation
-- Distance measurement
-- Point-to-point distance
+### 2.1. Unit Testing (Logic & Services)
+Tập trung vào các hàm xử lý tính toán thuần túy không phụ thuộc vào Database hoặc Network.
+- **`geo.py`**: Tính toán khoảng cách (Haversine/Euclidean), trọng số cạnh.
+- **`nlp.py`**: Chuẩn hóa văn bản, trích xuất điểm đi/điểm đến từ ngôn ngữ tự nhiên.
+- **`route_logic`**: Tính toán góc xoay, xác định hành động (rẽ trái/phải/đi thẳng).
 
-### 2.3 NLP Service (NL)
-- Location name normalization
-- A-to-B extraction from natural language
-- Vietnamese text processing
+### 2.2. Router Integration Testing (API Layer)
+Kiểm thử các Endpoint API bằng `FastAPI TestClient` và cơ sở dữ liệu SQLite in-memory.
+- **`routes.py`**: Kiểm thử luồng điều hướng toàn trình, chuyển tầng, quản lý Graph Cache.
+- **`nodes.py`, `maps.py`, `buildings.py`**: Kiểm thử các nghiệp vụ CRUD, ràng buộc dữ liệu và logic cascade delete.
 
-## 3. Test Environment Setup
+## 3. Các kịch bản kiểm thử trọng tâm (Core Test Scenarios)
+
+### 3.1. Điều hướng & Thuật toán (Navigation)
+- **Cùng tầng**: Tìm đường ngắn nhất giữa 2 phòng trong cùng 1 tòa nhà.
+- **Chuyển tầng**: Tìm đường từ Tầng 1 tòa A sang Tầng 3 tòa A (phải đi qua thang bộ/thang máy).
+- **Liên tòa nhà**: Tìm đường từ tòa A sang tòa B (đi qua bản đồ Campus).
+- **Chuyển đổi trạng thái**: Đi từ bên trong tòa nhà (Indoor) ra ngoài trời (Outdoor/Campus).
+- **Hướng dẫn giọng nói**: Kiểm tra tính chính xác của các câu lệnh "Rẽ trái", "Rẽ phải", "Đi thẳng" dựa trên góc tọa độ.
+
+### 3.2. Quản lý Graph Cache
+- **Refresh Cache**: Đảm bảo đồ thị đường đi được cập nhật ngay khi Admin thay đổi dữ liệu Node/Edge.
+- **Persistence**: Đảm bảo cache được lưu xuống file JSON để tăng tốc độ khởi động hệ thống.
+
+### 3.3. Xử lý ngôn ngữ tự nhiên (NLP)
+- **Fuzzy Matching**: Tìm đúng Node ngay cả khi User nhập tên không hoàn toàn chính xác (ví dụ: "p.101" -> "Phòng 101").
+- **Ambiguity**: Xử lý trường hợp một tên phòng tồn tại ở nhiều tòa nhà (hiển thị danh sách lựa chọn).
+
+## 4. Cấu trúc thư mục Test
+
+```text
+backend/tests/
+├── unit/
+│   ├── test_geo_service.py      # Test logic địa lý
+│   ├── test_nlp_service.py      # Test xử lý văn bản
+│   ├── test_routes_router.py    # Test API điều hướng chính
+│   ├── test_maps_router.py      # Test API quản lý bản đồ
+│   ├── test_nodes_router.py     # Test API quản lý node
+│   └── test_buildings_router.py # Test API quản lý tòa nhà
+└── conftest.py                  # Fixtures (Database, Client, Mock data)
+```
+
+## 5. Hướng dẫn chạy Test
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Thiết lập môi trường
+export PYTHONPATH="."
 
-# Run tests
-pytest
+# Chạy toàn bộ test suite
+uv run pytest backend/tests/unit/ -v
 
-# Run with coverage
-pytest --cov=backend --cov-report=html
+# Chạy kèm báo cáo Coverage
+uv run pytest --cov=backend/routers --cov-report=term-missing
 ```
 
 ---
-
-## Test Cases
-
-### RL - Route Logic
-
-| ID | Test Name | Test Data | Expected Result | Status |
-|----|-----------|----------|----------------|--------|
-| RL-001 | Tính góc đường thẳng | P1(0,0), P2(1,0), P3(2,0) | angle = 0° | Passed |
-| RL-002 | Tính góc quay phải 90° | P1(0,0), P2(1,0), P3(1,1) | angle ≈ 90° | Passed |
-| RL-003 | Tính góc quay trái 90° | P1(0,0), P2(1,0), P3(1,-1) | angle ≈ -90° | Passed |
-| RL-004 | Tiếp tục đi thẳng | P1(0,0), P2(1,1), P3(2,2) | angle ≈ 0° | Passed |
-| RL-005 | Hành động straight (0°)) | angle = 0 | "straight" | Passed |
-| RL-006 | Hành động straight (±10°) | angle = 10 | "straight" | Passed |
-| RL-007 | Hành động slight right | angle = 20 | "slight_right" | Passed |
-| RL-008 | Hành động slight right (44°) | angle = 44 | "slight_right" | Passed |
-| RL-009 | Hành động slight left | angle = -20 | "slight_left" | Passed |
-| RL-010 | Hành động slight left (-44°) | angle = -44 | "slight_left" | Passed |
-| RL-011 | Hành động right (46-180°) | angle = 46 | "right" | Passed |
-| RL-012 | Hành động right (90°) | angle = 90 | "right" | Passed |
-| RL-013 | Hành động right (180°) | angle = 180 | "right" | Passed |
-| RL-014 | Hành động left (-46°) | angle = -46 | "left" | Passed |
-| RL-015 | Hành động left (-90°) | angle = -90 | "left" | Passed |
-| RL-016 | Hành động left (-180°) | angle = -180 | "left" | Passed |
-
-### GS - Geo Service
-
-| ID | Test Name | Test Data | Expected Result | Status |
-|----|-----------|----------|----------------|--------|
-| GS-001 | Độ dài polyline rỗng | [] | 0.0 | Passed |
-| GS-002 | Độ dài 1 điểm | [(0, 0)] | 0.0 | Passed |
-| GS-003 | Độ dài 2 điểm | [(0, 0), (3, 4)] | 5.0 | Passed |
-| GS-004 | Độ dài 3 điểm | [(0, 0), (3, 0), (3, 4)] | 7.0 | Passed |
-| GS-005 | Độ dài đường thẳng | [(0, 0), (1, 0), (2, 0), (3, 0)] | 3.0 | Passed |
-| GS-006 | Độ dài phức tạp | [(0, 0), (1, 1), (2, 2), (3, 3)] | ≈ 4.2426 | Passed |
-
-### NL - NLP Service
-
-| ID | Test Name | Test Data | Expected Result | Status |
-|----|-----------|----------|----------------|--------|
-| NL-001 | Normalize chuỗi rỗng | "" | "" | Passed |
-| NL-002 | Normalize None | None | "" | Passed |
-| NL-003 | Normalize lowercase | "HELLO WORLD" | "hello world" | Passed |
-| NL-004 | Normalize strip whitespace | "  hello  " | "hello" | Passed |
-| NL-005 | Normalize giữ tiếng Việt | "Phòng Học" | "phòng học" | Passed |
-| NL-006 | Extract "Từ...đến" | "Từ Sảnh A đến Thang máy" | start="sảnh a", end="thang máy" | Passed |
-| NL-007 | Extract "Đi từ...tới" | "Đi từ Phòng 101 tới Phòng 202" | start="phòng 101", end="phòng 202" | Passed |
-| NL-008 | Extract "Từ...sang" | "Từ Nhà vệ sinh sang Căn tin" | start="nhà vệ sinh", end="căn tin" | Passed |
-| NL-009 | Extract "Từ...về" | "Từ Sân vườn về Sảnh chính" | start="sân vườn", end="sảnh chính" | Passed |
-| NL-010 | Extract chỉ có đích | "Đến Thang máy" | start=None, end="thang máy" | Passed |
-| NL-011 | Extract "Tìm" | "Tìm Phòng Họp" | start=None, end="phòng họp" | Passed |
-| NL-012 | Extract chỉ địa điểm | "Phòng 101" | start=None, end="phòng 101" | Passed |
-| NL-013 | Extract nhiều từ | "Đi từ Khoa Công Nghệ Thông Tin đến Phòng Hành Chính" | start="khoa công nghệ thông tin", end="phòng hành chính" | Passed |
-
----
-
-## 4. Test File Structure
-
-```
-wayfinder/
-├── backend/
-│   ├── tests/
-│   │   └── unit/
-│   │       ├── test_route_logic.py
-│   │       ├── test_geo_service.py
-│   │       └── test_nlp_service.py
-│   ├── routers/
-│   │   └── routes.py
-│   └── services/
-│       ├── geo.py
-│       └── nlp.py
-```
-
-## 5. Running Tests
-
-```bash
-# All unit tests
-pytest backend/tests/unit/ -v
-
-# Specific test file
-pytest backend/tests/unit/test_route_logic.py -v
-
-# With coverage
-pytest backend/tests/unit/ --cov=backend --cov-report=term-missing
-```
-
----
-
-## 6. API Endpoints (Test coverage)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/maps/search` | POST | Search location |
-| `/api/maps/navigate` | POST | Calculate route |
-| `/health` | GET | Health check |
+*Tài liệu này được cập nhật định kỳ dựa trên các thay đổi trong logic lõi của Wayfinder.*

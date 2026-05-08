@@ -571,7 +571,7 @@ export function ChatWindow({
 					}
 
 					return (
-						<div key={`group-${groupIndex}`} className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+						<div key={`group-${groupIndex}`} data-testid="bot-message" className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 							<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 								<Bot className="size-6" />
 							</div>
@@ -614,7 +614,7 @@ export function ChatWindow({
 										<div className="text-xs font-semibold text-muted-foreground mb-2">Nguồn tham khảo</div>
 										<div className="space-y-1">
 											{citations.map((cite, idx) => (
-												<div key={idx} className="text-xs">
+												<div key={idx} data-testid="citation-item" className="text-xs">
 													<span className="font-medium">[{idx + 1}]</span>{" "}
 													<span className="text-primary">{cite.file_name}</span>
 													<span className="text-muted-foreground"> - {cite.source_type}</span>

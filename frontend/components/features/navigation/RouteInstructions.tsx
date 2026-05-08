@@ -64,6 +64,7 @@ export function RouteInstructions({
                     ? 'bg-amber-50 border-l-4 border-amber-500'
                     : 'hover:bg-muted border-l-4 border-transparent'
               }`}
+              data-testid="instruction-item"
             >
               <div className="flex flex-col items-center">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${

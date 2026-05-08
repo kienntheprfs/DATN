@@ -18,6 +18,8 @@ checkpoints.db-*
 
 .claude
 
+dashboard/docker/data
+dashboard/topic_modeling_results
 
 # VSCode
 .vscode

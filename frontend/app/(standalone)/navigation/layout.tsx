@@ -10,18 +10,8 @@ const beVietnamPro = Be_Vietnam_Pro({
 
 export default function NavigationLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi" className={beVietnamPro.variable}>
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="font-sans">
-        <TooltipProvider>
-          {children}
-        </TooltipProvider>
-      </body>
-    </html>
+    <TooltipProvider>
+      {children}
+    </TooltipProvider>
   );
 }

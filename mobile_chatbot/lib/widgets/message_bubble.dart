@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../models/chat_models.dart';
 import '../services/api_client.dart';
 import '../utils/constants.dart';
+import 'landmark_carousel.dart';
+import 'map_preview_card.dart';
 
 class MessageBubble extends StatefulWidget {
   const MessageBubble({
@@ -89,28 +92,67 @@ class _MessageBubbleState extends State<MessageBubble> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              widget.message.text,
-              style: TextStyle(
-                color: isUser ? Colors.white : Colors.black87,
-                fontSize: 15,
-                height: 1.4,
+            MarkdownBody(
+              data: widget.message.text,
+              styleSheet: MarkdownStyleSheet(
+                p: TextStyle(
+                  color: isUser ? Colors.white : Colors.black87,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
               ),
+              imageBuilder: (uri, title, alt) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      AppConstants.getFullImageUrl(uri.toString()),
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                );
+              },
             ),
             if (widget.message.route != null) ...[
               const SizedBox(height: 12),
+              MapPreviewCard(
+                route: widget.message.route!,
+                onExpand: widget.onOpenRoute,
+              ),
+            ],
+            if (widget.message.landmarks != null) ...[
+              const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: widget.onOpenRoute,
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => LandmarkCarouselDialog(
+                      landmarks: widget.message.landmarks!,
+                      onConfirm: (_) => Navigator.pop(context),
+                    ),
+                  );
+                },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isUser ? Colors.white24 : Colors.blue.shade50,
-                  foregroundColor: isUser ? Colors.white : Colors.blue.shade700,
+                  backgroundColor: isUser ? Colors.white24 : Colors.orange.shade50,
+                  foregroundColor: isUser ? Colors.white : Colors.orange.shade700,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                icon: const Icon(Icons.map_outlined, size: 18),
-                label: const Text('Xem chỉ đường'),
+                icon: const Icon(Icons.image_search_rounded, size: 18),
+                label: const Text('Xem ảnh thực tế'),
               ),
             ],
             if (!isUser) ...[

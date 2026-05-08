@@ -14,6 +14,14 @@ const routeTitles: Record<string, string> = {
 	"/navigation/editor": "Chỉnh sửa bản đồ",
 	"/auth": "Đăng nhập",
 	"/auth/callback": "Đăng nhập Google",
+	// Admin routes
+	"/admin": "Quản trị",
+	"/admin/knowledge": "Cơ sở tri thức",
+	"/admin/topic": "Phân tích Chủ đề",
+	"/admin/rating": "Đánh giá người dùng",
+	"/admin/pinned-post": "Quản lý Bài ghim",
+	"/admin/missing-in-map": "Dữ liệu Bản đồ Thiếu",
+	"/faq": "Câu hỏi thường gặp",
 };
 
 export function usePageTitle() {

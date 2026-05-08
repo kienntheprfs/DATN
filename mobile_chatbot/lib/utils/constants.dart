@@ -16,4 +16,21 @@ class AppConstants {
   
   static const Color glassColor = Color(0xCCFFFFFF);
   static const double borderRadius = 24.0;
+
+  static String getFullImageUrl(String path) {
+    if (path.isEmpty) return '';
+    if (path.startsWith('http')) return path;
+    
+    // Match frontend logic in wayfinding-client.ts
+    // frontend uses /api/wayfinder/static/ as the base for wayfinding images
+    
+    final cleanPath = path.startsWith('/') ? path : '/$path';
+    
+    // If the path already includes the full static path, don't duplicate it
+    if (cleanPath.contains('/wayfinder/static')) {
+      return '${apiBase}${cleanPath}';
+    }
+    
+    return '${apiBase}/wayfinder/static${cleanPath}';
+  }
 }

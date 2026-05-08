@@ -115,6 +115,7 @@ export function LocationSearch({
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           className="flex-1"
+          data-testid={icon === 'origin' ? 'start-location-input' : 'end-location-input'}
         />
         {(query || value) && (
           <Button
@@ -135,6 +136,7 @@ export function LocationSearch({
               key={`${loc.map_id}-${loc.node_id}-${index}`}
               className="px-3 py-2 cursor-pointer hover:bg-muted"
               onClick={() => handleSelect(loc)}
+              data-testid="location-suggestion"
             >
               <div className="flex items-center gap-2">
                 <span>{getIcon(loc.node_type)}</span>

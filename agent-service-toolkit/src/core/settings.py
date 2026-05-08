@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     AUTH_SECRET: SecretStr | None = None
+    TOPIC_MODELING_ADMIN_TOKEN: SecretStr | None = None
 
     OPENAI_API_KEY: SecretStr | None = None
     DEEPSEEK_API_KEY: SecretStr | None = None
@@ -141,6 +142,9 @@ class Settings(BaseSettings):
     # If DEFAULT_MODEL is None, it will be set in model_post_init
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
+
+    MAX_TOKENS_PER_TIME_WINDOW: int = 50000
+    TIME_WINDOW: int = 60
 
     # Set openai compatible api, mainly used for proof of concept
     COMPATIBLE_MODEL: str | None = None

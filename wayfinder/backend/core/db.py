@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from sqlmodel import create_engine, SQLModel, text
+from sqlmodel import create_engine, SQLModel, text, Session
 from dotenv import load_dotenv
 
 BASE_PKG = Path(__file__).resolve().parents[2]
@@ -50,3 +50,8 @@ def init_db():
     print(
         f"Created {len(SQLModel.metadata.tables)} tables in schema '{DB_SCHEMA}': {list(SQLModel.metadata.tables.keys())}"
     )
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session

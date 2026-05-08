@@ -5,32 +5,35 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlmodel import Session, SQLModel
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel
+
+from fastapi.testclient import TestClient
+from backend.main import app
+from backend.core.db import get_session
+from backend.routers.routes import _clear_graph_cache
+
+integration_engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-@pytest.fixture
-def test_engine():
-    """Create an in-memory SQLite engine for tests."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    return engine
-
-
-@pytest.fixture
-def test_db_session(test_engine):
-    """Yield an isolated session for each test."""
-    session_maker = sessionmaker(test_engine, class_=Session, expire_on_commit=False)
-    with session_maker() as session:
+def override_get_session():
+    with Session(integration_engine) as session:
         yield session
-        session.rollback()
+
+
+app.dependency_overrides[get_session] = override_get_session
+
+
+@pytest.fixture(scope="function")
+def integration_client():
+    """Provide a TestClient with tables created and torn down per test."""
+    _clear_graph_cache()
+    SQLModel.metadata.create_all(integration_engine)
+    client = TestClient(app)
+    yield client
+    SQLModel.metadata.drop_all(integration_engine)
+    _clear_graph_cache()
