@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 
@@ -18,9 +19,14 @@ class _FakeBackgroundTasks:
 
 
 class _FakeSession:
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
     async def commit(self):
         return None
-
+    async def rollback(self):
+        return None
     async def refresh(self, obj):
         return None
 
@@ -60,3 +66,54 @@ async def test_trigger_job_enqueues_background_task(monkeypatch) -> None:
     assert created is True
     assert job.id == fake_job.id
     assert len(background_tasks.calls) == 1
+
+@pytest.mark.asyncio
+async def test_run_background_job_success(monkeypatch) -> None:
+    from src.services.topic_job_service import _run_background_job
+    from src.models.topic_pipeline import DashboardTopicPipelineJob, JobStatus
+    
+    job_id = uuid4()
+    job = DashboardTopicPipelineJob(id=job_id, status=JobStatus.PENDING.value, time_range="7d")
+    
+    # Mocks
+    mock_repo = MagicMock()
+    mock_repo.get_by_id = AsyncMock(return_value=job)
+    mock_repo.mark_running = AsyncMock()
+    mock_repo.mark_succeeded = AsyncMock()
+    
+    monkeypatch.setattr("src.services.topic_job_service.TopicJobRepository", mock_repo)
+    monkeypatch.setattr("src.services.topic_job_service.parse_time_range", MagicMock(return_value=(None, None)))
+    
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.return_value.run = AsyncMock()
+    monkeypatch.setattr("src.services.topic_job_service.PipelineOrchestrator", mock_orchestrator)
+    
+    # Mock exporters and adapters
+    monkeypatch.setattr("src.services.topic_job_service.get_input_adapter", MagicMock())
+    monkeypatch.setattr("src.services.topic_job_service.get_output_adapters", MagicMock(return_value=(MagicMock(), MagicMock())))
+    
+    async def _run():
+        await _run_background_job(job_id, TimeRange.DAYS_7, lambda: _FakeSession())
+        
+    await _run()
+    
+    mock_repo.mark_running.assert_called_once()
+    mock_repo.mark_succeeded.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_run_background_job_failure(monkeypatch) -> None:
+    from src.services.topic_job_service import _run_background_job
+    
+    job_id = uuid4()
+    job = MagicMock()
+    
+    mock_repo = MagicMock()
+    mock_repo.get_by_id = AsyncMock(return_value=job)
+    mock_repo.mark_running = AsyncMock(side_effect=Exception("Crash"))
+    mock_repo.mark_failed = AsyncMock()
+    
+    monkeypatch.setattr("src.services.topic_job_service.TopicJobRepository", mock_repo)
+    
+    await _run_background_job(job_id, TimeRange.DAYS_7, lambda: _FakeSession())
+    
+    mock_repo.mark_failed.assert_called_once()

@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from src.models import AnswerRating, RatingValue
 from src.services.rating_service import RatingService
-from src.schemas.rating import RatingCreate
+from src.schemas.rating import RatingCreate, RatingAdminListParams
 
 @pytest.fixture
 def mock_repo(monkeypatch):
@@ -119,3 +119,26 @@ async def test_fetch_histories_mocked():
         
         assert ("t1", "u1") in result
         assert result[("t1", "u1")][0]["content"] == "test"
+
+@pytest.mark.asyncio
+async def test_list_admin_ratings(monkeypatch):
+    # Mock Repository
+    mock_repo = MagicMock()
+    mock_repo.list_admin_ratings = AsyncMock(return_value=([
+        AnswerRating(id=uuid4(), user_id="u1", run_id="r1", thread_id="t1", rating="LIKE", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    ], 1))
+    mock_repo.get_thread_user_metadata = AsyncMock(return_value=({"t1": "Thread 1"}, {"u1": "User 1"}))
+    
+    monkeypatch.setattr("src.services.rating_service.RatingRepository", mock_repo)
+    
+    # Mock history fetching
+    monkeypatch.setattr(RatingService, "_fetch_histories_for_items", AsyncMock(return_value={("t1", "u1"): [{"type": "human", "content": "q"}, {"type": "ai", "content": "a", "run_id": "r1"}]}))
+    
+    params = RatingAdminListParams(page=1, page_size=10)
+    response = await RatingService.list_admin_ratings(AsyncMock(), params=params)
+    
+    assert response.total_items == 1
+    assert response.items[0].user_name == "User 1"
+    assert response.items[0].thread_name == "Thread 1"
+    assert response.items[0].question == "q"
+    assert response.items[0].answer == "a"
