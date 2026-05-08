@@ -33,6 +33,7 @@ Agent Service Toolkit là một framework hoàn chỉnh để xây dựng và ch
 - Research Assistant
 - Chatbot
 - RAG Assistant
+- **Map Agent** (Indoor Wayfinding)
 - Custom agents
 
 ### 2. Advanced Streaming
@@ -158,6 +159,45 @@ def create_agent():
     
     return agent
 ```
+
+## Logic Xử lý Navigation (Map Agent)
+
+Hệ thống Map Agent (định nghĩa tại `src/agents/agent_map.py`) được thiết kế đặc biệt để giải quyết bài toán chỉ đường trong không gian nội thất (indoor), nơi người dùng thường gặp khó khăn trong việc xác định vị trí hiện tại.
+
+### 1. Quy trình Xác nhận Điểm xuất phát
+
+Để đảm bảo tính chính xác, Agent tuân thủ quy trình nghiêm ngặt:
+- **Bắt buộc xác nhận**: Agent không được gọi công cụ tìm đường (`FindRoute`) cho đến khi xác định được cả **Điểm đi** và **Điểm đến** cụ thể.
+- **Xử lý thông tin chung chung**: Nếu người dùng nói "Tôi đang ở đây" hoặc "Đi từ chỗ này", Agent sẽ từ chối và yêu cầu một cái tên cụ thể hoặc mô tả cảnh vật.
+
+### 2. Các phương pháp hỗ trợ người dùng nhận diện vị trí
+
+Nếu người dùng không biết tên địa điểm hoặc tầng mình đang đứng, Agent cung cấp 2 giải pháp:
+
+| Phương pháp | Công cụ sử dụng | Cách hoạt động |
+| :--- | :--- | :--- |
+| **Mô tả cảnh vật** | `GuessLocationByDescription` | Người dùng mô tả những gì họ thấy (VD: "Có cái biển báo đỏ", "Gần thang máy..."). Agent sử dụng fuzzy matching để gợi ý các node phù hợp. |
+| **Nhận diện qua hình ảnh** | `GetLandmarkImages` | Agent trả về danh sách các hình ảnh thực tế của các địa điểm nổi bật (landmarks) trong khu vực để người dùng chọn. |
+
+### 3. Xử lý sự mơ hồ (Ambiguity)
+
+- **Gợi ý lựa chọn**: Khi có nhiều địa điểm trùng tên hoặc gần giống nhau, Agent sẽ liệt kê các lựa chọn kèm thông tin Tầng/Tòa nhà.
+- **Định danh chính xác (ID tracking)**: Sau khi người dùng xác nhận, Agent sẽ lưu vết ID của địa điểm (`[ID: ...]`). Trong các bước gọi công cụ tiếp theo, Agent ưu tiên truyền `from_node_id` hoặc `to_node_id` để tránh việc phải hỏi lại người dùng.
+
+### 4. Kết hợp Sự kiện và Navigation
+
+Agent có khả năng kết nối thông tin từ sự kiện (`SearchEvents`) với bản đồ. Nếu một sự kiện được tìm thấy và có thông tin vị trí trong database, Agent sẽ chủ động đề xuất chỉ đường từ vị trí của người dùng đến địa điểm diễn ra sự kiện đó.
+
+### 5. Chi tiết tích hợp kỹ thuật (Technical Integration)
+
+Map Agent tương tác với Wayfinder Service thông qua các endpoint API sau:
+
+- **Routing Engine**: Gọi `/api/find` với `start_node_id` và `end_node_id`. Kết quả trả về bao gồm polyline tổng, danh sách map liên quan và hướng dẫn di chuyển chi tiết.
+- **Fuzzy Search & Alias**: Sử dụng `/api/aliases/search` để tìm kiếm địa điểm theo tên hoặc biệt danh (alias). Hệ thống sử dụng `RapidFuzz` để xử lý các biến thể của tên.
+- **Phản hồi từ người dùng (Feedback Loop)**: 
+    - Nếu không tìm thấy địa điểm: Agent gọi `ReportMissingLocation`.
+    - Nếu không tìm thấy đường đi: Agent gọi `ReportMissingRoute`.
+    Dữ liệu này được lưu vào bảng `missing_locations` và `missing_routes` để Admin cập nhật dữ liệu bản đồ.
 
 ## Integration Examples
 

@@ -128,6 +128,7 @@ export function ChatInput({
                   aria-label={isDeepMode ? "Tắt chế độ tìm kiếm sâu" : "Bật chế độ tìm kiếm sâu"}
                   className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"} ${!isLoggedIn ? "opacity-50" : ""}`}
                   onClick={toggleQueryMode}
+                  data-testid="deep-mode-toggle"
                 >
                   <Sparkles className="size-4" aria-hidden="true" />
                 </Button>

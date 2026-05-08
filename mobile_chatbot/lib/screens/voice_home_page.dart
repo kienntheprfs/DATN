@@ -7,7 +7,8 @@ import '../utils/constants.dart';
 import '../widgets/face_widget.dart';
 import '../widgets/route_dialog.dart';
 import '../widgets/auth_dialog.dart';
-import '../widgets/settings_dialog.dart';
+import '../widgets/landmark_carousel.dart';
+import 'history_list_screen.dart';
 
 class VoiceHomePage extends StatefulWidget {
   const VoiceHomePage({super.key});
@@ -16,28 +17,40 @@ class VoiceHomePage extends StatefulWidget {
   State<VoiceHomePage> createState() => _VoiceHomePageState();
 }
 
-class _VoiceHomePageState extends State<VoiceHomePage> {
+class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserver {
   final api = ApiClient();
   late final voice = VoiceController(api: api, onError: _toast);
   String? token;
   String userId = 'guest';
-  String selectedAgent = 'chatbot';
-  List<String> agents = ['chatbot'];
+  String selectedAgent = 'knowledge-base-agent';
+  bool _isLoading = false;
+  List<String> agents = ['knowledge-base-agent', 'map-assistant'];
   RouteInfo? latestRoute;
   String? lastAutoShownRouteKey;
+  List<Landmark>? latestLandmarks;
+  String? lastAutoShownLandmarksKey;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     voice.addListener(_onVoiceUpdated);
     _loadAgents();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     voice.removeListener(_onVoiceUpdated);
     voice.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      voice.disconnect();
+    }
   }
 
   Future<void> _loadAgents() async {
@@ -46,7 +59,16 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
       if (!mounted || loaded.isEmpty) return;
       setState(() {
         agents = loaded;
-        if (!agents.contains(selectedAgent)) selectedAgent = agents.first;
+        // Map common keys to friendly names if needed
+        if (!agents.contains(selectedAgent)) {
+           if (agents.contains('knowledge-base-agent')) {
+             selectedAgent = 'knowledge-base-agent';
+           } else if (agents.contains('map-assistant')) {
+             selectedAgent = 'map-assistant';
+           } else if (agents.isNotEmpty) {
+             selectedAgent = agents.first;
+           }
+        }
       });
     } catch (_) {}
   }
@@ -54,19 +76,26 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
   void _onVoiceUpdated() {
     if (!mounted) return;
 
-    // Find latest route in messages
+    // Find latest route and landmarks in messages
     RouteInfo? foundRoute;
+    List<Landmark>? foundLandmarks;
+    
     for (final msg in voice.messages.reversed) {
-      if (msg.route != null) {
+      if (foundRoute == null && msg.route != null) {
         foundRoute = msg.route;
-        break;
       }
+      if (foundLandmarks == null && msg.landmarks != null) {
+        foundLandmarks = msg.landmarks;
+      }
+      if (foundRoute != null && foundLandmarks != null) break;
     }
 
     setState(() {
       latestRoute = foundRoute;
+      latestLandmarks = foundLandmarks;
     });
 
+    // Auto show route
     if (latestRoute != null) {
       final routeKey = '${latestRoute!.title}|${latestRoute!.summary}';
       if (routeKey != lastAutoShownRouteKey) {
@@ -77,18 +106,63 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         });
       }
     }
+
+    // Auto show landmarks
+    if (latestLandmarks != null) {
+      final landmarksKey = latestLandmarks!.map((e) => e.id).join(',');
+      if (landmarksKey != lastAutoShownLandmarksKey) {
+        lastAutoShownLandmarksKey = landmarksKey;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _openLandmarkModal(latestLandmarks!);
+        });
+      }
+    }
   }
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: AppConstants.secondaryColor,
+    
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (context) => _PremiumToast(
+        message: message,
+        onDismiss: () {},
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (entry.mounted) entry.remove();
+    });
+  }
+
+  Future<void> _switchAgent(String agentId) async {
+    if (selectedAgent == agentId) return;
+    
+    setState(() {
+      selectedAgent = agentId;
+      _isLoading = true;
+    });
+
+    try {
+      // 1. Disconnect current session if it exists
+      if (voice.status != VoiceStatus.disconnected) {
+        await voice.disconnect();
+        // Give it a small buffer for cleanup
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
+      // 2. Re-establish connection with NEW agentId
+      await voice.connect(agentId: agentId, userId: userId, token: token);
+      _toast("Đã chuyển sang agent mới");
+    } catch (e) {
+      _toast("Lỗi khi chuyển agent: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _toggleVoice() async {
@@ -107,6 +181,21 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     );
   }
 
+  void _openLandmarkModal(List<Landmark> landmarks) {
+    showDialog(
+      context: context,
+      builder: (_) => LandmarkCarouselDialog(
+        landmarks: landmarks,
+        onConfirm: (landmark) {
+          Navigator.pop(context);
+          final text = 'Tôi đang ở ${landmark.name}';
+          voice.sendTextMessage(text);
+          _toast('Đã xác nhận vị trí: ${landmark.name}');
+        },
+      ),
+    );
+  }
+
   Future<void> _openAuthDialog() async {
     final result = await showDialog<(String, String)>(
       context: context,
@@ -119,19 +208,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     });
   }
 
-  void _openSettingsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => SettingsDialog(
-        agents: agents,
-        selectedAgent: selectedAgent,
-        isLoggedIn: token != null,
-        isVoiceConnected: voice.status == VoiceStatus.connected,
-        onAgentChanged: (val) => setState(() => selectedAgent = val),
-        onAuthPressed: _openAuthDialog,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,35 +239,53 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                   _StatusIndicator(status: voice.status),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
                       children: [
-                        Text(
-                          connecting
-                              ? 'Đang kết nối...'
-                              : (connected ? 'Đang trực tuyến' : 'Ngoại tuyến'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        _AgentTab(
+                          label: 'HỎI ĐÁP',
+                          isSelected: selectedAgent == 'knowledge-base-agent',
+                          onPressed: () => _switchAgent('knowledge-base-agent'),
                         ),
-                        Text(
-                          selectedAgent,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        const SizedBox(width: 8),
+                        _AgentTab(
+                          label: 'CHỈ ĐƯỜNG',
+                          isSelected: selectedAgent == 'map-assistant',
+                          onPressed: () => _switchAgent('map-assistant'),
                         ),
                       ],
                     ),
                   ),
                   _HeaderAction(
-                    icon: Icons.settings_outlined,
-                    onPressed: _openSettingsDialog,
+                    icon: Icons.history_rounded,
+                    onPressed: () async {
+                      if (token == null) {
+                        final result = await showDialog<(String, String)>(
+                          context: context,
+                          builder: (_) => AuthDialog(api: api),
+                        );
+                        if (result != null) {
+                          setState(() {
+                            token = result.$1;
+                            userId = result.$2;
+                          });
+                        } else {
+                          return;
+                        }
+                      }
+                      
+                      if (!mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => HistoryListScreen(
+                            token: token!,
+                            api: api,
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   _HeaderAction(
                     icon: Icons.close_rounded,
                     onPressed: () async {
@@ -215,10 +309,14 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Transcript Card
-                if (voice.currentTranscript.isNotEmpty || latestMessage != null)
+                if (voice.transcriptHistory.isNotEmpty || voice.currentTranscript.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(bottom: 20),
                     padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -229,32 +327,56 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                                   ? Icons.person_rounded
                                   : Icons.smart_toy_rounded,
                               size: 14,
-                              color: Colors.white70,
+                              color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               voice.currentSpeaker == Role.user ? 'BẠN' : 'BOT',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: 1,
-                                color: AppConstants.primaryColor,
+                                color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         MarkdownBody(
-                          data: voice.currentTranscript.isNotEmpty
-                              ? voice.currentTranscript
-                              : (latestMessage?.text ?? ''),
+                          data: [...voice.transcriptHistory, if (voice.currentTranscript.isNotEmpty) voice.currentTranscript].join('\n'),
                           styleSheet: MarkdownStyleSheet(
                             p: const TextStyle(
                               fontSize: 15,
                               height: 1.4,
                               fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                            img: const TextStyle(
+                              fontSize: 10,
                             ),
                           ),
+                          imageBuilder: (uri, title, alt) {
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              constraints: const BoxConstraints(maxHeight: 180), // Keep images small
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  AppConstants.getFullImageUrl(uri.toString()),
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -281,13 +403,22 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                         onPressed: _toggleVoice,
                       ),
                     ),
-                    if (latestRoute != null) ...[
+                    if (latestRoute != null || latestLandmarks != null) ...[
                       const SizedBox(width: 16),
-                      _CircularAction(
-                        icon: Icons.map_outlined,
-                        onPressed: () => _openRouteModal(latestRoute!),
-                        color: Colors.orange.shade600,
-                      ),
+                      if (latestLandmarks != null)
+                        _CircularAction(
+                          icon: Icons.image_search_rounded,
+                          onPressed: () => _openLandmarkModal(latestLandmarks!),
+                          color: Colors.blue.shade600,
+                        ),
+                      if (latestRoute != null) ...[
+                        if (latestLandmarks != null) const SizedBox(width: 8),
+                        _CircularAction(
+                          icon: Icons.map_outlined,
+                          onPressed: () => _openRouteModal(latestRoute!),
+                          color: Colors.orange.shade600,
+                        ),
+                      ],
                     ],
                   ],
                 ),
@@ -343,6 +474,51 @@ class _HeaderAction extends StatelessWidget {
         padding: const EdgeInsets.all(10),
       ),
       icon: Icon(icon, size: 20, color: AppConstants.secondaryColor),
+    );
+  }
+}
+
+class _AgentTab extends StatelessWidget {
+  const _AgentTab({
+    required this.label,
+    required this.isSelected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppConstants.primaryColor : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppConstants.primaryColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
+            color: isSelected ? Colors.white : Colors.grey.shade600,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -442,6 +618,101 @@ class _MainCallButton extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+class _PremiumToast extends StatefulWidget {
+  const _PremiumToast({required this.message, required this.onDismiss});
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_PremiumToast> createState() => _PremiumToastState();
+}
+
+class _PremiumToastState extends State<_PremiumToast> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacity;
+  late Animation<Offset> _offset;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+    _offset = Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    );
+    _controller.forward();
+    
+    Future.delayed(const Duration(milliseconds: 2600), () {
+      if (mounted) _controller.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 80,
+      left: 20,
+      right: 20,
+      child: FadeTransition(
+        opacity: _opacity,
+        child: SlideTransition(
+          position: _offset,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppConstants.secondaryColor,
+                    AppConstants.secondaryColor.withOpacity(0.8),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppConstants.secondaryColor.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, color: Colors.amberAccent, size: 18),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Text(
+                        widget.message,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

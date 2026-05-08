@@ -1,0 +1,145 @@
+{
+  "timestamp": "2026-05-07T20:31:57.102261",
+  "elapsed_seconds": 179.8,
+  "summary": {
+    "total": 19,
+    "passed": 18,
+    "failed": 1
+  },
+  "simple": [
+    {
+      "question": "Xin chao",
+      "ttft": 3.1,
+      "total": 3.35,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Hello",
+      "ttft": 1.17,
+      "total": 1.6,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Chao ban",
+      "ttft": 1.01,
+      "total": 1.22,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Ban la ai?",
+      "ttft": 2.75,
+      "total": 3.19,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Ban lam duoc gi?",
+      "ttft": 6.26,
+      "total": 6.69,
+      "status": 200,
+      "passed": false
+    },
+    {
+      "question": "Cam on ban",
+      "ttft": 1.11,
+      "total": 1.47,
+      "status": 200,
+      "passed": true
+    }
+  ],
+  "complex": [
+    {
+      "question": " điều kiện khi xét cử sinh viên tham gia chương trình trao đổi/thực tập học tập ở nước ngoài",
+      "ttft": 8.97,
+      "total": 9.65,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": " chuẩn tiếng Nhật theo từng năm học dành cho sinh viên chương trình định hướng Nhật Bản",
+      "ttft": 8.56,
+      "total": 9.25,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "xét đăng ký học Chương trình đào tạo thạc sĩ theo hướng nghiên cứu",
+      "ttft": 9.02,
+      "total": 9.45,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Quy định về người hướng dẫn luận văn thạc sĩ và luận án tiến sĩ",
+      "ttft": 8.38,
+      "total": 8.79,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": " Chuẩn đầu vào tiếng Anh",
+      "ttft": 8.15,
+      "total": 9.26,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "CHƯƠNG TRÌNH KỸ SƯ CHẤT LƯỢNG CAO (PFIEV)",
+      "ttft": 9.19,
+      "total": 10.0,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "XÉT TUYỂN THẲNG, ƯU TIÊN XÉT TUYỂN THẲNG",
+      "ttft": 8.26,
+      "total": 8.89,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Nguyên tắc xét tuyển",
+      "ttft": 9.58,
+      "total": 10.36,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "LỊCH SỬ HÌNH THÀNH trường",
+      "ttft": 8.88,
+      "total": 9.28,
+      "status": 200,
+      "passed": true
+    },
+    {
+      "question": "Điểm Chuẩn Tuyển Sinh Đại học Chính Quy 2025 (Mã ngành 1XX)",
+      "ttft": 8.62,
+      "total": 9.01,
+      "status": 200,
+      "passed": true
+    }
+  ],
+  "streaming": [
+    {
+      "name": "test_tokens_arrive_without_long_gaps",
+      "desc": "Max gap giữa text tokens < 10s",
+      "passed": true,
+      "detail": "max_gap=0.60s, tokens=287"
+    },
+    {
+      "name": "test_receives_multiple_tokens",
+      "desc": "Nhận được nhiều text tokens",
+      "passed": true,
+      "detail": "tokens=57"
+    },
+    {
+      "name": "test_first_event_is_not_text_for_rag",
+      "desc": "Với RAG, event đầu tiên là tool call (không phải text)",
+      "passed": true,
+      "detail": "first_event=message, tokens=237"
+    }
+  ]
+}

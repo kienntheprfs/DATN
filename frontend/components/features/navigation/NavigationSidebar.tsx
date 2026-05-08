@@ -20,6 +20,7 @@ interface NavigationSidebarProps {
   onRefreshCache: () => void;
   onSwap: () => void;
   onInstructionClick: (coordinate: number[]) => void;
+  onQuerySubmit: (query: string) => void;
 }
 
 export function NavigationSidebar({
@@ -72,6 +73,7 @@ export function NavigationSidebar({
           onClick={onFindRoute}
           disabled={loading || !startNodeId || !endNodeId}
           className="w-full"
+          data-testid="find-route-btn"
         >
           {loading ? 'Đang tìm...' : 'Tìm đường'}
         </Button>
@@ -80,6 +82,7 @@ export function NavigationSidebar({
           variant="outline"
           onClick={onRefreshCache}
           className="w-full"
+          data-testid="refresh-cache-btn"
         >
           🔄 Làm mới cache
         </Button>

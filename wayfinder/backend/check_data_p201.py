@@ -1,6 +1,6 @@
-from wayfinder.backend.core.db import engine
+from backend.core.db import engine
 from sqlmodel import Session, select
-from wayfinder.backend.models.entities import Alias, Node, Map
+from backend.models.entities import Alias, Node, Map
 import sys
 
 # Set encoding for output

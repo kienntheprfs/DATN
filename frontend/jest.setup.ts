@@ -24,4 +24,16 @@ if (typeof window !== 'undefined') {
       dispatchEvent: jest.fn(),
     })),
   });
+
+  // Mock IntersectionObserver
+  class IntersectionObserverMock {
+    constructor() {}
+    observe = jest.fn();
+    unobserve = jest.fn();
+    disconnect = jest.fn();
+  }
+  window.IntersectionObserver = IntersectionObserverMock as any;
+
+  // Mock scrollTo
+  window.scrollTo = jest.fn();
 }

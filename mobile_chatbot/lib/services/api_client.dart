@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:http/http.dart' as http;
 import '../models/chat_models.dart';
 import '../utils/constants.dart';
@@ -78,5 +79,153 @@ class ApiClient {
       }),
     );
     if (response.statusCode ~/ 100 != 2) throw Exception(response.statusCode);
+  }
+
+  Future<List<ThreadItem>> fetchThreads({required String token}) async {
+    final response = await http.get(
+      _uri('/agent/threads'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode ~/ 100 != 2) throw Exception(response.statusCode);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final raw = body['items'] as List<dynamic>? ?? [];
+    return raw.map((e) {
+      final map = e as Map<String, dynamic>;
+      return ThreadItem(
+        id: map['id']?.toString() ?? '',
+        userId: map['user_id']?.toString() ?? '',
+        title: map['title']?.toString(),
+        createdAt: map['created_at'] != null
+            ? DateTime.tryParse(map['created_at'].toString())
+            : null,
+      );
+    }).toList();
+  }
+
+  Future<List<ChatMessage>> fetchHistory({
+    required String token,
+    required String threadId,
+  }) async {
+    final response = await http.post(
+      _uri('/agent/history'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'thread_id': threadId}),
+    );
+    if (response.statusCode ~/ 100 != 2) throw Exception(response.statusCode);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final raw = body['messages'] as List<dynamic>? ?? [];
+    
+    final List<ChatMessage> chatMessages = [];
+    
+    for (var e in raw) {
+      final map = e as Map<String, dynamic>;
+      final type = map['type']?.toString();
+      final content = map['content']?.toString() ?? '';
+      
+      if (type == 'human') {
+        chatMessages.add(ChatMessage(Role.user, content));
+      } else if (type == 'ai') {
+        // Parse landmarks from additional_kwargs if present
+        List<Landmark>? landmarks;
+        final kwargs = map['additional_kwargs'] as Map<String, dynamic>?;
+        if (kwargs != null && kwargs['landmarks'] != null) {
+          landmarks = _parseLandmarksList(kwargs['landmarks'] as List<dynamic>);
+        }
+        chatMessages.add(ChatMessage(Role.bot, content, landmarks: landmarks));
+      } else if (type == 'tool') {
+        // Try to parse tool result if it's a route or landmarks
+        try {
+          final parsed = jsonDecode(content);
+          if (parsed is Map && parsed['type'] == 'route') {
+            final route = _parseRouteInfo(Map<String, dynamic>.from(parsed));
+            if (route != null) {
+              chatMessages.add(ChatMessage(
+                Role.bot, 
+                'Đã tìm thấy lộ trình. Nhấn xem chỉ đường để mở bản đồ.', 
+                route: route
+              ));
+            }
+          } else {
+            // Check if it's a list of landmarks or a map containing landmarks
+            final landmarks = _parseLandmarksList(parsed);
+            if (landmarks != null && landmarks.isNotEmpty) {
+              chatMessages.add(ChatMessage(
+                Role.bot,
+                'Tôi tìm thấy một số địa điểm giống mô tả của bạn. Bạn xem có phải mình đang ở một trong những nơi này không?',
+                landmarks: landmarks,
+              ));
+            }
+          }
+        } catch (_) {
+          // Ignore failed JSON parses for tools
+        }
+      }
+    }
+    
+    return chatMessages;
+  }
+
+  List<Landmark>? _parseLandmarksList(dynamic raw) {
+    try {
+      List<dynamic>? list;
+      if (raw is List) {
+        list = raw;
+      } else if (raw is Map && raw['landmarks'] is List) {
+        list = raw['landmarks'];
+      }
+      
+      if (list == null || list.isEmpty) return null;
+      
+      return list.map((l) {
+        final m = l as Map<String, dynamic>;
+        return Landmark(
+          id: int.tryParse(m['id']?.toString() ?? '0') ?? 0,
+          name: m['name']?.toString() ?? '',
+          description: m['description']?.toString() ?? '',
+          imageUrl: m['real_image_url']?.toString() ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  RouteInfo? _parseRouteInfo(Map<String, dynamic> parsed) {
+    try {
+      final path = (parsed['path_coords'] as List<dynamic>? ?? [])
+          .map((e) => e as List<dynamic>)
+          .where((e) => e.length >= 2)
+          .map((e) => Offset((e[0] as num).toDouble(), (e[1] as num).toDouble()))
+          .toList();
+          
+      if (path.isEmpty) return null;
+      
+      final steps = (parsed['instructions'] as List<dynamic>? ?? [])
+          .map((e) => (e as Map<String, dynamic>)['instruction']?.toString() ?? e.toString())
+          .toList();
+
+      final mapRaw = parsed['map'] as Map<String, dynamic>?;
+      if (mapRaw == null) return null;
+
+      final mapData = MapData(
+        id: int.tryParse(mapRaw['id']?.toString() ?? '0') ?? 0,
+        name: mapRaw['name']?.toString() ?? '',
+        imageUrl: mapRaw['image_url']?.toString() ?? '',
+        floorLevel: mapRaw['floor_level'] as int?,
+      );
+
+      return RouteInfo(
+        title: '${parsed['start_name'] ?? 'Bắt đầu'} -> ${parsed['end_name'] ?? 'Kết thúc'}',
+        summary: '${((parsed['total_distance_m'] as num?)?.round() ?? 0)}m',
+        path: path,
+        steps: steps,
+        map: mapData,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

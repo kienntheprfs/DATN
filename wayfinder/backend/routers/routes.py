@@ -203,7 +203,7 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
     nodes = session.exec(select(Node).where(Node.map_id.in_(related_map_ids))).all()
 
     if not nodes:
-        raise HTTPException(status_code=404, detail="No nodes found.")
+        return G, node_pos
 
     # Create map_id -> floor_level lookup
     map_floor = {m.id: m.floor_level for m in all_maps}
@@ -565,13 +565,14 @@ def find_best_alias_node(
 
     # Lấy tất cả Alias + Node + Map + Building
     from backend.models.entities import Building, Map
+
     stmt = (
         select(Alias, Node, Building)
         .join(Node, Alias.node_id == Node.id)
         .join(Map, Node.map_id == Map.id)
         .outerjoin(Building, Map.building_id == Building.id)
     )
-    
+
     if map_id:
         # Nếu có map_id, ưu tiên các kết quả trong map này hoặc lân cận
         # Nhưng vẫn cho phép tìm ở map khác nếu được yêu cầu cụ thể qua tên
@@ -586,26 +587,26 @@ def find_best_alias_node(
     for alias, node, building in results:
         alias_name = normalize_name(alias.name)
         building_name = normalize_name(building.name) if building else ""
-        
+
         # So khớp cả tên alias và kết hợp alias + tòa nhà
         combined_name = f"{alias_name} {building_name}".strip()
-        
+
         # Tính score cao nhất giữa các cách gọi
         score_alias = fuzz.token_set_ratio(norm_q, alias_name)
         score_combined = fuzz.token_set_ratio(norm_q, combined_name)
-        
+
         score = max(score_alias, score_combined)
-        
+
         # Ưu tiên kết quả khớp hoàn toàn
         if norm_q in alias_name or norm_q in combined_name:
             score += 10
-            
+
         if score > 50:
             candidates.append((node, float(score)))
 
     # Sắp xếp theo score
     candidates.sort(key=lambda x: x[1], reverse=True)
-    
+
     return candidates
 
 
@@ -759,19 +760,27 @@ def route_by_query(
     def check_ambiguity(candidates, name):
         if not candidates:
             return None, f"Không tìm thấy địa điểm '{name}'"
-        
+
         # Nếu có nhiều hơn 1 kết quả và các kết quả hàng đầu có score quá sát nhau
         if len(candidates) > 1:
             score1 = candidates[0][1]
             score2 = candidates[1][1]
             # Nếu chênh lệch score < 10, coi là không rõ ràng
             if score1 - score2 < 10:
-                options = [f"{c[0].name} (Tầng {session.get(Map, c[0].map_id).floor_level})" for c in candidates[:3]]
-                return None, f"Tìm thấy nhiều địa điểm '{name}': {', '.join(options)}. Vui lòng xác nhận chính xác hơn."
-        
+                options = [
+                    f"{c[0].name} (Tầng {session.get(Map, c[0].map_id).floor_level})"
+                    for c in candidates[:3]
+                ]
+                return (
+                    None,
+                    f"Tìm thấy nhiều địa điểm '{name}': {', '.join(options)}. Vui lòng xác nhận chính xác hơn.",
+                )
+
         return candidates[0][0].id, None
 
-    start_id, start_err = check_ambiguity(start_candidates, start_txt or "vị trí của bạn")
+    start_id, start_err = check_ambiguity(
+        start_candidates, start_txt or "vị trí của bạn"
+    )
     end_id, end_err = check_ambiguity(end_candidates, end_txt or "điểm đến")
 
     if start_err or end_err:
@@ -779,7 +788,11 @@ def route_by_query(
         raise HTTPException(status_code=400, detail=error_msg)
 
     # 4. Tính toán đường đi
-    m = session.get(Map, map_id) if map_id else session.get(Map, start_candidates[0][0].map_id)
+    m = (
+        session.get(Map, map_id)
+        if map_id
+        else session.get(Map, start_candidates[0][0].map_id)
+    )
     scale = m.scale_ratio if m and m.scale_ratio else 1.0
 
     G, node_pos = _get_global_graph(session)

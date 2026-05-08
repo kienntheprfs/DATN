@@ -295,7 +295,7 @@ export function AppSidebar() {
                                                             ) : history.length > 0 ? (
                                                                 <>
                                                                     {history.map((historyItem, index) => (
-                                                                        <SidebarMenuSubItem key={`${historyItem.id}-${index}`}>
+                                                                        <SidebarMenuSubItem key={`${historyItem.id}-${index}`} data-testid="thread-item">
                                                                             <div className="flex items-center gap-1 group">
                                                                                 <SidebarMenuSubButton asChild className="text-blue-200/80 hover:text-white hover:bg-white/5 flex-1 min-w-0">
                                                                                     <Link href={historyItem.url}>
@@ -304,7 +304,7 @@ export function AppSidebar() {
                                                                                 </SidebarMenuSubButton>
                                                                                 <DropdownMenu>
                                                                                     <DropdownMenuTrigger asChild>
-                                                                                        <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-opacity">
+                                                                                        <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-opacity" data-testid="thread-more-btn">
                                                                                             <MoreHorizontal className="size-4 text-blue-200/60" />
                                                                                         </button>
                                                                                     </DropdownMenuTrigger>
@@ -315,6 +315,7 @@ export function AppSidebar() {
                                                                                         </DropdownMenuItem>
                                                                                         <DropdownMenuSeparator />
                                                                                         <DropdownMenuItem
+                                                                                            data-testid="delete-thread-btn"
                                                                                             onClick={() => handleDelete(historyItem.id)}
                                                                                             className="text-destructive focus:text-destructive"
                                                                                             disabled={deletingId === historyItem.id}

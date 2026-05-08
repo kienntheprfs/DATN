@@ -207,47 +207,49 @@ export const testFixtures = {
 };
 
 export const setupMockApi = async (page: Page, options: {
-  mockHealth?: boolean;
   mockChat?: boolean;
   mockErrors?: boolean;
   delay?: number;
 } = {}) => {
   const {
-    mockHealth = true,
     mockChat = true,
     mockErrors = false,
     delay = 0,
   } = options;
 
-  // Health check endpoint
-  if (mockHealth) {
-    await page.route('**/api/health', (route: Route) => {
-      setTimeout(() => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(testFixtures.apiResponses.health),
-        });
-      }, delay);
-    });
-  }
-
-  // Chat endpoints
+  // Selective Mocking: Only intercept streaming and invoke APIs
+  // Everything else passes through to the real backend by default
+  
+  // Chat streaming endpoints
   if (mockChat) {
     await page.route('**/api/agent/stream**', (route: Route) => {
+      // Check if we should return an error
+      if (mockErrors) {
+        setTimeout(() => {
+          route.fulfill({
+            status: 500,
+            headers: { 'Content-Type': 'text/event-stream' },
+            body: `data: ${JSON.stringify({ type: "error", content: "Internal Server Error" })}\n\n`,
+          });
+        }, delay);
+        return;
+      }
+
       setTimeout(() => {
-        // SSE Response format
-        const sseData = JSON.stringify({
+        // SSE Response format simulation
+        const tokens = ["Đây ", "là ", "phản hồi ", "mô phỏng ", "từ ", "chatbot."];
+        
+        const sseData = tokens.map(t => `data: ${JSON.stringify({ type: "token", content: t })}\n\n`).join('');
+        
+        const messageData = JSON.stringify({
           type: "message",
           content: {
             type: "ai",
-            content: testFixtures.apiResponses.chatSend.message,
-            citations: mockErrors ? [] : testFixtures.citations.slice(0, 2),
+            content: tokens.join(''),
+            citations: testFixtures.citations.slice(0, 2),
             run_id: "mock-run-id",
           }
         });
-
-        const doneData = JSON.stringify({ type: "done" });
 
         route.fulfill({
           status: 200,
@@ -256,27 +258,22 @@ export const setupMockApi = async (page: Page, options: {
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
           },
-          body: `data: ${sseData}\n\ndata: [DONE]\n\n`,
+          body: `${sseData}data: ${messageData}\n\ndata: [DONE]\n\n`,
         });
       }, delay);
     });
   }
 
-  // Error scenarios
-  if (mockErrors) {
-    await page.route('**/api/agent/stream**', (route: Route) => {
-      setTimeout(() => {
-        // Trả về luồng SSE bị lỗi
-        route.fulfill({
-          status: 500,
-          headers: {
-            'Content-Type': 'text/event-stream',
-          },
-          body: `data: ${JSON.stringify({ type: "error", content: testFixtures.errors.serverError.message })}\n\n`,
-        });
-      }, delay);
+  // Mock any "invoke" APIs if they appear (placeholder for future tool use)
+  await page.route('**/*invoke*', (route: Route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: "invoked", result: "success" }),
     });
-  }
+  });
+
+  // All other requests continue to the real backend
 };
 
 // Mock voice API helper

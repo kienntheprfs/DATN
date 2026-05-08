@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -164,12 +165,16 @@ class VoiceController extends ChangeNotifier {
     );
   }
 
+  List<String> transcriptHistory = [];
   String currentTranscript = '';
   Role? currentSpeaker;
   DateTime? _lastSpeakingEvent;
   Timer? _speakingTimeout;
   Timer? _noResponseTimeout;
   static const _noResponseDuration = Duration(seconds: 30);
+  
+  DateTime? _lastMessageTime;
+  static const _messageDebounce = Duration(milliseconds: 500);
 
   bool get isBotSpeaking => isSpeaking && currentSpeaker == Role.bot;
 
@@ -211,6 +216,7 @@ class VoiceController extends ChangeNotifier {
           if (currentSpeaker != Role.user) {
             currentSpeaker = Role.user;
             currentTranscript = '';
+            transcriptHistory.clear(); // Clear history when switching to user
           }
           currentTranscript = data!['text'].toString();
           
@@ -222,8 +228,24 @@ class VoiceController extends ChangeNotifier {
           _startSpeakingTimeout(); // Proactive stop
 
           if (data['final'] == true) {
-            _append(Role.user, currentTranscript);
-            _startNoResponseTimer();
+            final text = currentTranscript.trim();
+            if (text.isNotEmpty) {
+              final now = DateTime.now();
+              if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
+                _lastMessageTime = now;
+                
+                // Deduplicate for transcript display
+                if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
+                  if (transcriptHistory.length >= 3) {
+                    transcriptHistory.clear();
+                  }
+                  transcriptHistory.add(text);
+                }
+                _append(Role.user, text);
+                _startNoResponseTimer();
+              }
+            }
+            currentTranscript = '';
           }
           notifyListeners();
         }
@@ -232,6 +254,18 @@ class VoiceController extends ChangeNotifier {
           if (currentSpeaker != Role.bot) {
             currentSpeaker = Role.bot;
             currentTranscript = '';
+            transcriptHistory.clear(); // Clear history when switching to bot
+          }
+
+          // Check for custom_data (landmarks, route) in the message
+          final customData = data?['custom_data'] as Map<String, dynamic>?;
+          if (customData != null) {
+            if (customData.containsKey('landmarks')) {
+              _parseLandmarks(jsonEncode(customData['landmarks']));
+            }
+            if (customData.containsKey('route') || customData['type'] == 'route') {
+              _parseRoute(jsonEncode(customData));
+            }
           }
 
           String? output;
@@ -242,11 +276,24 @@ class VoiceController extends ChangeNotifier {
           }
           
           if (output != null && output.trim().isNotEmpty) {
-            currentTranscript = output.trim();
+            final text = output.trim();
+            currentTranscript = text;
             _cancelNoResponseTimer();
             
             if (type == 'bot-output') {
-              _append(Role.bot, currentTranscript, runId: runId);
+              final now = DateTime.now();
+              if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
+                _lastMessageTime = now;
+                
+                if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
+                  if (transcriptHistory.length >= 3) {
+                    transcriptHistory.clear();
+                  }
+                  transcriptHistory.add(text);
+                }
+                _append(Role.bot, text, runId: runId);
+              }
+              currentTranscript = '';
             }
             
             if (!isSpeaking) {
@@ -258,12 +305,20 @@ class VoiceController extends ChangeNotifier {
           }
         }
         
-        if (type == 'tool-result') _parseRoute(data?['content']?.toString());
+        if (type == 'tool-result') {
+          final content = data?['content']?.toString();
+          _parseRoute(content);
+          _parseLandmarks(content);
+        }
       }
 
       if (type == 'bot-started-speaking') {
           debugPrint('[Voice] Bot started talking');
-          currentSpeaker = Role.bot;
+          if (currentSpeaker != Role.bot) {
+            currentSpeaker = Role.bot;
+            transcriptHistory.clear();
+            currentTranscript = '';
+          }
           if (!isSpeaking) {
             isSpeaking = true;
             notifyListeners();
@@ -271,7 +326,11 @@ class VoiceController extends ChangeNotifier {
           _startSpeakingTimeout(ms: 10000);
         } else if (type == 'user-started-speaking') {
           debugPrint('[Voice] User started talking');
-          currentSpeaker = Role.user;
+          if (currentSpeaker != Role.user) {
+            currentSpeaker = Role.user;
+            transcriptHistory.clear();
+            currentTranscript = '';
+          }
           if (!isSpeaking) {
             isSpeaking = true;
             notifyListeners();
@@ -294,25 +353,28 @@ class VoiceController extends ChangeNotifier {
   }
 
   void _append(Role role, String text, {String? runId}) {
-    final parsedText = _parseMarkdown(text);
+    final parsedText = _parseMarkdown(text).trim();
+    if (parsedText.isEmpty) return;
+    
     final key = '${role.name}:$parsedText';
-    if (!seen.add(key)) {
-      if (messages.isNotEmpty && messages.last.role == role) {
-        final lastMsg = messages.removeLast();
-        seen.remove('${lastMsg.role.name}:${lastMsg.text}');
-        final remaining = 500 - parsedText.length;
-        final trimmedOld = lastMsg.text.length > remaining
-            ? lastMsg.text.substring(lastMsg.text.length - remaining)
-            : lastMsg.text;
-        final combined = '$trimmedOld $parsedText';
-        final newKey = '${role.name}:$combined';
-        if (seen.add(newKey)) {
-          messages.add(ChatMessage(role, combined, runId: runId));
-        }
+    
+    // Strict deduplication: if we've seen this EXACT text from this role recently, skip.
+    if (seen.contains(key)) return;
+    seen.add(key);
+
+    // Merge consecutive messages from the same role if they are different content
+    if (messages.isNotEmpty && messages.last.role == role) {
+      final lastMsg = messages.last;
+      if (lastMsg.text != parsedText) {
+        messages[messages.length - 1] = ChatMessage(
+          role, 
+          '${lastMsg.text}\n$parsedText', 
+          runId: runId ?? lastMsg.runId
+        );
       }
-      return;
+    } else {
+      messages.add(ChatMessage(role, parsedText, runId: runId));
     }
-    messages.add(ChatMessage(role, parsedText, runId: runId));
     notifyListeners();
   }
 
@@ -325,7 +387,7 @@ class VoiceController extends ChangeNotifier {
           .map((e) => e as List<dynamic>)
           .where((e) => e.length >= 2)
           .map(
-            (e) => LatLng((e[0] as num).toDouble(), (e[1] as num).toDouble()),
+            (e) => Offset((e[0] as num).toDouble(), (e[1] as num).toDouble()),
           )
           .toList();
       if (path.isEmpty) return;
@@ -346,10 +408,53 @@ class VoiceController extends ChangeNotifier {
             title:
                 '${parsed['start_name'] ?? 'Start'} -> ${parsed['end_name'] ?? 'End'}',
             summary:
-                '~${((parsed['total_distance_m'] as num?)?.round() ?? 0)}m',
+                '${((parsed['total_distance_m'] as num?)?.round() ?? 0)}m',
             path: path,
             steps: steps,
+            map: MapData(
+              id: int.tryParse(parsed['map']?['id']?.toString() ?? '0') ?? 0,
+              name: parsed['map']?['name']?.toString() ?? '',
+              imageUrl: parsed['map']?['image_url']?.toString() ?? '',
+              floorLevel: parsed['map']?['floor_level'] as int?,
+            ),
           ),
+        ),
+      );
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _parseLandmarks(String? content) {
+    if (content == null) return;
+    try {
+      final parsed = jsonDecode(content);
+      List<dynamic>? rawLandmarks;
+      if (parsed is List) {
+        rawLandmarks = parsed;
+      } else if (parsed is Map && parsed['landmarks'] is List) {
+        rawLandmarks = parsed['landmarks'];
+      }
+
+      if (rawLandmarks == null || rawLandmarks.isEmpty) return;
+
+      final landmarks = rawLandmarks.map((e) {
+        final m = e as Map<String, dynamic>;
+        return Landmark(
+          id: int.tryParse(m['id']?.toString() ?? '0') ?? 0,
+          name: m['name']?.toString() ?? '',
+          description: m['description']?.toString() ?? '',
+          imageUrl: m['real_image_url']?.toString() ?? '',
+        );
+      }).toList();
+
+      if (landmarks.isEmpty) return;
+
+      messages.add(
+        ChatMessage(
+          Role.bot,
+          'Tôi tìm thấy một số địa điểm giống mô tả của bạn. Bạn xem có phải mình đang ở một trong những nơi này không?',
+          runId: runId,
+          landmarks: landmarks,
         ),
       );
       notifyListeners();
@@ -376,8 +481,11 @@ class VoiceController extends ChangeNotifier {
     isSpeaking = false;
     isMuted = false;
     currentTranscript = '';
+    transcriptHistory.clear();
     currentSpeaker = null;
     status = VoiceStatus.disconnected;
+    seen.clear();
+    messages.clear(); // Added to wipe conversation history as requested
     notifyListeners();
   }
 
@@ -391,6 +499,21 @@ class VoiceController extends ChangeNotifier {
     if (audioTrack == null) return;
     isMuted = !isMuted;
     audioTrack!.enabled = !isMuted;
+    notifyListeners();
+  }
+
+  void sendTextMessage(String text) {
+    if (status != VoiceStatus.connected) return;
+    
+    final msg = jsonEncode({
+      'label': 'rtvi-ai',
+      'type': 'user-chat-message',
+      'data': {'text': text},
+    });
+    
+    dataChannel?.send(RTCDataChannelMessage(msg));
+    _append(Role.user, text);
+    _startNoResponseTimer();
     notifyListeners();
   }
 }
