@@ -7,10 +7,9 @@ class MissingKnowledgeRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def log_missing_query(self, user_id: str, thread_id: str, query: str):
+    async def log_missing_query(self, thread_id: str, query: str):
         try:
             new_log = MissingKnowledgeLog(
-                user_id=user_id,
                 thread_id=thread_id,
                 query=query
             )

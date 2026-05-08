@@ -124,6 +124,7 @@ class Settings(BaseSettings):
     SEM_CACHE_ENABLED: bool = True
     SEM_CACHE_REDIS_URL: str | None = None
     SEM_CACHE_REDIS_PASSWORD: str | None = None
+    SEM_CACHE_MAX_CONNECTIONS: int = 100
     SEM_CACHE_INDEX_NAME: str = "idx:kb_sem_cache"
     SEM_CACHE_KEY_PREFIX: str = "kb_sem_cache"
     SEM_CACHE_KB_VERSION_KEY: str = "kb_sem_cache:kb_version"
