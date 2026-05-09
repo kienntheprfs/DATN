@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import httpx
+import torch
+import torch.nn.functional as F
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -107,23 +109,41 @@ class BGEReranker(BaseReranker):
         """Lazy load — chỉ load khi lần đầu gọi rerank."""
         if self._model is None:
             try:
-                from FlagEmbedding import FlagReranker
-                logger.info("Loading BGE reranker model: BAAI/bge-reranker-v2-m3 ...")
-                self._model = FlagReranker(
-                    "BAAI/bge-reranker-v2-m3",
-                    use_fp16=True,  # Dùng FP16 để nhanh hơn, giảm RAM ~50%
+                from transformers import AutoTokenizer, AutoModelForSequenceClassification
+                model_name = "BAAI/bge-reranker-v2-m3"
+                logger.info("Loading BGE reranker model: %s ...", model_name)
+                self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self._model = AutoModelForSequenceClassification.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 )
-                logger.info("BGE reranker loaded successfully.")
+                self._device = "cuda" if torch.cuda.is_available() else "cpu"
+                self._model.to(self._device)
+                self._model.eval()
+                logger.info("BGE reranker loaded successfully on %s.", self._device)
             except ImportError:
                 raise ImportError(
-                    "FlagEmbedding chưa được cài đặt. Chạy: pip install FlagEmbedding"
+                    "transformers chưa được cài đặt. Chạy: pip install transformers torch"
                 )
 
     def _compute_scores_sync(self, pairs: List[List[str]]) -> List[float]:
         """Chạy sync inference — sẽ được wrap bằng to_thread."""
         self._load_model()
-        scores = self._model.compute_score(pairs, normalize=True)
-        # compute_score trả về float nếu 1 pair, list nếu nhiều
+        # Tokenize theo batch, tránh gọi prepare_for_model trực tiếp
+        inputs = self._tokenizer(
+            [p[0] for p in pairs],
+            [p[1] for p in pairs],
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        ).to(self._device)
+
+        with torch.no_grad():
+            logits = self._model(**inputs).logits.squeeze(-1)  # shape: (N,)
+
+        # Normalize về [0, 1] bằng sigmoid
+        scores: List[float] = torch.sigmoid(logits).cpu().tolist()
         if isinstance(scores, float):
             scores = [scores]
         return scores
