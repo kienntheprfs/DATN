@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     EMBEDDING_API_VERSION: str | None = None
 
     # Reranker
+    # Chọn backend: "bge" (local, không cần API) hoặc "jina" (cloud API)
+    RERANKER_BACKEND: str = "jina"
     JINA_API_KEY: str | None = None
     JINA_API_URL: str | None = None
 
@@ -131,7 +133,7 @@ class Settings(BaseSettings):
     # Per-namespace KB version key: f"{SEM_CACHE_KB_VERSION_KEY_PREFIX}:{namespace}"
     # Used to invalidate cache when a KB is updated (upload/delete/re-index).
     SEM_CACHE_KB_VERSION_KEY_PREFIX: str = "kb_sem_cache:kb_version"
-    SEM_CACHE_NAMESPACE: str = "kb_2"
+    SEM_CACHE_NAMESPACE: str = "kb_1"
     SEM_CACHE_MIN_SCORE: float = 0.75
     SEM_CACHE_TOP_K: int = 3
     SEM_CACHE_TTL_SECONDS: int = 86400
