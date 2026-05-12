@@ -61,12 +61,18 @@ export function LocationSearch({
   }, []);
 
   useEffect(() => {
+    const isExcluded = (loc: LocationSuggestion) => {
+      return loc.name === 'New Node' || 
+             loc.node_type === 'stairs' || 
+             loc.node_type === 'elevator';
+    };
+
     if (!query.trim()) {
-      setSuggestions(allLocations.filter(loc => loc.name !== 'New Node'));
+      setSuggestions(allLocations.filter(loc => !isExcluded(loc)));
     } else {
       const q = query.toLowerCase().trim();
       const filtered = allLocations.filter(loc => 
-        loc.name !== 'New Node' && (
+        !isExcluded(loc) && (
           loc.name.toLowerCase().includes(q) ||
           (loc.node_type && loc.node_type.toLowerCase().includes(q))
         )
@@ -101,7 +107,7 @@ export function LocationSearch({
   return (
     <div className="relative" ref={dropdownRef}>
       <div className="flex items-center gap-2">
-        <span className={`shrink-0 ${icon === 'origin' ? 'text-muted-foreground' : 'text-blue-600'}`}>
+        <span className={`shrink-0 ${icon === 'origin' ? 'text-muted-foreground' : 'text-primary font-bold'}`}>
           {icon === 'origin' ? '📍' : '🏁'}
         </span>
         <Input

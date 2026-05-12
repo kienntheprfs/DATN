@@ -140,7 +140,7 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
       if (width === 0 || height === 0) return; // Wait for layout
       
       const [x, y] = activeStep.coordinate;
-      const S = 2.0; // matching scale prop
+      const S = 1.3; // matching scale prop
       setPosition({
         x: width / 2 - x * S,
         y: height / 2 - y * S
@@ -254,7 +254,7 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
           floorMaps={allMaps}
           floorSegments={floorSegments}
           currentFloorIndex={activeFloorIdx}
-          scale={2.0}
+          scale={1.3}
           position={position}
           isDragging={false}
           svgRef={{ current: null }}
@@ -281,25 +281,15 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
                 ))}
                 
                 {isCurrentStepOnThisFloor && (
-                  <g>
-                    <circle
-                      cx={activeStep.coordinate[0]}
-                      cy={activeStep.coordinate[1]}
-                      r="12"
-                      fill="#3b82f6"
-                      fillOpacity="0.2"
-                      className="animate-ping"
-                    />
-                    <circle
-                      cx={activeStep.coordinate[0]}
-                      cy={activeStep.coordinate[1]}
-                      r="6"
-                      fill="#ffffff"
-                      stroke="#3b82f6"
-                      strokeWidth="3"
-                      className="drop-shadow-md"
-                    />
-                  </g>
+                  <circle
+                    cx={activeStep.coordinate[0]}
+                    cy={activeStep.coordinate[1]}
+                    r="8"
+                    fill="#3b82f6"
+                    stroke="#ffffff"
+                    strokeWidth="3"
+                    className="drop-shadow-xl"
+                  />
                 )}
               </g>
             );

@@ -581,8 +581,8 @@ export default function NavigationPage() {
 
   // Get path d string for edge (matching editor style)
   const getEdgePath = (edge: MapEdge) => {
-    const startNode = nodes.find((n) => n.id === edge.start_node_id);
-    const endNode = nodes.find((n) => n.id === edge.end_node_id);
+    const startNode = allNodes.find((n) => n.id === edge.start_node_id);
+    const endNode = allNodes.find((n) => n.id === edge.end_node_id);
     if (!startNode || !endNode) return '';
 
     let d = `M ${startNode.x} ${startNode.y}`;
@@ -610,20 +610,23 @@ export default function NavigationPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-border bg-card px-4 py-3 z-20 shadow-sm">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-20 flex h-10 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 shadow-sm">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => window.location.href = '/'}
-            className="hover:bg-muted"
+            className="h-7 w-7 p-0 -ml-2 hover:bg-muted"
           >
-            <ChevronLeft className="size-5" />
+            <ChevronLeft className="size-4" />
           </Button>
-          <div className="size-8 bg-primary rounded-lg flex items-center justify-center">
-            <MapIcon className="size-5 text-primary-foreground" />
+          
+          <div className="mr-1 h-4 w-px bg-border" />
+          
+          <div className="size-6 bg-primary rounded flex items-center justify-center shrink-0">
+            <MapIcon className="size-3.5 text-primary-foreground" />
           </div>
-          <h2 className="text-card-foreground text-base sm:text-lg font-bold leading-tight truncate max-w-[150px] sm:max-w-none">
+          <h2 className="text-foreground text-sm font-bold leading-tight truncate max-w-[200px] sm:max-w-none">
             {currentMap?.name || 'Campus Pathfinding'}
           </h2>
         </div>
@@ -632,7 +635,7 @@ export default function NavigationPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar - Only show on desktop */}
         {!isMobile && (
-          <aside className="w-[320px] lg:w-[420px] border-r border-border flex flex-col bg-card overflow-y-visible z-10 shadow-lg relative">
+          <aside className="w-[320px] lg:w-[420px] border-r border-border flex flex-col bg-background/50 backdrop-blur-sm overflow-y-visible z-10 relative">
             <div className="p-4 space-y-4">
               {/* Search */}
               <div className="flex flex-col gap-2">
@@ -1023,7 +1026,7 @@ export default function NavigationPage() {
                               key={`route-seg-${idx}`}
                               d={pathData}
                               fill="none"
-                              stroke="#2563eb"
+                              stroke="#020260"
                               strokeWidth="4"
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -1034,30 +1037,34 @@ export default function NavigationPage() {
                       })()}
 
                       {/* Nodes - only show all nodes if not in 3D */}
-                      {!is3D && isTargetFloor && fmNodes.map((node) => (
-                        <g key={node.id}>
-                          <circle
-                            cx={node.x}
-                            cy={node.y}
-                            r={node.type === 'room' ? 12 : 8}
-                            fill={NODE_COLORS[node.type] || NODE_COLORS.path}
-                            stroke="white"
-                            strokeWidth={2}
-                          />
-                          {node.name && node.name !== 'New Node' && (
+                      {!is3D && isTargetFloor && fmNodes
+                        .filter(node => node.name && node.name !== 'New Node')
+                        .map((node) => (
+                          <g key={node.id}>
+                            <circle
+                              cx={node.x}
+                              cy={node.y}
+                              r={node.type === 'room' ? 8 : 5}
+                              fill={NODE_COLORS[node.type] || NODE_COLORS.path}
+                              stroke="white"
+                              strokeWidth={1.5}
+                            />
                             <text
                               x={node.x}
-                              y={node.y - 15}
+                              y={node.y - 12}
                               textAnchor="middle"
-                              fill="#1f2937"
-                              fontSize="10"
-                              fontWeight="500"
+                              fill="#020260"
+                              fontSize="12"
+                              fontWeight="800"
+                              className="select-none pointer-events-none uppercase tracking-tight"
+                              stroke="white"
+                              strokeWidth="2.5"
+                              paintOrder="stroke"
                             >
                               {node.name}
                             </text>
-                          )}
-                        </g>
-                      ))}
+                          </g>
+                        ))}
 
                       {/* Start/End Markers */}
                       {route && (() => {
@@ -1081,10 +1088,20 @@ export default function NavigationPage() {
                           <>
                             {startFloorIdx === floorIndex && (
                               <g>
-                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "20" : "14"} fill="#2563eb" />
+                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "20" : "14"} fill="#020260" />
                                 <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "12" : "8"} fill="white" />
                                 {!is3D && (
-                                  <text x={startCoord[0] + 20} y={startCoord[1] + 5} fill="#1e40af" fontSize="12" fontWeight="bold">
+                                  <text 
+                                    x={startCoord[0] + 20} 
+                                    y={startCoord[1] + 5} 
+                                    fill="#020260" 
+                                    fontSize="12" 
+                                    fontWeight="900"
+                                    stroke="white"
+                                    strokeWidth="3"
+                                    paintOrder="stroke"
+                                    className="uppercase tracking-tighter"
+                                  >
                                     BẮT ĐẦU
                                   </text>
                                 )}
@@ -1095,7 +1112,17 @@ export default function NavigationPage() {
                                 <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "20" : "14"} fill="#dc2626" />
                                 <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "12" : "8"} fill="white" />
                                 {!is3D && (
-                                  <text x={endCoord[0] + 20} y={endCoord[1] + 5} fill="#991b1b" fontSize="12" fontWeight="bold">
+                                  <text 
+                                    x={endCoord[0] + 20} 
+                                    y={endCoord[1] + 5} 
+                                    fill="#dc2626" 
+                                    fontSize="12" 
+                                    fontWeight="900"
+                                    stroke="white"
+                                    strokeWidth="3"
+                                    paintOrder="stroke"
+                                    className="uppercase tracking-tighter"
+                                  >
                                     ĐÍCH ĐẾN
                                   </text>
                                 )}
@@ -1119,6 +1146,7 @@ export default function NavigationPage() {
                         const currentSeg = floorSegments.find(s => s.floorIndex === currentFloorIndex);
                         const transitionNodes = fmNodes.filter(n =>
                           (n.type === 'stairs' || n.type === 'elevator') &&
+                          n.name && n.name !== 'New Node' &&
                           currentSeg?.pathCoords.some(coord => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2)
                         );
 

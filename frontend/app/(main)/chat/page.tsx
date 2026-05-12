@@ -220,7 +220,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			sendMessageRef.current?.(urlMessage, urlQueryMode || undefined);
 
 			setTimeout(() => {
-				router.replace(`/chat?thread_id=${urlThreadId}`);
+				router.replace(`/chat?thread_id=${threadId}`);
 			}, 100);
 		}
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router, isReadOnly]);
@@ -272,7 +272,11 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	};
 
 	const handleSendMessage = (message: string, queryMode?: QueryMode) => {
-		sendMessage(message, queryMode);
+		if (voice.state === "connected") {
+			voice.sendTextMessage(message);
+		} else {
+			sendMessage(message, queryMode);
+		}
 	};
 
 	useEffect(() => {
@@ -363,6 +367,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							isMuted={voice.isMuted}
 							onVoiceToggle={handleVoiceStateChange}
 							onVoiceMute={voice.toggleMute}
+							onSendVoiceTextMessage={voice.sendTextMessage}
 							showDocumentButton={true}
 							onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
 						/>
@@ -375,12 +380,14 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 
 export default function ChatPage() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const urlThreadId = searchParams.get("thread_id");
 	const refreshHistory = useAppStore((s) => s.refreshHistory);
 
 	const handleVoiceToggle = () => {
 		const threadId = crypto.randomUUID();
 		const params = new URLSearchParams({ thread_id: threadId, voice: "true" });
-		router.replace(`/chat?${params.toString()}`);
+		router.push(`/chat?${params.toString()}`);
 	};
 
 	const handleConversationStart = () => {
@@ -389,7 +396,7 @@ export default function ChatPage() {
 
 	return (
 		<Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-			<ChatContent onVoiceToggle={handleVoiceToggle} onConversationStart={handleConversationStart} />
+			<ChatContent key={urlThreadId || "new"} onVoiceToggle={handleVoiceToggle} onConversationStart={handleConversationStart} />
 		</Suspense>
 	);
 }

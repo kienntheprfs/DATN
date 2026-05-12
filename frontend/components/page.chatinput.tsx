@@ -28,6 +28,7 @@ interface ChatInputProps {
   onVoiceBotOutput?: (text: string) => void;
   onVoiceToggle?: () => void;
   onVoiceMute?: () => void;
+  onSendVoiceTextMessage?: (message: string) => void;
   showDocumentButton?: boolean;
   onDocumentToggle?: () => void;
 }
@@ -47,6 +48,7 @@ export function ChatInput({
   onVoiceBotOutput,
   onVoiceToggle,
   onVoiceMute,
+  onSendVoiceTextMessage,
   showDocumentButton = false,
   onDocumentToggle,
 }: ChatInputProps) {
@@ -82,6 +84,12 @@ export function ChatInput({
       return;
     }
 
+    if (voiceState === "connected" && onSendVoiceTextMessage) {
+      onSendVoiceTextMessage(trimmedMessage);
+      setMessage("");
+      return;
+    }
+
     if (onSubmitMessage) {
       onSubmitMessage(trimmedMessage, queryMode);
       setMessage(""); 
@@ -111,8 +119,8 @@ export function ChatInput({
         
         <InputGroupTextarea 
           id="chat-textarea" 
-          aria-label="Nhập câu hỏi hoặc yêu cầu tra cứu"
-          placeholder="Nhập câu hỏi hoặc yêu cầu tra cứu..." 
+          aria-label={isVoiceConnected ? "Nhập tin nhắn văn bản vào Voice Chat" : "Nhập câu hỏi hoặc yêu cầu tra cứu"}
+          placeholder={isVoiceConnected ? "Gửi tin nhắn văn bản vào cuộc trò chuyện Voice..." : "Nhập câu hỏi hoặc yêu cầu tra cứu..." }
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -129,6 +137,7 @@ export function ChatInput({
                   className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"} ${!isLoggedIn ? "opacity-50" : ""}`}
                   onClick={toggleQueryMode}
                   data-testid="deep-mode-toggle"
+                  disabled={isVoiceConnected}
                 >
                   <Sparkles className="size-4" aria-hidden="true" />
                 </Button>

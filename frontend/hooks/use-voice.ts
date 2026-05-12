@@ -51,6 +51,7 @@ interface UseVoiceReturn {
   startConversation: () => Promise<void>;
   stopConversation: () => void;
   toggleMute: () => void;
+  sendTextMessage: (text: string) => Promise<void>;
 }
 
 export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
@@ -89,6 +90,15 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const canSendCandidatesRef = useRef(false);
   const recentMessagesRef = useRef<Set<string>>(new Set());
   const lastMessageTimeRef = useRef<number>(0);
+  const threadIdRef = useRef<string | null>(threadIdProp || null);
+
+  // Sync threadId state with prop
+  useEffect(() => {
+    if (threadIdProp && threadIdProp !== threadId) {
+      setThreadId(threadIdProp);
+      threadIdRef.current = threadIdProp;
+    }
+  }, [threadIdProp]);
 
   const cleanup = useCallback(() => {
     if (dcRef.current) {
@@ -124,7 +134,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   }, [isMuted]);
 
   const sendIceCandidate = useCallback(async (candidate: RTCIceCandidate) => {
-    if (!pcIdRef.current) return;
+    if (!pcIdRef.current || !candidate.candidate) return;
 
     try {
       const authHeaders = getAuthHeaders();
@@ -138,8 +148,8 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
           pc_id: pcIdRef.current,
           candidates: [{
             candidate: candidate.candidate,
-            sdp_mid: candidate.sdpMid,
-            sdp_mline_index: candidate.sdpMLineIndex,
+            sdp_mid: candidate.sdpMid || "",
+            sdp_mline_index: candidate.sdpMLineIndex ?? 0,
           }],
         }),
       });
@@ -440,9 +450,56 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     }
   }, [state, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
 
+  const sendTextMessage = useCallback(async (text: string) => {
+    if (!pcIdRef.current || !text.trim()) return;
+
+    try {
+      const authHeaders = getAuthHeaders();
+      await fetch("/api/voice/chat/text", {
+        method: "POST",
+        headers: { 
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          pc_id: pcIdRef.current,
+          message: text,
+          user_id: userId || "guest",
+          agent_id: agentId,
+          thread_id: threadId,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send text message to voice pipeline:", err);
+    }
+  }, [userId, agentId, threadId]);
+
   const stopConversation = useCallback(() => {
     cleanup();
   }, [cleanup]);
+
+  useEffect(() => {
+    if (state === "connected" && pcIdRef.current && (agentId || threadId)) {
+      const updateAgent = async () => {
+        try {
+          const authHeaders = getAuthHeaders();
+          await fetch("/api/voice/chat/text", {
+            method: "POST",
+            headers: { ...authHeaders },
+            body: JSON.stringify({
+              pc_id: pcIdRef.current,
+              agent_id: agentId,
+              thread_id: threadId,
+              message: "", // Empty message just to trigger update
+            }),
+          });
+          console.log(`[useVoice] Agent/Thread updated: ${agentId} / ${threadId}`);
+        } catch (err) {
+          console.error("Failed to update agent/thread mid-conversation:", err);
+        }
+      };
+      updateAgent();
+    }
+  }, [agentId, threadId, state]);
 
   useEffect(() => {
     return () => {
@@ -462,5 +519,6 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     startConversation,
     stopConversation,
     toggleMute,
+    sendTextMessage,
   };
 }

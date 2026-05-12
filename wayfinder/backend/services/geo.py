@@ -11,6 +11,13 @@ TYPE_FACTORS = {
     "restricted": 999.0 
 }
 
+# Chi phí cố định cho các kết nối xuyên tầng/xuyên bản đồ (không tính theo pixel)
+FIXED_COSTS = {
+    "stairs": 100.0,   # Cầu thang bộ tốn sức hơn
+    "elevator": 50.0,   # Thang máy ưu tiên hơn
+    "entrance": 10.0,   # Lối vào (Campus <-> Indoor) chi phí thấp
+}
+
 def polyline_length(poly: List[List[float]]) -> float:
     if not poly or len(poly) < 2:
         return 0.0

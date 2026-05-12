@@ -18,8 +18,12 @@ export interface ChatMessage {
 	citations?: Array<{
 		file_name: string;
 		s3_url: string;
-		text_preview: string;
+		text_preview?: string;
 		source_type: string;
+		doc_id?: string;
+		file_path?: string;
+		is_faq?: boolean;
+		faq_source?: string;
 	}>;
 }
 
@@ -36,8 +40,12 @@ export interface BackendChatMessage {
 	citations?: Array<{
 		file_name: string;
 		s3_url: string;
-		text_preview: string;
+		text_preview?: string;
 		source_type: string;
+		doc_id?: string;
+		file_path?: string;
+		is_faq?: boolean;
+		faq_source?: string;
 	}>;
 }
 

@@ -11,6 +11,7 @@ from backend.core.db import engine, get_session
 from backend.models.entities import Map, Node, Edge, Alias
 
 from backend.services.nlp import normalize_name, extract_a_b
+from backend.services.geo import FIXED_COSTS
 from rapidfuzz import process, fuzz
 import math
 import time
@@ -63,7 +64,6 @@ def _save_graph_to_cache(G: nx.Graph, node_pos: Dict):
             "map_id": G.nodes[node_id].get("map_id"),
             "floor": G.nodes[node_id].get("floor"),
             "type": G.nodes[node_id].get("type"),
-            "linked_node_ids": G.nodes[node_id].get("linked_node_ids"),
             "pos": list(node_pos[node_id]),
         }
 
@@ -215,7 +215,6 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
         G.nodes[n.id]["map_id"] = n.map_id
         G.nodes[n.id]["floor"] = map_floor.get(n.map_id)
         G.nodes[n.id]["type"] = n.type
-        G.nodes[n.id]["linked_node_ids"] = n.linked_node_ids or []
         node_map_info[n.id] = {"map_id": n.map_id, "floor": map_floor.get(n.map_id)}
 
     # 3. Load Edges from related maps
@@ -226,51 +225,18 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
     ).all()
 
     for e in edges:
+        # Override weight for fixed cost types (stairs, elevator, entrance)
+        # This ensures existing edges in DB get the new logic without migration
+        weight = e.weight
+        if e.type in FIXED_COSTS:
+            weight = FIXED_COSTS[e.type]
+
         attr = {
-            "weight": e.weight,
+            "weight": weight,
             "type": e.type,
             "polyline": e.polyline if e.polyline else [],
         }
         G.add_edge(e.start_node_id, e.end_node_id, **attr)
-
-    # 4. Add edges for linked nodes (cross-floor connections)
-    for n in nodes:
-        if n.linked_node_ids:
-            for linked_id in n.linked_node_ids:
-                if linked_id in G.nodes:
-                    # Determine connection type based on node types
-                    if n.type in ["stairs", "elevator"] or G.nodes[linked_id].get(
-                        "type"
-                    ) in ["stairs", "elevator"]:
-                        conn_type = (
-                            n.type
-                            if n.type in ["stairs", "elevator"]
-                            else G.nodes[linked_id].get("type", "stairs")
-                        )
-                    else:
-                        conn_type = "stairs"  # Default for floor transitions
-
-                    # Add edge with high weight (stairs/elevator takes longer)
-                    # Only add if edge doesn't exist (avoid duplicate with DB edges)
-                    if not G.has_edge(n.id, linked_id):
-                        G.add_edge(
-                            n.id, linked_id, weight=50, type=conn_type, polyline=[]
-                        )
-
-    # 5. Add edges for linked_campus_node_id (entrance <-> campus connection)
-    for n in nodes:
-        campus_node_id = n.linked_campus_node_id
-        if campus_node_id and campus_node_id in G.nodes:
-            # Add edge from building entrance to campus
-            if not G.has_edge(n.id, campus_node_id):
-                G.add_edge(
-                    n.id, campus_node_id, weight=10, type="entrance", polyline=[]
-                )
-            # Also add reverse edge from campus to building entrance
-            if not G.has_edge(campus_node_id, n.id):
-                G.add_edge(
-                    campus_node_id, n.id, weight=10, type="entrance", polyline=[]
-                )
 
     return G, node_pos
 
@@ -280,6 +246,39 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
 
 def get_distance(p1, p2):
     return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+
+
+def create_astar_heuristic(G: nx.Graph, node_pos: Dict):
+    """
+    Tạo heuristic function cho A* algorithm.
+    Sử dụng Euclidean distance với floor penalty để ước lượng khoảng cách.
+
+    Heuristic phải admissible (không bao giờ ước lượng quá cao) để A* đảm bảo
+    tìm được đường ngắn nhất.
+    """
+    FLOOR_PENALTY = 20.0  # Conservative: stairs/elevator có weight=50
+
+    def heuristic(u: int, v: int) -> float:
+        u_pos = node_pos.get(u)
+        v_pos = node_pos.get(v)
+
+        if not u_pos or not v_pos:
+            return 0.0
+
+        euclidean_dist = get_distance(u_pos, v_pos)
+
+        u_floor = G.nodes[u].get("floor")
+        v_floor = G.nodes[v].get("floor")
+
+        if u_floor is not None and v_floor is not None:
+            floor_diff = abs(u_floor - v_floor)
+            if floor_diff > 0:
+                floor_penalty = floor_diff * FLOOR_PENALTY
+                return euclidean_dist + floor_penalty
+
+        return euclidean_dist
+
+    return heuristic
 
 
 def generate_human_instructions(
@@ -386,11 +385,12 @@ def generate_human_instructions(
             edge_data = G.get_edge_data(current_node, next_node)
             edge_type = edge_data.get("type", "walk") if edge_data else "walk"
 
+            location_at = f" đến {node_name}" if node_name else ""
             if edge_type == "elevator":
-                text = f"Đi {dist_m}m. Đi thang máy {direction} {floor_text}"
+                text = f"Đi {dist_m}m{location_at}. Đi thang máy {direction} {floor_text}"
                 step_action = "use_elevator"
             else:
-                text = f"Đi {dist_m}m. Đi cầu thang {direction} {floor_text}"
+                text = f"Đi {dist_m}m{location_at}. Đi cầu thang {direction} {floor_text}"
                 step_action = "use_stairs"
 
             instructions.append(
@@ -474,20 +474,25 @@ def generate_human_instructions(
             angle = calculate_angle(p1, p2, p3)
             turn_action = get_turn_action(angle)
 
+            location_at = f" đến {node_name}" if node_name else ""
+
             if turn_action == "left":
-                text = f"Đi bộ {dist_m}m. Rẽ trái"
+                text = f"Đi {dist_m}m{location_at}. Rẽ trái"
                 step_action = "turn_left"
             elif turn_action == "right":
-                text = f"Đi bộ {dist_m}m. Rẽ phải"
+                text = f"Đi {dist_m}m{location_at}. Rẽ phải"
                 step_action = "turn_right"
             elif turn_action == "slight_left":
-                text = f"Đi bộ {dist_m}m. Đi chếch trái"
+                text = f"Đi {dist_m}m{location_at}. Đi chếch trái"
                 step_action = "slight_left"
             elif turn_action == "slight_right":
-                text = f"Đi bộ {dist_m}m. Đi chếch phải"
+                text = f"Đi {dist_m}m{location_at}. Đi chếch phải"
                 step_action = "slight_right"
             else:
-                text = f"Đi bộ {dist_m}m. Đi thẳng"
+                if node_name:
+                    text = f"Đi {dist_m}m đến {node_name}"
+                else:
+                    text = f"Đi {dist_m}m. Đi thẳng"
                 step_action = "straight"
 
             instructions.append(
@@ -630,7 +635,7 @@ def find_route(
         raise HTTPException(status_code=404, detail="Map không tồn tại")
     scale = m.scale_ratio if m.scale_ratio else 1.0  # mét / pixel
 
-    # 2. Build Graph & Tìm đường ngắn nhất (Dijkstra)
+    # 2. Build Graph & Tìm đường ngắn nhất (A* với Euclidean heuristic)
     G, node_pos = _get_global_graph(session)
 
     if start_node_id not in G or end_node_id not in G:
@@ -638,9 +643,15 @@ def find_route(
             status_code=400, detail="Start/End node không thuộc map này"
         )
 
+    heuristic = create_astar_heuristic(G, node_pos)
+
     try:
-        path_nodes = nx.shortest_path(
-            G, source=start_node_id, target=end_node_id, weight="weight"
+        path_nodes = nx.astar_path(
+            G,
+            source=start_node_id,
+            target=end_node_id,
+            heuristic=heuristic,
+            weight="weight",
         )
     except nx.NetworkXNoPath:
         raise HTTPException(status_code=404, detail="Không tìm thấy đường đi")
@@ -796,10 +807,11 @@ def route_by_query(
     scale = m.scale_ratio if m and m.scale_ratio else 1.0
 
     G, node_pos = _get_global_graph(session)
+    heuristic = create_astar_heuristic(G, node_pos)
 
     try:
-        path_nodes = nx.shortest_path(
-            G, source=start_id, target=end_id, weight="weight"
+        path_nodes = nx.astar_path(
+            G, source=start_id, target=end_id, heuristic=heuristic, weight="weight"
         )
     except nx.NetworkXNoPath:
         raise HTTPException(

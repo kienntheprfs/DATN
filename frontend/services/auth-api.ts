@@ -94,6 +94,16 @@ export const refreshAccessToken = async (): Promise<string | null> => {
   return null;
 };
 
+const getGuestId = (): string => {
+  if (typeof window === "undefined") return 'guest';
+  let guestId = localStorage.getItem('guest_id');
+  if (!guestId) {
+    guestId = `guest-${Math.random().toString(36).substring(2, 11)}`;
+    localStorage.setItem('guest_id', guestId);
+  }
+  return guestId;
+};
+
 const getCommonHeaders = (): Record<string, string> => {
   const headers: Record<string, string> = {};
   
@@ -107,12 +117,12 @@ const getCommonHeaders = (): Record<string, string> => {
     if (user) {
       try {
         const parsed = JSON.parse(user);
-        headers['X-User-Id'] = parsed.id?.toString() || parsed.sub?.toString() || 'guest';
+        headers['X-User-Id'] = parsed.id?.toString() || parsed.sub?.toString() || getGuestId();
       } catch {
-        headers['X-User-Id'] = 'guest';
+        headers['X-User-Id'] = getGuestId();
       }
     } else {
-      headers['X-User-Id'] = 'guest';
+      headers['X-User-Id'] = getGuestId();
     }
   }
   
@@ -317,12 +327,12 @@ export const getAuthHeaders = () => getCommonHeaders();
 export const getUserId = (): string | null => {
   if (typeof window === "undefined") return null;
   const user = localStorage.getItem("user");
-  if (!user) return null;
+  if (!user) return getGuestId();
   try {
     const parsed = JSON.parse(user);
-    return parsed.id?.toString() || parsed.sub?.toString() || null;
+    return parsed.id?.toString() || parsed.sub?.toString() || getGuestId();
   } catch {
-    return null;
+    return getGuestId();
   }
 };
 

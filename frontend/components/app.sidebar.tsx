@@ -212,11 +212,10 @@ export function AppSidebar() {
             <SidebarMenuButton
                 asChild
                 tooltip={item.title}
-                className={`h-auto! px-3 py-2 gap-3 rounded-md transition-colors ${
-                    active
-                        ? "bg-primary! text-white! shadow-sm hover:bg-primary! hover:text-white!"
-                        : "bg-transparent! text-blue-200 hover:text-white! hover:bg-white/5!"
-                }`}
+                className={`h-auto! px-3 py-2 gap-3 rounded-md transition-colors ${active
+                    ? "bg-primary! text-white! shadow-sm hover:bg-primary! hover:text-white!"
+                    : "bg-transparent! text-blue-200 hover:text-white! hover:bg-white/5!"
+                    }`}
             >
                 <Link href={item.url}>
                     <span className={`material-symbols-outlined text-[20px] ${active ? "fill-1" : ""}`}>{item.icon}</span>
@@ -235,7 +234,7 @@ export function AppSidebar() {
                         <span className="material-symbols-outlined text-white text-[20px]">school</span>
                     </div>
                     <div>
-                        <h1 className="font-heading font-semibold text-[14px] leading-tight text-white mb-0">Academic Nexus</h1>
+                        <h1 className="font-heading font-semibold text-[14px] leading-tight text-white mb-0">BK-TBOT</h1>
                         <p className="text-xs text-blue-200 font-display mt-0">Hệ thống Tra cứu</p>
                     </div>
                 </Link>

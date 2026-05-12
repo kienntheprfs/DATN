@@ -544,12 +544,10 @@ export function ChatWindow({
 								<div className="flex size-10 shrink-0 items-center justify-center bg-secondary text-secondary-foreground rounded-none shadow-sm">
 									<User className="size-6" />
 								</div>
-								<div className="group relative max-w-[85%] space-y-2">
-									{group.messages.map((m) => (
-										<div key={m.id} className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide">
-											<p className="whitespace-pre-wrap">{String(m.content)}</p>
-										</div>
-									))}
+								<div className="group relative max-w-[85%]">
+									<div className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
+										{group.messages.map(m => m.content).filter(Boolean).join(" ")}
+									</div>
 								</div>
 							</div>
 						);
@@ -647,6 +645,7 @@ export function ChatWindow({
 					<div className="flex-1 max-w-full">
 						<LandmarkCarousel 
 							landmarks={landmarkData} 
+							disabled={false}
 							onConfirm={(landmark) => {
 								if (sendMessage) {
 									sendMessage(`Tôi đang ở ${landmark.name}`);

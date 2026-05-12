@@ -13,40 +13,45 @@ def strip_markdown(text: str) -> str:
     if not text:
         return text
 
-    # 1. Xử lý Code Blocks và Inline Code trước (giữ lại nội dung bên trong)
-    # Loại bỏ ``` ngôn_ngữ và ``` ở cuối
-    text = re.sub(r"```[a-zA-Z0-9]*\n(.*?)\n```", r"\1", text, flags=re.DOTALL)
-    # Loại bỏ inline code `code`
-    text = re.sub(r"`(.*?)`", r"\1", text)
+    # 1. Xử lý Code Blocks và Inline Code (giữ lại nội dung)
+    text = re.sub(r"```[a-zA-Z0-9]*\n(.*?)\n```", r" \1 ", text, flags=re.DOTALL)
+    text = re.sub(r"`(.*?)`", r" \1 ", text)
 
-    # 2. Xử lý Image trước Link (giữ lại alt text)
-    text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r"\1", text)
-    # 3. Xử lý Link (giữ lại text hiển thị)
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    # 2. Xử lý Image và Link (giữ lại text hiển thị)
+    text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r" \1 ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r" \1 ", text)
 
-    # 4. Xử lý các Block elements (Header, Quote, List) - Bắt buộc phải ở đầu dòng
-    # Xóa Headers (# Header)
-    text = re.sub(r"^#+\s+", "", text, flags=re.MULTILINE)
-    # Xóa Blockquotes (> Quote)
-    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
-    # Xóa Unordered Lists (-, *, +)
-    text = re.sub(r"^[\-\*\+]\s+", "", text, flags=re.MULTILINE)
-    # Xóa Ordered Lists (1. Item)
-    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
-    # Xóa Horizontal Rules (---, ***, ___)
-    text = re.sub(r"^(?:---|\*\*\*|___)\s*$", "", text, flags=re.MULTILINE)
+    # 3. Xử lý các Block elements (Headers, Quotes, Lists)
+    # Headers (# Header) - Hỗ trợ cả khi có space phía trước
+    text = re.sub(r"^\s*#+\s+", "", text, flags=re.MULTILINE)
+    # Blockquotes (> Quote)
+    text = re.sub(r"^\s*>\s+", "", text, flags=re.MULTILINE)
+    # Lists (-, *, +, \d.) - Quan trọng: Xử lý cả khi có thụt lề
+    text = re.sub(r"^\s*[\-\*\+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+    
+    # Horizontal Rules (---, ***, ___)
+    text = re.sub(r"^\s*(?:---|\*\*\*|___)\s*$", "", text, flags=re.MULTILINE)
 
-    # 5. Xử lý các Inline elements (Bold, Italic, Strikethrough)
-    # Dùng ? để non-greedy, tránh xóa nhầm khoảng văn bản giữa 2 phần in đậm khác nhau
-    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text, flags=re.DOTALL)
-    text = re.sub(r"__(.*?)__", r"\1", text, flags=re.DOTALL)
-    text = re.sub(r"\*(.*?)\*", r"\1", text, flags=re.DOTALL)
-    text = re.sub(r"_(.*?)_", r"\1", text, flags=re.DOTALL)
+    # 4. Xử lý các Inline elements (Bold, Italic, Strikethrough)
+    # Bold/Italic lồng nhau hoặc lẻ loi
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"_{1,3}(.*?)_{1,3}", r"\1", text, flags=re.DOTALL)
     text = re.sub(r"~~(.*?)~~", r"\1", text, flags=re.DOTALL)
 
-    # 6. Loại bỏ các thẻ HTML cơ bản (nếu có lẫn trong Markdown)
+    # 5. Loại bỏ các ký tự Markdown còn sót lại mà TTS hay đọc
+    # Xóa các dấu sao, gạch dưới, thăng lẻ loi (không nằm trong từ)
+    text = re.sub(r"(^|\s)[\*\#\_\-\+\>]+(\s|$)", r"\1\2", text)
+    # Xóa các ký tự đặc biệt ở đầu/cuối câu thường thấy trong MD
+    text = re.sub(r"^\s*[\*\#\_\-\+\>]+", "", text)
+    text = re.sub(r"[\*\#\_\-\+\>]+\s*$", "", text)
+
+    # 6. Loại bỏ HTML tags
     text = re.sub(r"<[^>]*>", "", text)
 
+    # 7. Dọn dẹp khoảng trắng thừa
+    text = re.sub(r"\s+", " ", text)
+    
     return text.strip()
 
 
@@ -82,6 +87,14 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
         self._on_tool_result = on_tool_result
         self._transport = transport
 
+    def set_agent_name(self, agent_name: str):
+        logger.info(f"Switching agent to: {agent_name}")
+        self.agent_name = agent_name
+
+    def set_thread_id(self, thread_id: str):
+        logger.info(f"Switching thread context to: {thread_id}")
+        self.thread_id = thread_id
+
     async def get_chat_completions(self, params_from_context):
         if hasattr(params_from_context, "messages"):
             messages = params_from_context.messages
@@ -116,79 +129,83 @@ class DirectAPIAgentLLMService(BaseOpenAILLMService):
                     endpoint, json=payload, headers=headers, timeout=120.0
                 ) as resp:
                     resp.raise_for_status()
-                    async for line in resp.content:
-                        line = line.decode("utf-8").strip()
-                        if not line.startswith("data: "):
-                            continue
+                    try:
+                        async for line in resp.content:
+                            line_decoded = line.decode("utf-8").strip()
+                            if not line_decoded.startswith("data: "):
+                                continue
 
-                        data_str = line[6:]
-                        if data_str == "[DONE]":
-                            break
+                            data_str = line_decoded[6:]
+                            if data_str == "[DONE]":
+                                break
 
-                        try:
-                            data = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
+                            try:
+                                data = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
 
-                        msg_type = data.get("type")
+                            msg_type = data.get("type")
 
-                        if msg_type == "token":
-                            content = data.get("content", "")
-                            if content:
-                                accumulated_content += content
-                                yield ChatCompletionChunk(
-                                    id="agent-stream",
-                                    choices=[
-                                        {
-                                            "delta": {
-                                                "role": "assistant",
-                                                "content": content,
-                                            },
-                                            "index": 0,
-                                            "finish_reason": None,
-                                        }
-                                    ],
-                                    model="agent-model",
-                                    created=0,
-                                    object="chat.completion.chunk",
-                                )
-
-                        elif msg_type == "message":
-                            content = data.get("content")
-                            if content and isinstance(content, dict):
-                                msg_type_inner = content.get("type")
-
-                                if msg_type_inner == "ai":
-                                    logger.info(
-                                        f"[Voice] AI message content keys: {content.keys() if isinstance(content, dict) else 'not dict'}"
-                                    )
-                                    logger.info(f"[Voice] Full content: {content}")
-                                    tool_calls = content.get("tool_calls", [])
-                                    if tool_calls:
-                                        if self._on_tool_calls:
-                                            await self._on_tool_calls(tool_calls)
-                                    run_id = content.get("run_id", "")
-                                    if run_id and self._transport:
-                                        try:
-                                            msg = {
-                                                "label": "rtvi-ai",
-                                                "type": "run-id",
-                                                "data": {"run_id": run_id},
+                            if msg_type == "token":
+                                content = data.get("content", "")
+                                if content:
+                                    accumulated_content += content
+                                    yield ChatCompletionChunk(
+                                        id="agent-stream",
+                                        choices=[
+                                            {
+                                                "delta": {
+                                                    "role": "assistant",
+                                                    "content": content,
+                                                },
+                                                "index": 0,
+                                                "finish_reason": None,
                                             }
-                                            await self._transport.output().send_message(
-                                                OutputTransportMessageFrame(message=msg)
-                                            )
-                                        except Exception as e:
-                                            logger.error(f"Failed to send run-id: {e}")
+                                        ],
+                                        model="agent-model",
+                                        created=0,
+                                        object="chat.completion.chunk",
+                                    )
 
-                                elif msg_type_inner == "tool":
-                                    tool_call_id = content.get("tool_call_id", "")
-                                    tool_result = content.get("content", "")
-                                    if self._on_tool_result and tool_call_id:
-                                        await self._on_tool_result(tool_call_id, tool_result, None)
+                            elif msg_type == "message":
+                                content = data.get("content")
+                                if content and isinstance(content, dict):
+                                    msg_type_inner = content.get("type")
+
+                                    if msg_type_inner == "ai":
+                                        logger.info(
+                                            f"[Voice] AI message content keys: {content.keys() if isinstance(content, dict) else 'not dict'}"
+                                        )
+                                        logger.info(f"[Voice] Full content: {content}")
+
+                                        tool_calls = content.get("tool_calls", [])
+                                        if tool_calls:
+                                            if self._on_tool_calls:
+                                                await self._on_tool_calls(tool_calls)
+                                        run_id = content.get("run_id", "")
+                                        if run_id and self._transport:
+                                            try:
+                                                msg = {
+                                                    "label": "rtvi-ai",
+                                                    "type": "run-id",
+                                                    "data": {"run_id": run_id},
+                                                }
+                                                await self._transport.output().send_message(
+                                                    OutputTransportMessageFrame(message=msg)
+                                                )
+                                            except Exception as e:
+                                                logger.error(f"Failed to send run-id: {e}")
+
+                                    elif msg_type_inner == "tool":
+                                        tool_call_id = content.get("tool_call_id", "")
+                                        tool_result = content.get("content", "")
+                                        if self._on_tool_result and tool_call_id:
+                                            await self._on_tool_result(tool_call_id, tool_result, None)
+                    except (aiohttp.ClientPayloadError, aiohttp.ClientConnectorError) as e:
+                        logger.warning(f"Stream interrupted but content may be partial: {e}")
 
             except Exception as e:
-                logger.error(f"Stream error: {e}")
+                logger.error(f"Critical stream error: {e}")
             finally:
                 if accumulated_content:
                     yield ChatCompletionChunk(
