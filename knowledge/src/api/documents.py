@@ -51,9 +51,13 @@ async def upload_document(
         try:
             parsed = json.loads(meta_data_json)
         except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail="Invalid meta_data_json") from exc
+            raise HTTPException(
+                status_code=400, detail="Invalid meta_data_json"
+            ) from exc
         if not isinstance(parsed, dict):
-            raise HTTPException(status_code=400, detail="meta_data_json must be a JSON object")
+            raise HTTPException(
+                status_code=400, detail="meta_data_json must be a JSON object"
+            )
         meta_data = parsed
 
     if not is_formal_doc:
@@ -72,19 +76,19 @@ async def upload_document(
             "is_formal_doc": False,
         }
     else:
-        formal_doc, sync_task_id = await service.upload_formal_document(
+        formal_doc, document, sync_task_id = await service.upload_formal_document(
             file=file,
             storage_id=storage_id,
             meta_data=meta_data,
         )
         return {
             "status": "queued",
-            "document_id": formal_doc.id,
+            "document_id": formal_doc.document_id,
             "track_id": formal_doc.lightrag_track_id,
             "lightrag_doc_id": formal_doc.lightrag_doc_id,
             "sync_task_id": sync_task_id,
             "is_formal_doc": True,
-            "meta_data": formal_doc.meta_data,
+            "meta_data": document.meta_data if document else {},
         }
 
 
@@ -234,9 +238,7 @@ async def stream_document_file(
         ascii_name = f"document-{document_id}"
 
     encoded_name = quote(file_name, safe="")
-    content_disposition = (
-        f"{disposition_type}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
-    )
+    content_disposition = f"{disposition_type}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
     headers = {"Content-Disposition": content_disposition}
     return StreamingResponse(iter_file(), media_type=media_type, headers=headers)
 
@@ -319,15 +321,43 @@ async def delete_document(
         if not formal_doc:
             raise HTTPException(status_code=404, detail="Formal document not found")
 
+        linked_doc = formal_doc.document
+
+        # Check Qdrant indexing status
+        if linked_doc and linked_doc.processing_status in (
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete formal document while the internal indexing is still in progress. Please wait until processing completes.",
+            )
+
+        # Check LightRAG sync status from DB
+        if formal_doc.sync_status in (
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete formal document while it is still being synced to LightRAG. Please wait until syncing completes.",
+            )
+
+        # Check LightRAG remote status (ground truth)
         if formal_doc.lightrag_track_id and service.lightrag.enabled:
             try:
-                track_result = await service.lightrag.get_track_result(formal_doc.lightrag_track_id)
+                track_result = await service.lightrag.get_track_result(
+                    formal_doc.lightrag_track_id
+                )
                 if isinstance(track_result, dict):
                     status_summary = track_result.get("status_summary", {})
-                    if status_summary.get("Processing", 0) > 0 or status_summary.get("Pending", 0) > 0:
+                    if (
+                        status_summary.get("Processing", 0) > 0
+                        or status_summary.get("Pending", 0) > 0
+                    ):
                         raise HTTPException(
                             status_code=409,
-                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes."
+                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes.",
                         )
             except HTTPException:
                 raise
@@ -336,15 +366,17 @@ async def delete_document(
 
         # Sync from LightRAG to get latest status
         try:
-            await service._sync_formal_doc_from_lightrag(formal_doc)
+            formal_doc = await service._sync_formal_doc_from_lightrag(formal_doc)
+            linked_doc = formal_doc.document
         except Exception:
             pass  # Proceed with deletion even if sync fails
 
         task = trigger_formal_document_deletion(
             document_id=document_id,
             lightrag_doc_id=formal_doc.lightrag_doc_id,
-            storage_id=formal_doc.storage_id,
-            storage_path=formal_doc.file_path,
+            storage_id=linked_doc.storage_id if linked_doc else None,
+            storage_path=linked_doc.file_path if linked_doc else None,
+            qdrant_document_id=formal_doc.document_id,
         )
 
         return {
@@ -361,10 +393,13 @@ async def delete_document(
             raise HTTPException(status_code=404, detail="Document not found")
 
         # Check current status
-        if normal_doc.processing_status in [ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]:
+        if normal_doc.processing_status in [
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ]:
             raise HTTPException(
                 status_code=409,
-                detail="Cannot delete document while it is being processed. Please wait until processing completes."
+                detail="Cannot delete document while it is being processed. Please wait until processing completes.",
             )
 
         if normal_doc.status == DocumentStatus.DELETED:
@@ -419,25 +454,46 @@ async def delete_document(
 
         return response
 
-    # Auto-detect: check both tables
-    normal_doc = await service.doc_repo.get_by_id(document_id)
+    # Auto-detect: formal doc first (vì FormalDocument.document_id == Document.id)
     formal_doc = await service.formal_doc_repo.get_by_id(document_id)
 
-    if normal_doc and formal_doc:
-        raise HTTPException(
-            status_code=409,
-            detail="Ambiguous document id. Please set is_formal_doc=true/false explicitly.",
-        )
     if formal_doc:
+        linked_doc = formal_doc.document
+
+        # Check Qdrant indexing status
+        if linked_doc and linked_doc.processing_status in (
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete formal document while the internal indexing is still in progress. Please wait until processing completes.",
+            )
+
+        # Check LightRAG sync status from DB
+        if formal_doc.sync_status in (
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete formal document while it is still being synced to LightRAG. Please wait until syncing completes.",
+            )
+
         if formal_doc.lightrag_track_id and service.lightrag.enabled:
             try:
-                track_result = await service.lightrag.get_track_result(formal_doc.lightrag_track_id)
+                track_result = await service.lightrag.get_track_result(
+                    formal_doc.lightrag_track_id
+                )
                 if isinstance(track_result, dict):
                     status_summary = track_result.get("status_summary", {})
-                    if status_summary.get("Processing", 0) > 0 or status_summary.get("Pending", 0) > 0:
+                    if (
+                        status_summary.get("Processing", 0) > 0
+                        or status_summary.get("Pending", 0) > 0
+                    ):
                         raise HTTPException(
                             status_code=409,
-                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes."
+                            detail="Cannot delete formal document while it is being processed in LightRAG. Please wait until processing completes.",
                         )
             except HTTPException:
                 raise
@@ -446,15 +502,17 @@ async def delete_document(
 
         # Sync from LightRAG to get latest status
         try:
-            await service._sync_formal_doc_from_lightrag(formal_doc)
+            formal_doc = await service._sync_formal_doc_from_lightrag(formal_doc)
+            linked_doc = formal_doc.document
         except Exception:
             pass
 
         task = trigger_formal_document_deletion(
             document_id=document_id,
             lightrag_doc_id=formal_doc.lightrag_doc_id,
-            storage_id=formal_doc.storage_id,
-            storage_path=formal_doc.file_path,
+            storage_id=linked_doc.storage_id if linked_doc else None,
+            storage_path=linked_doc.file_path if linked_doc else None,
+            qdrant_document_id=formal_doc.document_id,
         )
 
         return {
@@ -463,12 +521,17 @@ async def delete_document(
             "document_id": document_id,
             "task_id": task.id,
         }
-    elif normal_doc:
+
+    normal_doc = await service.doc_repo.get_by_id(document_id)
+    if normal_doc:
         # Same logic as explicit normal doc deletion
-        if normal_doc.processing_status in [ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]:
+        if normal_doc.processing_status in [
+            ProcessingStatus.PENDING,
+            ProcessingStatus.PROCESSING,
+        ]:
             raise HTTPException(
                 status_code=409,
-                detail="Cannot delete document while it is being processed. Please wait until processing completes."
+                detail="Cannot delete document while it is being processed. Please wait until processing completes.",
             )
 
         if normal_doc.status == DocumentStatus.DELETED:

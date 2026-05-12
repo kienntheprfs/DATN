@@ -13,7 +13,7 @@ class DocumentResponse(BaseModel):
     file_path: str
     file_size: int
     checksum: str
-    
+
     processing_status: ProcessingStatus
     processing_error: Optional[str] = None
     processing_started_at: Optional[datetime] = None
@@ -24,6 +24,7 @@ class DocumentResponse(BaseModel):
     deletion_completed_at: Optional[datetime] = None
 
     meta_data: Optional[dict] = None
+    is_formal_doc: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -32,6 +33,7 @@ class DocumentResponse(BaseModel):
 
 class DocumentDetailResponse(DocumentResponse):
     """Same shape as list item; no separate version history."""
+
     pass
 
 
@@ -55,6 +57,9 @@ class AdminDocumentListItem(BaseModel):
     processing_status: Optional[ProcessingStatus] = None
     file_size: Optional[int] = None
     meta_data: Optional[dict[str, Any]] = None
+    sync_status: Optional[str] = None
+    sync_error: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
