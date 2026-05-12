@@ -208,7 +208,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
             )
         )
         task_qdrant = asyncio.create_task(_qdrant_search_coro())
-        task_lightrag = asyncio.create_task(_lightrag_query_coro())
+        if search_depth == "deep":
+            task_lightrag = asyncio.create_task(_lightrag_query_coro())
 
         pending = {task_cache, task_faq}
         cache_hit = None
@@ -225,7 +226,9 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
 
             # Hết giờ -> Hủy các task đang treo và thoát vòng lặp
             if remaining <= 0:
-                logger.warning("TIMEOUT: Tra cứu Cache/FAQ vượt quá giới hạn thời gian. Đang bỏ qua...")
+                logger.warning(
+                    "TIMEOUT: Tra cứu Cache/FAQ vượt quá giới hạn thời gian. Đang bỏ qua..."
+                )
                 for p in pending:
                     p.cancel()
                 break
@@ -255,7 +258,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                             for p in pending:
                                 p.cancel()
                             task_qdrant.cancel()
-                            task_lightrag.cancel()
+                            if search_depth == "deep":
+                                task_lightrag.cancel()
                             return cache_hit.response_text, cache_hit.artifacts
 
                     # 4. NẾU LÀ TASK FAQ
@@ -281,9 +285,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                                     "score": best_faq.score,
                                     "is_faq": True,
                                     "faq_source": faq_source,
-                                    **({
-                                        "faq_id": best_faq.faq_id
-                                    } if not best_faq.doc_id else {}),
+                                    **({"faq_id": best_faq.faq_id} if not best_faq.doc_id else {}),
                                     "reference_url": best_faq.metadata.get("reference_url")
                                     if best_faq.metadata
                                     else None,
@@ -299,7 +301,8 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                             for p in pending:
                                 p.cancel()
                             task_qdrant.cancel()
-                            task_lightrag.cancel()
+                            if search_depth == "deep":
+                                task_lightrag.cancel()
                             return output_text, artifacts
 
                 except Exception as e:
@@ -311,7 +314,9 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         # (2 task này đã chạy từ sau encode, overlap với toàn bộ phase cache/FAQ)
         logger.info("semantic_cache_miss mode=%s kb_version=%s", query_mode, kb_version)
         if faq_results:
-            logger.info("FAQ_SEARCH results=%d top_score=%.3f", len(faq_results), faq_results[0].score)
+            logger.info(
+                "FAQ_SEARCH results=%d top_score=%.3f", len(faq_results), faq_results[0].score
+            )
         logger.info(
             "perf_cache_faq_phase | %.3fs | result=miss cache_hit=%s faq_count=%d",
             asyncio.get_event_loop().time() - _t0,
@@ -402,7 +407,11 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
         # 5. PRIORITY 3: Cache+FAQ miss → chờ Qdrant + LightRAG (đã chạy nền từ sau encode)
         # task_qdrant và task_lightrag đã được khởi động từ bước tạo task → phần lớn
         # thời gian overlap với phase cache/FAQ → tiết kiệm đáng kể TTFT.
-        qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
+        if search_depth == "deep":
+            qdrant_docs, lightrag_result = await asyncio.gather(task_qdrant, task_lightrag)
+        else:
+            qdrant_docs = await task_qdrant
+            lightrag_result = LightRAGResult()
         logger.info(
             "perf_retrieve_total | %.3fs | qdrant=%d lightrag=%d (đã chạy nền từ sau encode)",
             asyncio.get_event_loop().time() - _t0_retrieve,
@@ -524,7 +533,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
                 "perf_tool_total | %.3fs | exit=no_result",
                 asyncio.get_event_loop().time() - _t_tool_start,
             )
-            return output_text
+            return output_text, artifacts
 
         output_text = "\n".join(output_lines)
         logger.info(

@@ -1,7 +1,6 @@
 import inspect
 import json
 import logging
-import sys
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -56,33 +55,8 @@ from rag_utils.reference import reference_service
 from core.database import AsyncSessionLocal, get_db
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
-
-_log_level = settings.LOG_LEVEL.to_logging_level()
-_root = logging.getLogger()
-_root.setLevel(_log_level)
-for h in _root.handlers[:]:
-    _root.removeHandler(h)
-    h.close()
-_handler = logging.StreamHandler(sys.stdout)
-_handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s %(levelname)-8s %(name)s - %(message)s",
-        datefmt="%H:%M:%S",
-    )
-)
-_root.addHandler(_handler)
-
-for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    logging.getLogger(_name).setLevel(_log_level)
-
-import os as _os
-
-print(
-    f"[DIAG] service.py loaded | PID={_os.getpid()} | root.handlers={len(_root.handlers)} | level={_root.level}",
-    flush=True,
-)
-
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=settings.LOG_LEVEL.to_logging_level())
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -255,17 +229,16 @@ async def _handle_input(
 
     return kwargs, run_id
 
-
-# token limit usage retrieving api endpoint
+# token limit usage retrieving api endpoint 
 @router.get("/token-limit-usage/{client_id}")
 async def get_token_limit_usage(client_id: str) -> Any:
     return token_limiter.get_limit_usage(client_id)
-
+    
 
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
 async def invoke(
-    request: Request,
+    request: Request,  
     user_input: UserInput,
     background_tasks: BackgroundTasks,
     agent_id: str = DEFAULT_AGENT,
@@ -505,7 +478,7 @@ async def message_generator(
                     # Drop them.
                     if not isinstance(msg, AIMessageChunk):
                         continue
-
+                        
                     if hasattr(msg, "usage_metadata") and msg.usage_metadata:
                         tokens = msg.usage_metadata.get("total_tokens", 0)
                         if tokens > 0:
@@ -532,6 +505,7 @@ async def message_generator(
             # Add token usage
             if total_request_tokens > 0:
                 token_limiter.add_usage(user_id, total_request_tokens)
+            
 
             # THÊM MỚI: Đợi các task lấy link S3 hoàn tất (nếu có) trước khi đóng stream
             if background_tasks:
@@ -713,7 +687,7 @@ def _sse_response_example() -> dict[int | str, Any]:
 )
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
-    request: Request,
+    request: Request,  
     user_input: StreamInput,
     background_tasks: BackgroundTasks,
     chat_service: ChatService = Depends(get_chat_service),
