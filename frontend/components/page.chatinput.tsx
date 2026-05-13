@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation } from "lucide-react";
+import { useAgent } from "@/contexts/agent-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -56,6 +57,7 @@ export function ChatInput({
   const [message, setMessage] = useState("");
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { agent, setAgent, isOnline } = useAgent();
 
   useEffect(() => {
     setIsLoggedIn(authService.isAuthenticated());
@@ -128,6 +130,36 @@ export function ChatInput({
 
         <div className="flex items-center justify-between bg-muted/20 px-3 pb-3 pt-1">
           <div className="flex items-center gap-1">
+            {/* Agent Switcher Integrated */}
+            {isOnline && (
+              <div className="flex items-center bg-muted/40 rounded-sm p-0.5 mr-1 border border-border/50 h-9">
+                <Button
+                  variant={agent === 'knowledge-base-agent' ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
+                    agent === 'knowledge-base-agent' 
+                      ? "bg-primary text-primary-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => setAgent('knowledge-base-agent')}
+                >
+                  Hỏi đáp
+                </Button>
+                <Button
+                  variant={agent === 'map-assistant' ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
+                    agent === 'map-assistant' 
+                      ? "bg-primary text-primary-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => setAgent('map-assistant')}
+                >
+                  Chỉ đường
+                </Button>
+              </div>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

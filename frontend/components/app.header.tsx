@@ -42,7 +42,7 @@ const routeDictionary: Record<string, string> = {
 };
 
 function StatusBadge() {
-	const { isOnline, isLoading, model, models } = useAgent();
+	const { isOnline, isLoading } = useAgent();
 
 	if (isLoading) {
 		return (
@@ -56,85 +56,9 @@ function StatusBadge() {
 	return (
 		<div className="flex items-center gap-1.5 px-2 py-1 bg-surface-bg border border-border-color rounded-sm">
 			<span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`} />
-			<span className="text-xs font-mono text-text-secondary">
-				{model || "RAG"} {isOnline ? "Online" : "Offline"}
+			<span className="text-xs font-mono text-text-secondary uppercase">
+				{isOnline ? "Active" : "Inactive"}
 			</span>
-		</div>
-	);
-}
-
-function AgentSwitcher() {
-	const { agent, setAgent, agents, isOnline } = useAgent();
-	
-	if (!isOnline) return null;
-
-	// Backend keys are hyphenated: 'knowledge-base-agent' and 'map-assistant'
-	const kbAgent = agents.find(a => a.key === 'knowledge-base-agent');
-	const mapAgent = agents.find(a => a.key === 'map-assistant');
-
-	return (
-		<div className="flex items-center bg-muted/50 p-1 rounded-lg border border-border h-8">
-			<Button
-				variant={agent === 'knowledge-base-agent' ? "default" : "ghost"}
-				size="sm"
-				onClick={() => setAgent('knowledge-base-agent')}
-				className="h-6 text-[10px] font-bold px-2 uppercase transition-all"
-				disabled={!kbAgent}
-			>
-				Hỏi đáp
-			</Button>
-			<Button
-				variant={agent === 'map-assistant' ? "default" : "ghost"}
-				size="sm"
-				onClick={() => setAgent('map-assistant')}
-				className="h-6 text-[10px] font-bold px-2 uppercase transition-all"
-				disabled={!mapAgent}
-			>
-				Chỉ đường
-			</Button>
-		</div>
-	);
-}
-
-function SettingsPanel() {
-	const { model, setModel, isOnline, models } = useAgent();
-	const [isOpen, setIsOpen] = React.useState(false);
-
-	if (!isOnline) return null;
-
-	return (
-		<div className="relative">
-			<Button
-				variant="ghost"
-				size="sm"
-				onClick={() => setIsOpen(!isOpen)}
-				className="h-7 w-7 p-0 flex items-center justify-center rounded-full hover:bg-muted"
-			>
-				<Settings />
-			</Button>
-
-			{isOpen && (
-				<>
-					<div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-					<div className="absolute right-0 top-full mt-1 z-50 w-64 bg-popover border rounded-lg shadow-lg p-3">
-						<div className="mb-0">
-							<label className="text-[10px] font-bold uppercase text-muted-foreground mb-2 block">LLM Model</label>
-							<Select value={model} onValueChange={setModel}>
-								<SelectTrigger className="w-full h-8 text-xs">
-									<SelectValue placeholder="Chọn model" />
-								</SelectTrigger>
-								<SelectContent>
-									{models.map((m) => (
-										<SelectItem key={m.id} value={m.id} className="text-xs">
-											{m.name}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
-				</>
-			)}
 		</div>
 	);
 }
@@ -185,9 +109,7 @@ export function AppHeader() {
 			</Breadcrumb>
 
 			<div className="ml-auto flex items-center gap-3">
-				<AgentSwitcher />
 				<StatusBadge />
-				<SettingsPanel />
 			</div>
 		</header>
 	);

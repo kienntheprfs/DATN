@@ -294,15 +294,24 @@ def generate_human_instructions(
     for i in range(len(path_nodes) - 1):
         u = path_nodes[i]
         v = path_nodes[i + 1]
-        polyline = get_edge_polyline(G, u, v, node_pos)
 
-        # Add distance from u to first polyline point
+        # Skip distance calculation if switching floors (not counting weight/vertical in main distance)
+        u_floor = G.nodes[u].get("floor")
+        v_floor = G.nodes[v].get("floor")
+        u_map = G.nodes[u].get("map_id")
+        v_map = G.nodes[v].get("map_id")
+        
+        # Cross-floor or Cross-map transition
+        is_transition = (u_floor != v_floor) or (u_map != v_map)
+
+        if is_transition:
+            continue
+
+        polyline = get_edge_polyline(G, u, v, node_pos)
         if polyline:
             total_dist_px += get_distance(node_pos[u], polyline[0])
-            # Add distances between polyline points
             for j in range(len(polyline) - 1):
                 total_dist_px += get_distance(polyline[j], polyline[j + 1])
-            # Add distance from last polyline point to v
             total_dist_px += get_distance(polyline[-1], node_pos[v])
         else:
             total_dist_px += get_distance(node_pos[u], node_pos[v])
@@ -334,15 +343,20 @@ def generate_human_instructions(
         current_map_id = G.nodes[current_node].get("map_id")
 
         # Calculate distance from previous node to current
-        polyline = get_edge_polyline(G, prev_node, current_node, node_pos)
-        if polyline:
-            segment_dist = get_distance(node_pos[prev_node], polyline[0])
-            for j in range(len(polyline) - 1):
-                segment_dist += get_distance(polyline[j], polyline[j + 1])
-            segment_dist += get_distance(polyline[-1], node_pos[current_node])
-        else:
-            segment_dist = get_distance(node_pos[prev_node], node_pos[current_node])
-        cumulative_dist += segment_dist
+        u_floor, v_floor = G.nodes[prev_node].get("floor"), G.nodes[current_node].get("floor")
+        u_map, v_map = G.nodes[prev_node].get("map_id"), G.nodes[current_node].get("map_id")
+        is_transition_edge = (u_floor != v_floor) or (u_map != v_map)
+
+        if not is_transition_edge:
+            polyline = get_edge_polyline(G, prev_node, current_node, node_pos)
+            if polyline:
+                segment_dist = get_distance(node_pos[prev_node], polyline[0])
+                for j in range(len(polyline) - 1):
+                    segment_dist += get_distance(polyline[j], polyline[j + 1])
+                segment_dist += get_distance(polyline[-1], node_pos[current_node])
+            else:
+                segment_dist = get_distance(node_pos[prev_node], node_pos[current_node])
+            cumulative_dist += segment_dist
 
         # Check for floor change
         is_floor_change = current_floor and next_floor and current_floor != next_floor
@@ -385,12 +399,12 @@ def generate_human_instructions(
             edge_data = G.get_edge_data(current_node, next_node)
             edge_type = edge_data.get("type", "walk") if edge_data else "walk"
 
-            location_at = f" đến {node_name}" if node_name else ""
+            location_at = f"Đến {node_name}. " if node_name else ""
             if edge_type == "elevator":
-                text = f"Đi {dist_m}m{location_at}. Đi thang máy {direction} {floor_text}"
+                text = f"{location_at}Đi thang máy {direction} {floor_text}"
                 step_action = "use_elevator"
             else:
-                text = f"Đi {dist_m}m{location_at}. Đi cầu thang {direction} {floor_text}"
+                text = f"{location_at}Đi cầu thang {direction} {floor_text}"
                 step_action = "use_stairs"
 
             instructions.append(
@@ -452,7 +466,7 @@ def generate_human_instructions(
         elif is_entrance:
             # Get building name from current node
             building_name = node_name if node_name else "Tòa"
-            text = f"Đi {dist_m}m. Vào {building_name}"
+            text = f"Đến lối vào. Vào {building_name}"
             step_action = "entrance"
             last_building_name = building_name
             instructions.append(
@@ -514,15 +528,20 @@ def generate_human_instructions(
     # Calculate final distance
     if len(path_nodes) >= 2:
         last_prev = path_nodes[-2]
-        polyline = get_edge_polyline(G, last_prev, end_node, node_pos)
-        if polyline:
-            final_dist = get_distance(node_pos[last_prev], polyline[0])
-            for j in range(len(polyline) - 1):
-                final_dist += get_distance(polyline[j], polyline[j + 1])
-            final_dist += get_distance(polyline[-1], node_pos[end_node])
-        else:
-            final_dist = get_distance(node_pos[last_prev], node_pos[end_node])
-        cumulative_dist += final_dist
+        u_floor, v_floor = G.nodes[last_prev].get("floor"), G.nodes[end_node].get("floor")
+        u_map, v_map = G.nodes[last_prev].get("map_id"), G.nodes[end_node].get("map_id")
+        is_final_transition = (u_floor != v_floor) or (u_map != v_map)
+
+        if not is_final_transition:
+            polyline = get_edge_polyline(G, last_prev, end_node, node_pos)
+            if polyline:
+                final_dist = get_distance(node_pos[last_prev], polyline[0])
+                for j in range(len(polyline) - 1):
+                    final_dist += get_distance(polyline[j], polyline[j + 1])
+                final_dist += get_distance(polyline[-1], node_pos[end_node])
+            else:
+                final_dist = get_distance(node_pos[last_prev], node_pos[end_node])
+            cumulative_dist += final_dist
 
     final_dist_m = round(cumulative_dist * scale, 1)
 

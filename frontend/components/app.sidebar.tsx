@@ -110,12 +110,6 @@ const adminNavItems = [
         icon: "map",
         isActive: true,
     },
-    {
-        title: "Cài đặt API",
-        url: "#",
-        icon: "settings",
-        isActive: true,
-    },
 ];
 
 /** Check xem user có role admin không */

@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { UnifiedMapView } from './UnifiedMapView';
+import { locationApi } from '@/services/location-api';
 
 const ACTION_ICONS: Record<string, string> = {
   start: 'trip_origin',
@@ -82,6 +83,7 @@ export default function NavigationPage() {
   const [mapLoading, setMapLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
 
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -168,18 +170,12 @@ export default function NavigationPage() {
         const allMaps = await wayfindingMapApi.getAllMaps();
         console.log('[Nav] All maps:', allMaps.map(m => ({ id: m.id, name: m.name, floor: m.floor_level, building: m.building_id })));
 
-        // Load nodes/edges for all maps
-        const allFloorData: FloorMap[] = await Promise.all(
-          allMaps.map(async (m) => {
-            const data = await wayfindingMapApi.getMapWithData(m.id);
-            return {
-              map: data.map,
-              nodes: data.nodes,
-              edges: data.edges,
-              isCampus: m.floor_level === null,
-            };
-          })
-        );
+        const allFloorData: FloorMap[] = allMaps.map(m => ({
+          map: m,
+          nodes: [], // Lazy load nodes/edges later
+          edges: [],
+          isCampus: m.floor_level === null,
+        }));
 
         // Sort: campus first, then by floor level
         allFloorData.sort((a, b) => {
@@ -191,13 +187,17 @@ export default function NavigationPage() {
         setFloorMaps(allFloorData);
         setCurrentFloorIndex(0);
         setCurrentMap(allFloorData[0].map);
-        setNodes(allFloorData[0].nodes);
-        setEdges(allFloorData[0].edges);
-
-        const allNodesCombined = allFloorData.flatMap(f => f.nodes);
-        const allEdgesCombined = allFloorData.flatMap(f => f.edges);
-        setAllNodes(allNodesCombined);
-        setAllEdges(allEdgesCombined);
+        
+        // Also load all locations for search and URL mapping
+        const locations = await locationApi.getAll();
+        setAllNodes(locations.map(loc => ({
+          id: loc.node_id,
+          name: loc.name,
+          map_id: loc.map_id || 0,
+          type: (loc.node_type || 'room') as any,
+          x: 0, // Coordinates will come from path or lazy loaded data
+          y: 0,
+        })));
 
         console.log('[Nav] Total floors:', allFloorData.length);
         console.log('[Nav] Maps loaded successfully');
@@ -245,17 +245,44 @@ export default function NavigationPage() {
 
   // Use separate effect for floor change
   useEffect(() => {
-    console.log('[Nav] Effect triggered, index:', currentFloorIndex, 'map id:', floorMaps[currentFloorIndex]?.map?.id, 'len:', floorMaps.length);
-    if (floorMaps.length > 0) {
-      const newMap = floorMaps[currentFloorIndex];
-      if (newMap) {
-        setCurrentMap(newMap.map);
+    if (floorMaps.length === 0) return;
+    
+    const targetIdx = currentFloorIndex;
+    const newMap = floorMaps[targetIdx];
+    
+    console.log('[Nav] Effect triggered, index:', targetIdx, 'map id:', newMap?.map?.id);
+    
+    if (newMap) {
+      setCurrentMap(newMap.map);
+      
+      // Lazy load data for this floor if it's empty
+      if (newMap.nodes.length === 0) {
+        const mapId = newMap.map.id;
+        wayfindingMapApi.getMapWithData(mapId).then(fullData => {
+          // Use functional update to avoid race conditions
+          setFloorMaps(prev => {
+            const updated = [...prev];
+            const idx = updated.findIndex(f => f.map.id === mapId);
+            if (idx !== -1) {
+              updated[idx] = {
+                ...updated[idx],
+                nodes: fullData.nodes,
+                edges: fullData.edges
+              };
+            }
+            return updated;
+          });
+          
+          setNodes(fullData.nodes);
+          setEdges(fullData.edges);
+          console.log('[Nav] Lazy loaded nodes for map:', mapId);
+        }).catch(err => console.error('Failed to lazy load floor:', err));
+      } else {
         setNodes(newMap.nodes);
         setEdges(newMap.edges);
-        console.log('[Nav] Switched to floor:', currentFloorIndex, 'map id:', newMap.map.id);
       }
     }
-  }, [currentFloorIndex]);
+  }, [currentFloorIndex, floorMaps.length]);
 
   useEffect(() => {
     if (svgRef.current && position === null) {
@@ -280,6 +307,36 @@ export default function NavigationPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Keyboard navigation for steps
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only navigate if route exists and no input is focused
+      if (!route || route.instructions.length === 0) return;
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        const nextIndex = Math.min(currentStepIndex + 1, route.instructions.length - 1);
+        if (nextIndex !== currentStepIndex) {
+          goToStep(nextIndex);
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const prevIndex = Math.max(currentStepIndex - 1, 0);
+        if (prevIndex !== currentStepIndex) {
+          goToStep(prevIndex);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [route, currentStepIndex]);
+
+  const goToStep = (index: number) => {
+    if (!route || index < 0 || index >= route.instructions.length) return;
+    const instr = route.instructions[index];
+    handleInstructionClick(instr.coordinate, index);
+  };
 
   const handleRefreshCache = async () => {
     try {
@@ -310,6 +367,37 @@ export default function NavigationPage() {
         end_node_id: endNodeId,
       });
       setRoute(result);
+      setCurrentStepIndex(0);
+
+      // Lazy load data for maps involved in this route
+      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+      const involvedMapIds = Array.from(new Set(
+        result.path_node_ids
+          .map(id => nodeMap.get(id)?.map_id)
+          .filter((id): id is number => !!id)
+      ));
+
+      // Load full data for those maps if not already loaded
+      await Promise.all(involvedMapIds.map(async (mid) => {
+        try {
+          // Check if we already have data in current state
+          const currentFloor = floorMaps.find(f => f.map.id === mid);
+          if (currentFloor && currentFloor.nodes.length === 0) {
+            const fullData = await wayfindingMapApi.getMapWithData(mid);
+            setFloorMaps(prev => {
+              const updated = [...prev];
+              const idx = updated.findIndex(f => f.map.id === mid);
+              if (idx !== -1) {
+                updated[idx] = { ...updated[idx], nodes: fullData.nodes, edges: fullData.edges };
+              }
+              return updated;
+            });
+            console.log(`[Nav] Lazy loaded nodes for map ${mid}`);
+          }
+        } catch (e) {
+          console.error(`Failed to lazy load map ${mid}`, e);
+        }
+      }));
 
       // Group path_coords by floor based on path_node_ids (more accurate than coords)
       const floorPathMap = new Map<number, { coords: number[][], nodes: number[] }>();
@@ -329,6 +417,15 @@ export default function NavigationPage() {
         }
       }
 
+      // Automatically highlight and center the start node
+      if (result.instructions.length > 0) {
+        const startInstr = result.instructions[0];
+        setHighlightedCoord({ x: startInstr.coordinate[0], y: startInstr.coordinate[1] });
+        setCurrentStepIndex(0);
+      }
+
+      setLoading(false);
+
       // NOTE: Don't init - let it be created naturally when adding first node
 
       // Set initial floor to start node's floor
@@ -343,9 +440,6 @@ export default function NavigationPage() {
         setEdges(targetFloor.edges);
         console.log('[Nav] Direct set map id:', targetFloor.map.id);
       }
-
-      // Build map from node ID to node
-      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
 
       // Process each node in path to determine floor
       let currentCoords: number[][] = [];
@@ -483,37 +577,43 @@ export default function NavigationPage() {
     }
   };
 
-  const handleInstructionClick = (coord: number[]) => {
-    const node = allNodes.find(n =>
-      Math.abs(n.x - coord[0]) < 1 && Math.abs(n.y - coord[1]) < 1
-    );
+  const handleInstructionClick = (coord: [number, number], index?: number) => {
+    if (!route) return;
 
-    if (node) {
-      const floorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
-      if (floorIdx !== -1 && floorIdx !== currentFloorIndex) {
-        setCurrentFloorIndex(floorIdx);
-      }
-
-      setHighlightedCoord({ x: node.x, y: node.y });
-
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect();
-        const mapCenterX = MAP_WIDTH / 2;
-        const mapCenterY = MAP_HEIGHT / 2;
-        setPosition({
-          x: rect.width / 2 - node.x * scale,
-          y: rect.height / 2 - node.y * scale,
-        });
-      }
+    if (index !== undefined) {
+      setCurrentStepIndex(index);
     } else {
-      setHighlightedCoord({ x: coord[0], y: coord[1] });
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect();
-        setPosition({
-          x: rect.width / 2 - coord[0] * scale,
-          y: rect.height / 2 - coord[1] * scale,
-        });
+      const foundIdx = route.instructions.findIndex(i => 
+        Math.abs(i.coordinate[0] - coord[0]) < 1 && Math.abs(i.coordinate[1] - coord[1]) < 1
+      );
+      if (foundIdx !== -1) setCurrentStepIndex(foundIdx);
+    }
+
+    // Find node ID at this coordinate from the path to determine floor
+    const pathIdx = route.path_coords.findIndex(c => 
+      Math.abs(c[0] - coord[0]) < 1 && Math.abs(c[1] - coord[1]) < 1
+    );
+    
+    if (pathIdx !== -1) {
+      const nodeId = route.path_node_ids[pathIdx];
+      const node = allNodes.find(n => n.id === nodeId);
+      
+      if (node) {
+        const floorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+        if (floorIdx !== -1 && floorIdx !== currentFloorIndex) {
+          setCurrentFloorIndex(floorIdx);
+        }
       }
+    }
+
+    setHighlightedCoord({ x: coord[0], y: coord[1] });
+
+    if (svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.width / 2 - coord[0] * scale,
+        y: rect.height / 2 - coord[1] * scale,
+      });
     }
   };
 
@@ -558,8 +658,28 @@ export default function NavigationPage() {
   // Map pan/zoom handlers
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    if (!svgRef.current || !position) return;
+
+    // Use the viewport coordinates for zooming
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((s) => Math.min(Math.max(s * delta, 0.5), 3));
+    const newScale = Math.min(Math.max(scale * delta, 0.5), 10);
+
+    if (newScale !== scale) {
+      // Calculate how far the mouse is from the current map position in screen space
+      // then adjust the position so that same map point stays under the mouse
+      const dx = (mouseX - position.x) / scale;
+      const dy = (mouseY - position.y) / scale;
+
+      setPosition({
+        x: mouseX - dx * newScale,
+        y: mouseY - dy * newScale,
+      });
+      setScale(newScale);
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -577,6 +697,25 @@ export default function NavigationPage() {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!svgRef.current || !position) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const delta = 1.5;
+    const newScale = Math.min(scale * delta, 10);
+    
+    const dx = (mouseX - position.x) / scale;
+    const dy = (mouseY - position.y) / scale;
+    
+    setPosition({
+      x: mouseX - dx * newScale,
+      y: mouseY - dy * newScale,
+    });
+    setScale(newScale);
   };
 
   // Get path d string for edge (matching editor style)
@@ -731,16 +870,20 @@ export default function NavigationPage() {
                   <div className="space-y-1 overflow-y-auto max-h-96 pr-2 custom-scrollbar">
                     {route.instructions.map((instruction, idx) => {
                       const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
+                      const isActive = idx === currentStepIndex;
                       return (
                         <div
                           key={idx}
-                          onClick={() => handleInstructionClick(instruction.coordinate)}
-                          className={`flex gap-4 p-3 rounded-lg cursor-pointer ${instruction.action === 'start' || instruction.action === 'arrive'
-                            ? 'bg-primary/10 border-l-4 border-primary'
-                            : isFloorChange
-                              ? 'bg-accent border-l-4 border-primary'
-                              : 'hover:bg-muted border-l-4 border-transparent'
-                            } transition-colors`}
+                          id={`instruction-${idx}`}
+                          onClick={() => handleInstructionClick(instruction.coordinate, idx)}
+                          className={`flex gap-4 p-3 rounded-lg cursor-pointer ${isActive
+                            ? 'bg-primary/20 border-l-4 border-primary shadow-sm scale-[1.02]'
+                            : instruction.action === 'start' || instruction.action === 'arrive'
+                              ? 'bg-primary/5 border-l-4 border-primary/50'
+                              : isFloorChange
+                                ? 'bg-accent border-l-4 border-primary'
+                                : 'hover:bg-muted border-l-4 border-transparent'
+                            } transition-all duration-200`}
                           data-testid="instruction-item"
                         >
                           <div className="flex flex-col items-center">
@@ -862,6 +1005,7 @@ export default function NavigationPage() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
           >
             {/* Smart Vertical Floor Selector */}
             {groupedFloors.length > 0 && (
@@ -1036,160 +1180,88 @@ export default function NavigationPage() {
                         });
                       })()}
 
-                      {/* Nodes - only show all nodes if not in 3D */}
-                      {!is3D && isTargetFloor && fmNodes
-                        .filter(node => node.name && node.name !== 'New Node')
-                        .map((node) => (
-                          <g key={node.id}>
-                            <circle
-                              cx={node.x}
-                              cy={node.y}
-                              r={node.type === 'room' ? 8 : 5}
-                              fill={NODE_COLORS[node.type] || NODE_COLORS.path}
-                              stroke="white"
-                              strokeWidth={1.5}
-                            />
-                            <text
-                              x={node.x}
-                              y={node.y - 12}
-                              textAnchor="middle"
-                              fill="#020260"
-                              fontSize="12"
-                              fontWeight="800"
-                              className="select-none pointer-events-none uppercase tracking-tight"
-                              stroke="white"
-                              strokeWidth="2.5"
-                              paintOrder="stroke"
-                            >
-                              {node.name}
-                            </text>
-                          </g>
-                        ))}
-
-                      {/* Start/End Markers */}
+                      {/* Start/End Markers - Minimalist style like MapPreview */}
                       {route && (() => {
-                        const startCoord = route.path_coords[0];
-                        const startNode = allNodes.find(n =>
-                          Math.abs(n.x - startCoord[0]) < 2 && Math.abs(n.y - startCoord[1]) < 2
-                        );
-                        const startFloorIdx = startNode
-                          ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
-                          : -1;
+                        const startNodeId = route.path_node_ids[0];
+                        const startNode = allNodes.find(n => n.id === startNodeId);
+                        const startMapId = startNode?.map_id;
+                        
+                        const endNodeId = route.path_node_ids[route.path_node_ids.length - 1];
+                        const endNode = allNodes.find(n => n.id === endNodeId);
+                        const endMapId = endNode?.map_id;
 
-                        const endCoord = route.path_coords[route.path_coords.length - 1];
-                        const endNode = allNodes.find(n =>
-                          Math.abs(n.x - endCoord[0]) < 2 && Math.abs(n.y - endCoord[1]) < 2
-                        );
-                        const endFloorIdx = endNode
-                          ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
-                          : -1;
+                        const currentMapId = fm.map.id;
 
                         return (
-                          <>
-                            {startFloorIdx === floorIndex && (
-                              <g>
-                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "20" : "14"} fill="#020260" />
-                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "12" : "8"} fill="white" />
-                                {!is3D && (
-                                  <text 
-                                    x={startCoord[0] + 20} 
-                                    y={startCoord[1] + 5} 
-                                    fill="#020260" 
-                                    fontSize="12" 
-                                    fontWeight="900"
-                                    stroke="white"
-                                    strokeWidth="3"
-                                    paintOrder="stroke"
-                                    className="uppercase tracking-tighter"
-                                  >
-                                    BẮT ĐẦU
-                                  </text>
-                                )}
+                          <g>
+                            {/* Start Marker */}
+                            {startMapId === currentMapId && (
+                              <g transform={`translate(${route.path_coords[0][0]}, ${route.path_coords[0][1]})`}>
+                                <circle r="8" fill="#020260" stroke="white" strokeWidth="2" className="drop-shadow-md" />
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">START</text>
                               </g>
                             )}
-                            {endFloorIdx === floorIndex && (
-                              <g>
-                                <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "20" : "14"} fill="#dc2626" />
-                                <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "12" : "8"} fill="white" />
-                                {!is3D && (
-                                  <text 
-                                    x={endCoord[0] + 20} 
-                                    y={endCoord[1] + 5} 
-                                    fill="#dc2626" 
-                                    fontSize="12" 
-                                    fontWeight="900"
-                                    stroke="white"
-                                    strokeWidth="3"
-                                    paintOrder="stroke"
-                                    className="uppercase tracking-tighter"
-                                  >
-                                    ĐÍCH ĐẾN
-                                  </text>
-                                )}
+
+                            {/* End Marker */}
+                            {endMapId === currentMapId && (
+                              <g transform={`translate(${route.path_coords[route.path_coords.length - 1][0]}, ${route.path_coords[route.path_coords.length - 1][1]})`}>
+                                <circle r="8" fill="#ef4444" stroke="white" strokeWidth="2" className="drop-shadow-md" />
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">END</text>
                               </g>
                             )}
-                          </>
+                          </g>
                         );
                       })()}
 
-                      {/* Highlighted instruction marker */}
+                      {/* Highlighted instruction marker - Pulsing like MapPreview */}
                       {!is3D && isTargetFloor && highlightedCoord && (
                         <g>
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="20" fill="#10b981" fillOpacity="0.3" />
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="12" fill="#10b981" stroke="white" strokeWidth="3" />
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="5" fill="white" />
+                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="20" fill="#10b981" fillOpacity="0.3" className="animate-pulse" />
+                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="10" fill="#10b981" stroke="white" strokeWidth="3" />
                         </g>
                       )}
 
-                      {/* TRANSITION BUTTONS */}
-                      {!is3D && isTargetFloor && route && floorSegments.length > 1 && (() => {
-                        const currentSeg = floorSegments.find(s => s.floorIndex === currentFloorIndex);
-                        const transitionNodes = fmNodes.filter(n =>
-                          (n.type === 'stairs' || n.type === 'elevator') &&
-                          n.name && n.name !== 'New Node' &&
-                          currentSeg?.pathCoords.some(coord => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2)
-                        );
+                      {/* TRANSITION BUTTONS - Removed from map to match MapPreview minimalist style. 
+                          Users use the floor selector or follow the path. */}
 
-                        return transitionNodes.map((node, idx) => {
-                          const firstCoord = currentSeg?.pathCoords[0];
-                          const lastCoord = currentSeg?.pathCoords[currentSeg.pathCoords.length - 1];
-                          const isEntryPoint = firstCoord && Math.abs(node.x - firstCoord[0]) < 2 && Math.abs(node.y - firstCoord[1]) < 2;
-                          const isExitPoint = lastCoord && Math.abs(node.x - lastCoord[0]) < 2 && Math.abs(node.y - lastCoord[1]) < 2;
-
-                          let nextFloorIdx = -1;
-                          let prevFloorIdx = -1;
-                          const currentSegIdx = floorSegments.findIndex(s => s.floorIndex === currentFloorIndex);
-                          if (currentSegIdx < floorSegments.length - 1) nextFloorIdx = floorSegments[currentSegIdx + 1].floorIndex;
-                          if (currentSegIdx > 0) prevFloorIdx = floorSegments[currentSegIdx - 1].floorIndex;
-
-                          return (
-                            <g key={`trans-${currentFloorIndex}-${idx}`}>
-                              {isEntryPoint && prevFloorIdx !== -1 && (
-                                <g onClick={(e) => { e.stopPropagation(); handleFloorSwitch(prevFloorIdx); }} className="cursor-pointer">
-                                  <circle cx={node.x - 50} cy={node.y} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
-                                  <path d={`M${node.x - 40},${node.y - 6} L${node.x - 58},${node.y} L${node.x - 40},${node.y + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  <text x={node.x - 50} y={node.y + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
-                                    {floorMaps[prevFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[prevFloorIdx]?.map.floor_level}`}
-                                  </text>
-                                </g>
-                              )}
-                              {isExitPoint && nextFloorIdx !== -1 && (
-                                <g onClick={(e) => { e.stopPropagation(); handleFloorSwitch(nextFloorIdx); }} className="cursor-pointer">
-                                  <circle cx={node.x + 50} cy={node.y} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
-                                  <path d={`M${node.x + 40},${node.y - 6} L${node.x + 58},${node.y} L${node.x + 40},${node.y + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  <text x={node.x + 50} y={node.y + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
-                                    {floorMaps[nextFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[nextFloorIdx]?.map.floor_level}`}
-                                  </text>
-                                </g>
-                              )}
-                            </g>
-                          );
-                        });
-                      })()}
                     </g>
                   );
                 }}
               />
+            )}
+
+            {/* Step Navigator UI */}
+            {route && currentStepIndex !== -1 && (
+              <div className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card/90 backdrop-blur-md p-2 rounded-2xl border border-white/20 shadow-2xl transition-all duration-300 ${isMobile ? 'bottom-20 w-[90%]' : 'bottom-10'}`}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="size-10 rounded-xl hover:bg-primary/10 hover:text-primary"
+                  onClick={() => goToStep(Math.max(0, currentStepIndex - 1))}
+                  disabled={currentStepIndex <= 0}
+                >
+                  <span className="material-symbols-outlined">chevron_left</span>
+                </Button>
+                
+                <div className="flex-1 flex flex-col items-center min-w-[120px] px-2">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">
+                    Bước {currentStepIndex + 1} / {route.instructions.length}
+                  </div>
+                  <div className="text-xs font-semibold text-foreground text-center line-clamp-1">
+                    {route.instructions[currentStepIndex].text}
+                  </div>
+                </div>
+
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="size-10 rounded-xl hover:bg-primary/10 hover:text-primary"
+                  onClick={() => goToStep(Math.min(route.instructions.length - 1, currentStepIndex + 1))}
+                  disabled={currentStepIndex >= route.instructions.length - 1}
+                >
+                  <span className="material-symbols-outlined">chevron_right</span>
+                </Button>
+              </div>
             )}
 
             {/* Floor Change Notice Overlay */}
