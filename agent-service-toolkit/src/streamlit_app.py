@@ -146,6 +146,7 @@ async def main() -> None:
                 index=agent_idx,
             )
             use_streaming = st.toggle("Stream results", value=True)
+            use_deep_mode = st.toggle("Deep Mode (Query Decomposition)", value=False, help="Enable for complex or multi-part questions.")
             # Audio toggle with callback: clears cached audio when toggled off
             enable_audio = st.toggle(
                 "Enable audio generation",
@@ -269,6 +270,7 @@ async def main() -> None:
                     model=model,
                     thread_id=st.session_state.thread_id,
                     user_id=user_id,
+                    agent_config={"query_mode": "deep" if use_deep_mode else "normal"},
                 )
                 await draw_messages(stream, is_new=True)
                 # Generate TTS audio for streaming response
@@ -290,6 +292,7 @@ async def main() -> None:
                     model=model,
                     thread_id=st.session_state.thread_id,
                     user_id=user_id,
+                    agent_config={"query_mode": "deep" if use_deep_mode else "normal"},
                 )
                 messages.append(response)
                 # Render AI response with optional voice

@@ -89,7 +89,7 @@ async def lookup_hcmut_info(query: str, config: RunnableConfig):
     search_depth: "normal" (Tìm kiếm nhanh) hoặc "deep" (Tìm kiếm sâu trên đồ thị tri thức).
     """
     # Lấy query_mode từ config (mặc định là 'normal' nếu API không truyền)
-    query_mode = str(config.get("configurable", {}).get("query_mode", "normal")).strip().lower()
+    query_mode = str(config.get("configurable", {}).get("query_mode", "deep")).strip().lower()
 
     _t_tool_start = asyncio.get_event_loop().time()
     logger.info("CALL TOOL: lookup_hcmut_info | QUERY: %s | MODE: %s", query, query_mode)
@@ -709,6 +709,70 @@ class AgentState(MessagesState):
     pass
 
 
+async def deep_analyzer(state: AgentState, config: RunnableConfig) -> AgentState:
+    """
+    Node phân tích truy vấn dành riêng cho Deep Mode.
+    Sử dụng LLM để đọc câu hỏi, viết lại hoặc tách thành nhiều sub-queries 
+    và trả về các tool_calls.
+    """
+    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    
+    # Chỉ cung cấp tool lookup_hcmut_info cho analyzer
+    m_with_tools = m.bind_tools([lookup_hcmut_info])
+    
+    sys_msg = SystemMessage(
+        content="""
+    Bạn là chuyên gia phân tích và lập kế hoạch truy vấn dữ liệu (Query Analyzer) của trường Đại học Bách Khoa TP.HCM (HCMUT).
+    Nhiệm vụ của bạn là đọc câu hỏi của người dùng và gọi công cụ `lookup_hcmut_info` để thu thập thông tin.
+    
+    QUY TẮC Ở CHẾ ĐỘ DEEP MODE:
+    1. Phân tích câu hỏi:
+       - Nếu câu hỏi mơ hồ, thiếu từ khóa, hãy viết lại (rewrite) thành truy vấn rõ ràng, nhiều từ khóa hơn.
+       - Nếu câu hỏi có nhiều ý (ví dụ: "Học phí là bao nhiêu và có học bổng nào không?"), bạn BẮT BUỘC tách thành nhiều câu truy vấn và gọi tool `lookup_hcmut_info` NHIỀU LẦN (song song) tương ứng với từng ý.
+    2. KHÔNG TỰ TRẢ LỜI CÂU HỎI. Bạn CHỈ được gọi tool.
+    """
+    )
+    
+    current_messages = list(state["messages"])
+    if not isinstance(current_messages[0], SystemMessage):
+        current_messages.insert(0, sys_msg)
+    else:
+        current_messages[0] = sys_msg  # Cập nhật prompt mới nhất cho analyzer
+    
+    response = await m_with_tools.ainvoke(current_messages, config)
+    
+    # Đảm bảo analyzer luôn gọi tool
+    if not response.tool_calls:
+        last_human_msg = ""
+        for msg in reversed(current_messages):
+            if isinstance(msg, HumanMessage):
+                last_human_msg = msg.content
+                break
+        
+        import uuid
+        response = AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "lookup_hcmut_info",
+                "args": {"query": last_human_msg},
+                "id": f"call_{uuid.uuid4().hex[:8]}"
+            }]
+        )
+    
+    return {"messages": [response]}
+
+
+def route_entry(state: AgentState, config: RunnableConfig) -> Literal["deep_analyzer", "agent"]:
+    """
+    Điều hướng ban đầu dựa trên query_mode.
+    """
+    query_mode = config.get("configurable", {}).get("query_mode", "normal")
+    if query_mode == "deep":
+        return "deep_analyzer"
+    return "agent"
+
+
+
 content = """
     Bạn là trợ lý ảo AI của trường Đại học Bách Khoa TP.HCM (HCMUT).
 
@@ -914,9 +978,16 @@ workflow = StateGraph(AgentState)
 workflow.add_node("agent", call_model)
 workflow.add_node("tools", tool_node)
 workflow.add_node("handle_error", handle_error)
+workflow.add_node("deep_analyzer", deep_analyzer)
 
 # Entry Point
-workflow.set_entry_point("agent")
+workflow.set_conditional_entry_point(
+    route_entry,
+    {
+        "deep_analyzer": "deep_analyzer",
+        "agent": "agent",
+    }
+)
 
 # Conditional Edges (Dùng hàm route_tools tự viết)
 workflow.add_conditional_edges(
@@ -929,7 +1000,8 @@ workflow.add_conditional_edges(
     },
 )
 
-# Edge quay lại
+# Edge quay lại và luồng mới cho deep_analyzer
+workflow.add_edge("deep_analyzer", "tools")
 workflow.add_edge("tools", "agent")
 workflow.add_edge("handle_error", END)
 
