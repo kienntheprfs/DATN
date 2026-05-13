@@ -184,8 +184,10 @@ def get_node_name(session: Session, node_id: int) -> Optional[str]:
     alias = session.exec(select(Alias).where(Alias.node_id == node_id)).first()
     if alias:
         return alias.name
-    # Fallback to node's own name
+    # Fallback to node's own name (Skip if it's "New Node")
     node = session.get(Node, node_id)
+    if node and node.name and node.name.lower() == "new node":
+        return None
     return node.name if node else None
 
 
@@ -359,26 +361,32 @@ def generate_human_instructions(
             direction = "lên" if w_floor > v_floor else "xuống"
             edge_data = G.get_edge_data(current_node, next_node)
             edge_type = edge_data.get("type", "walk") if edge_data else "walk"
-            loc = f"Đến {node_name}. " if node_name else ""
             
-            text = f"{loc}Đi {'thang máy' if edge_type == 'elevator' else 'cầu thang'} {direction} Tầng {w_floor}"
+            dist_m = round(cumulative_dist_m, 1)
+            dist_prefix = f"Đi {dist_m}m, " if dist_m > 0 else ""
+            loc = f"đến {node_name}. " if node_name else ""
+            
+            text = f"{dist_prefix}{loc}Đi {'thang máy' if edge_type == 'elevator' else 'cầu thang'} {direction} Tầng {w_floor}"
             action = "use_elevator" if edge_type == 'elevator' else "use_stairs"
             
             instructions.append(Instruction(
                 step=len(instructions)+1, text=text, action=action, 
-                distance_m=round(cumulative_dist_m, 1), coordinate=node_pos[current_node]
+                distance_m=dist_m, coordinate=node_pos[current_node]
             ))
             cumulative_dist_m = 0.0
 
         # HÀNH ĐỘNG: Vào/Ra tòa nhà
         elif is_exit or is_entrance:
+            dist_m = round(cumulative_dist_m, 1)
+            dist_prefix = f"Đi {dist_m}m, " if dist_m > 0 else ""
+            
             building_name = node_name if node_name else "Tòa"
-            text = f"Ra khỏi {building_name}" if is_exit else f"Đến lối vào. Vào {building_name}"
+            text = f"{dist_prefix}Ra khỏi {building_name}" if is_exit else f"{dist_prefix}Đến lối vào. Vào {building_name}"
             action = "exit" if is_exit else "entrance"
             
             instructions.append(Instruction(
                 step=len(instructions)+1, text=text, action=action, 
-                distance_m=round(cumulative_dist_m, 1), coordinate=node_pos[current_node]
+                distance_m=dist_m, coordinate=node_pos[current_node]
             ))
             cumulative_dist_m = 0.0
 
@@ -390,20 +398,32 @@ def generate_human_instructions(
             
             # Chỉ tạo instruction nếu rẽ đáng kể hoặc có tên node (phòng, cửa...)
             if turn != "straight" or node_name:
-                loc = f" đến {node_name}" if node_name else ""
-                dist_str = f"{round(cumulative_dist_m, 1)}m"
+                dist_m = round(cumulative_dist_m, 1)
                 
-                if turn == "left": text, action = f"Đi {dist_str}{loc}. Rẽ trái", "turn_left"
-                elif turn == "right": text, action = f"Đi {dist_str}{loc}. Rẽ phải", "turn_right"
-                elif turn == "slight_left": text, action = f"Đi {dist_str}{loc}. Đi chếch trái", "slight_left"
-                elif turn == "slight_right": text, action = f"Đi {dist_str}{loc}. Đi chếch phải", "slight_right"
-                else: text, action = f"Đi {dist_str}{loc}. Đi thẳng", "straight"
+                # Skip if it's a straight instruction with 0.0m distance and no specific name
+                if turn == "straight" and dist_m == 0.0 and not node_name:
+                    continue
 
-                instructions.append(Instruction(
-                    step=len(instructions)+1, text=text, action=action, 
-                    distance_m=round(cumulative_dist_m, 1), coordinate=node_pos[current_node]
-                ))
-                cumulative_dist_m = 0.0
+                dist_prefix = f"Đi {dist_m}m, " if dist_m > 0 else ""
+                loc = f"đến {node_name}" if node_name else ""
+                
+                if turn == "left": text, action = f"{dist_prefix}{loc}. Rẽ trái", "turn_left"
+                elif turn == "right": text, action = f"{dist_prefix}{loc}. Rẽ phải", "turn_right"
+                elif turn == "slight_left": text, action = f"{dist_prefix}{loc}. Đi chếch trái", "slight_left"
+                elif turn == "slight_right": text, action = f"{dist_prefix}{loc}. Đi chếch phải", "slight_right"
+                else: text, action = f"{dist_prefix}{loc}. Đi thẳng", "straight"
+
+                # Clean up leading dots or spaces
+                text = text.replace("..", ".").replace(". .", ".").strip(". ")
+                if text.startswith("đến "):
+                    text = text.capitalize()
+
+                if text:
+                    instructions.append(Instruction(
+                        step=len(instructions)+1, text=text, action=action, 
+                        distance_m=dist_m, coordinate=node_pos[current_node]
+                    ))
+                    cumulative_dist_m = 0.0
 
     # Xử lý đoạn cuối cùng (từ last_prev đến end_node)
     end_node = path_nodes[-1]
@@ -429,12 +449,15 @@ def generate_human_instructions(
         cumulative_dist_m += final_dist_m
         total_walk_distance_m += final_dist_m
 
+    arrival_dist_m = round(cumulative_dist_m, 1)
+    arrival_prefix = f"Đi {arrival_dist_m}m. " if arrival_dist_m > 0 else ""
+    
     instructions.append(
         Instruction(
             step=len(instructions) + 1,
-            text=f"Đến {G.nodes[end_node].get('name', 'điểm đến')}",
+            text=f"{arrival_prefix}Đã đến {G.nodes[end_node].get('name', 'điểm đến')}",
             action="arrive",
-            distance_m=round(cumulative_dist_m, 1),
+            distance_m=arrival_dist_m,
             coordinate=node_pos[end_node],
         )
     )
@@ -479,6 +502,9 @@ def find_best_alias_node(
 
     candidates = []
     for alias, node, building in results:
+        if node.name and node.name.lower() == "new node":
+            continue
+            
         alias_name = normalize_name(alias.name)
         building_name = normalize_name(building.name) if building else ""
 
@@ -493,6 +519,11 @@ def find_best_alias_node(
 
         # Ưu tiên kết quả khớp hoàn toàn
         if norm_q in alias_name or norm_q in combined_name:
+            score += 10
+        
+        # Bonus if building name matches query directly (e.g. "Tòa B" matches "Tòa B4")
+        if building_name and (norm_q in building_name or building_name in norm_q):
+            score = max(score, 85.0)
             score += 10
 
         if score > 50:
@@ -665,9 +696,15 @@ def route_by_query(
             score2 = candidates[1][1]
             # Nếu chênh lệch score < 10, coi là không rõ ràng
             if score1 - score2 < 10:
+                # Liệt kê tất cả các địa điểm có điểm trên 80%
+                relevant_candidates = [c for c in candidates if c[1] >= 80]
+                # Nếu không có cái nào trên 80 (trường hợp hiếm vì score1 >= score2), lấy top 3
+                if not relevant_candidates:
+                    relevant_candidates = candidates[:3]
+                
                 options = [
                     f"{c[0].name} (Tầng {session.get(Map, c[0].map_id).floor_level})"
-                    for c in candidates[:3]
+                    for c in relevant_candidates
                 ]
                 return (
                     None,

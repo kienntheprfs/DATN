@@ -100,6 +100,11 @@ export const agentClient = {
 		const response = await apiClient.post<ChatHistory>('/agent/history', { thread_id: threadId });
 		return response.data;
 	},
+	
+	async getThread(threadId: string): Promise<ThreadItem> {
+		const response = await apiClient.get<ThreadItem>(`/agent/threads/${threadId}`);
+		return response.data;
+	},
 
 	async getThreads(limit: number = 20, offset: number = 0): Promise<ThreadListResponse> {
 		const response = await apiClient.get<ThreadListResponse>(`/agent/threads?limit=${limit}&offset=${offset}`);

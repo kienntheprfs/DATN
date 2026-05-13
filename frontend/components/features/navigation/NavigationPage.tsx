@@ -10,8 +10,10 @@ import { RouteResponse, MapData, MapNode, MapEdge, Building, Instruction } from 
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { LocationSearch } from './LocationSearch';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Navigation, RefreshCw, Map as MapIcon, ChevronLeft } from 'lucide-react';
+import { ArrowUpDown, Navigation, RefreshCw, Map as MapIcon, ChevronLeft, Navigation2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAppStore } from '@/stores/app.store';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { UnifiedMapView } from './UnifiedMapView';
@@ -58,8 +60,7 @@ interface FloorSegment {
 
 export default function NavigationPage() {
   const buildings = useBuildingStore((state) => state.buildings);
-
-
+  const { allMaps, fetchAllMaps, isLoadingMaps } = useAppStore();
   const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
   const isMobile = useIsMobile();
 
@@ -80,7 +81,6 @@ export default function NavigationPage() {
   const [route, setRoute] = useState<RouteResponse | null>(null);
   const [floorSegments, setFloorSegments] = useState<FloorSegment[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mapLoading, setMapLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
@@ -129,7 +129,7 @@ export default function NavigationPage() {
 
   // Auto-center map on load
   useEffect(() => {
-    if (floorMaps.length > 0 && !mapLoading) {
+    if (allMaps.length > 0 && !isLoadingMaps) {
       // Small delay to ensure container is rendered
       const timer = setTimeout(() => {
         if (svgRef.current) {
@@ -146,7 +146,7 @@ export default function NavigationPage() {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [floorMaps.length, mapLoading]);
+  }, [allMaps.length, isLoadingMaps]);
 
   useEffect(() => {
     fetchBuildings().then(() => {
@@ -163,31 +163,8 @@ export default function NavigationPage() {
   }, [buildings, selectedBuildingId]);
 
   useEffect(() => {
-    const loadMaps = async () => {
-      setMapLoading(true);
+    fetchAllMaps().then(async () => {
       try {
-        // Load all maps (campus + all buildings)
-        const allMaps = await wayfindingMapApi.getAllMaps();
-        console.log('[Nav] All maps:', allMaps.map(m => ({ id: m.id, name: m.name, floor: m.floor_level, building: m.building_id })));
-
-        const allFloorData: FloorMap[] = allMaps.map(m => ({
-          map: m,
-          nodes: [], // Lazy load nodes/edges later
-          edges: [],
-          isCampus: m.floor_level === null,
-        }));
-
-        // Sort: campus first, then by floor level
-        allFloorData.sort((a, b) => {
-          if (a.isCampus) return -1;
-          if (b.isCampus) return 1;
-          return (a.map.floor_level || 0) - (b.map.floor_level || 0);
-        });
-
-        setFloorMaps(allFloorData);
-        setCurrentFloorIndex(0);
-        setCurrentMap(allFloorData[0].map);
-        
         // Also load all locations for search and URL mapping
         const locations = await locationApi.getAll();
         setAllNodes(locations.map(loc => ({
@@ -198,23 +175,43 @@ export default function NavigationPage() {
           x: 0, // Coordinates will come from path or lazy loaded data
           y: 0,
         })));
-
-        console.log('[Nav] Total floors:', allFloorData.length);
-        console.log('[Nav] Maps loaded successfully');
       } catch (err) {
-        console.error('Failed to load maps:', err);
-      } finally {
-        setMapLoading(false);
+        console.error('Failed to load locations:', err);
       }
-    };
-    loadMaps();
-  }, []);
+    });
+  }, [fetchAllMaps]);
+
+  // Sync floorMaps with global store
+  useEffect(() => {
+    if (allMaps.length > 0) {
+      const allFloorData: FloorMap[] = allMaps.map(m => ({
+        ...m,
+        isCampus: m.map.floor_level === null,
+      }));
+
+      // Sort: campus first, then by floor level
+      allFloorData.sort((a, b) => {
+        if (a.isCampus) return -1;
+        if (b.isCampus) return 1;
+        return (a.map.floor_level || 0) - (b.map.floor_level || 0);
+      });
+
+      setFloorMaps(allFloorData);
+      
+      // If no current map, set initial
+      if (!currentMap && allFloorData.length > 0) {
+        setCurrentMap(allFloorData[0].map);
+        setNodes(allFloorData[0].nodes);
+        setEdges(allFloorData[0].edges);
+      }
+    }
+  }, [allMaps, currentMap]);
 
   const searchParams = useSearchParams();
   const initialLoadDone = useRef(false);
 
   useEffect(() => {
-    if (!mapLoading && allNodes.length > 0 && !initialLoadDone.current) {
+    if (!isLoadingMaps && allNodes.length > 0 && !initialLoadDone.current) {
       const startId = searchParams.get('start');
       const endId = searchParams.get('end');
 
@@ -234,7 +231,7 @@ export default function NavigationPage() {
         }
       }
     }
-  }, [mapLoading, allNodes, searchParams]);
+  }, [isLoadingMaps, allNodes, searchParams]);
 
   // Trigger find route automatically when IDs are set from URL
   useEffect(() => {
@@ -243,46 +240,19 @@ export default function NavigationPage() {
     }
   }, [startNodeId, endNodeId, route, loading, initialLoadDone.current]);
 
-  // Use separate effect for floor change
+  // Sync local nodes/edges when currentFloorIndex changes
   useEffect(() => {
     if (floorMaps.length === 0) return;
     
     const targetIdx = currentFloorIndex;
     const newMap = floorMaps[targetIdx];
     
-    console.log('[Nav] Effect triggered, index:', targetIdx, 'map id:', newMap?.map?.id);
-    
     if (newMap) {
       setCurrentMap(newMap.map);
-      
-      // Lazy load data for this floor if it's empty
-      if (newMap.nodes.length === 0) {
-        const mapId = newMap.map.id;
-        wayfindingMapApi.getMapWithData(mapId).then(fullData => {
-          // Use functional update to avoid race conditions
-          setFloorMaps(prev => {
-            const updated = [...prev];
-            const idx = updated.findIndex(f => f.map.id === mapId);
-            if (idx !== -1) {
-              updated[idx] = {
-                ...updated[idx],
-                nodes: fullData.nodes,
-                edges: fullData.edges
-              };
-            }
-            return updated;
-          });
-          
-          setNodes(fullData.nodes);
-          setEdges(fullData.edges);
-          console.log('[Nav] Lazy loaded nodes for map:', mapId);
-        }).catch(err => console.error('Failed to lazy load floor:', err));
-      } else {
-        setNodes(newMap.nodes);
-        setEdges(newMap.edges);
-      }
+      setNodes(newMap.nodes);
+      setEdges(newMap.edges);
     }
-  }, [currentFloorIndex, floorMaps.length]);
+  }, [currentFloorIndex, floorMaps]);
 
   useEffect(() => {
     if (svgRef.current && position === null) {
@@ -359,6 +329,7 @@ export default function NavigationPage() {
 
     setLoading(true);
     setError('');
+    setRoute(null);
 
     try {
       const result = await wayfindingApi.findRoute({
@@ -366,70 +337,30 @@ export default function NavigationPage() {
         start_node_id: startNodeId,
         end_node_id: endNodeId,
       });
-      setRoute(result);
       setCurrentStepIndex(0);
 
-      // Lazy load data for maps involved in this route
-      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
-      const involvedMapIds = Array.from(new Set(
-        result.path_node_ids
-          .map(id => nodeMap.get(id)?.map_id)
-          .filter((id): id is number => !!id)
-      ));
+      // Use all available nodes from the store to build a complete node map
+      const allGraphNodes = allMaps.flatMap(m => m.nodes);
+      const nodeMap = new Map(allGraphNodes.map(n => [n.id, n]));
 
-      // Load full data for those maps if not already loaded
-      await Promise.all(involvedMapIds.map(async (mid) => {
-        try {
-          // Check if we already have data in current state
-          const currentFloor = floorMaps.find(f => f.map.id === mid);
-          if (currentFloor && currentFloor.nodes.length === 0) {
-            const fullData = await wayfindingMapApi.getMapWithData(mid);
-            setFloorMaps(prev => {
-              const updated = [...prev];
-              const idx = updated.findIndex(f => f.map.id === mid);
-              if (idx !== -1) {
-                updated[idx] = { ...updated[idx], nodes: fullData.nodes, edges: fullData.edges };
-              }
-              return updated;
-            });
-            console.log(`[Nav] Lazy loaded nodes for map ${mid}`);
-          }
-        } catch (e) {
-          console.error(`Failed to lazy load map ${mid}`, e);
-        }
-      }));
 
-      // Group path_coords by floor based on path_node_ids (more accurate than coords)
+      // Group path_coords by floor based on path_node_ids
       const floorPathMap = new Map<number, { coords: number[][], nodes: number[] }>();
 
       // Determine initial floor from first node ID
       let currentFloorIdx = 0;
       if (result.path_node_ids.length > 0) {
-        const firstNodeId = Number(result.path_node_ids[0]); // Ensure number
-        const firstNode = allNodes.find(n => n.id === firstNodeId);
-        console.log('[Nav] First node:', firstNodeId, 'type:', typeof firstNodeId, 'found:', !!firstNode, 'map_id:', firstNode?.map_id);
+        const firstNodeId = Number(result.path_node_ids[0]);
+        const firstNode = nodeMap.get(firstNodeId);
         if (firstNode) {
           const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
-          console.log('[Nav] Initial floor idx:', initialFloorIdx, 'target map id:', firstNode.map_id);
           if (initialFloorIdx !== -1) {
             currentFloorIdx = initialFloorIdx;
           }
         }
       }
 
-      // Automatically highlight and center the start node
-      if (result.instructions.length > 0) {
-        const startInstr = result.instructions[0];
-        setHighlightedCoord({ x: startInstr.coordinate[0], y: startInstr.coordinate[1] });
-        setCurrentStepIndex(0);
-      }
-
-      setLoading(false);
-
-      // NOTE: Don't init - let it be created naturally when adding first node
-
       // Set initial floor to start node's floor
-      console.log('[Nav] Setting floor index to:', currentFloorIdx, 'floorMaps length:', floorMaps.length);
       setCurrentFloorIndex(currentFloorIdx);
 
       // Also directly set state
@@ -566,8 +497,16 @@ export default function NavigationPage() {
       }
 
       setFloorSegments(segments);
-      console.log('[Nav] Segments:', segments.map(s => ({ floorIndex: s.floorIndex, pathCoordsCount: s.pathCoords.length })));
-      console.log('[Nav] floorMaps ids:', floorMaps.map(f => f.map.id));
+
+      // Finally update the route state to trigger re-render
+      setRoute(result);
+      
+      // Automatically highlight and center the start node
+      if (result.instructions.length > 0) {
+        const startInstr = result.instructions[0];
+        setHighlightedCoord({ x: startInstr.coordinate[0], y: startInstr.coordinate[1] });
+        setCurrentStepIndex(0);
+      }
     } catch (err) {
       const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Could not find route. Please try different locations.';
       setError(errorMsg);
@@ -1127,9 +1066,19 @@ export default function NavigationPage() {
               </div>
             )}
 
-            {mapLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <span className="material-symbols-outlined text-4xl animate-spin text-muted-foreground">sync</span>
+            {isLoadingMaps ? (
+              <div className="flex items-center justify-center h-full bg-slate-950/5">
+                <div className="flex flex-col items-center gap-4">
+                  <Navigation2 className="size-12 animate-pulse text-primary/40" />
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-sm font-bold text-muted-foreground animate-pulse">ĐANG TẢI BẢN ĐỒ</p>
+                    <div className="flex gap-1">
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : floorMaps.length === 0 ? (
               <div className="flex items-center justify-center h-full">

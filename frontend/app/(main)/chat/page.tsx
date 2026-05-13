@@ -45,6 +45,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		clearVoiceTools,
 		stop,
 		isLoading,
+		isHistoryLoading,
 		isTyping,
 		currentTools,
 		error,
@@ -168,15 +169,15 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		return contents;
 	}, [messages]);
 
+	const prevCitationsCount = useRef(0);
+
 	useEffect(() => {
-		if (citations && citations.length > 0 && !isDocumentPanelOpen) {
+		const currentCount = citations?.length || 0;
+		if (currentCount > prevCitationsCount.current) {
 			setIsDocumentPanelOpen(true);
 		}
-		
-		if (isReadOnly && citations && citations.length > 0 && !isDocumentPanelOpen) {
-			setIsDocumentPanelOpen(true);
-		}
-	}, [citations, isReadOnly, isDocumentPanelOpen]);
+		prevCitationsCount.current = currentCount;
+	}, [citations?.length]);
 
 	const routeData = useMemo(() => {
 		const routeTool = currentTools.find((tool) => {
@@ -324,6 +325,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 										messages={messages}
 										error={error}
 										isStreaming={isLoading}
+										isHistoryLoading={isHistoryLoading}
 										isTyping={isTyping}
 										isVoiceMode={voice.state === "connected"}
 										isListening={voice.isListening}

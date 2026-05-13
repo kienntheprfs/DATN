@@ -110,6 +110,12 @@ const adminNavItems = [
         icon: "map",
         isActive: true,
     },
+    {
+        title: "Quản lý sự kiện",
+        url: "/events",
+        icon: "event",
+        isActive: true,
+    },
 ];
 
 /** Check xem user có role admin không */

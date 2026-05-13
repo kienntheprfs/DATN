@@ -120,7 +120,10 @@ def get_all_locations(
                     )
                 )
         else:
-            # Use node name if no aliases
+            # Use node name if no aliases (Skip if it's "New Node")
+            if node.name and node.name.lower() == "new node":
+                continue
+
             out.append(
                 AliasSearchOut(
                     node_id=node.id,
@@ -151,7 +154,7 @@ def search_alias(
 
     norm_q = q.strip().lower()
     # Tách query thành các từ để tìm kiếm linh hoạt hơn
-    query_words = [w.strip() for w in norm_q.split() if len(w) >= 2]
+    query_words = [w.strip() for w in norm_q.split() if len(w) >= 1]
 
     if not query_words:
         return []
@@ -175,97 +178,112 @@ def search_alias(
         for m in all_maps
     }
 
+    # Find buildings that match the query
+    matching_building_ids = set()
+    for b_id, b_name in building_dict.items():
+        if not b_name: continue
+        b_name_lower = b_name.lower()
+        
+        # 1. So khớp trực tiếp (substring)
+        if norm_q in b_name_lower or b_name_lower in norm_q:
+            matching_building_ids.add(b_id)
+            continue
+            
+        # 2. So khớp từng từ (Ví dụ "B" khớp với "B4", "Tòa" khớp với "Tòa A")
+        # Nhưng tránh khớp các từ quá phổ biến như "Tòa"
+        for w in query_words:
+            if w in ["tòa", "building", "floor", "tầng"]: continue
+            if w == b_name_lower or w in b_name_lower:
+                matching_building_ids.add(b_id)
+                break
+        
+        # 3. Fuzzy match cho building
+        if b_id not in matching_building_ids and fuzz.token_set_ratio(norm_q, b_name_lower) > 80:
+            matching_building_ids.add(b_id)
+
     # Lấy tất cả aliases và nodes
     all_aliases = session.exec(select(Alias)).all()
     all_nodes = session.exec(select(Node)).all()
 
     # Tạo dict node info
     node_dict = {n.id: n for n in all_nodes}
+    # 1. Thu thập tất cả định danh cho từng node (name + aliases)
+    node_names_map = {}
+    for n in all_nodes:
+        if n.name and n.name.lower() != "new node":
+            node_names_map[n.id] = [n.name]
+        else:
+            node_names_map[n.id] = []
+
+    for a in all_aliases:
+        if a.node_id in node_names_map:
+            node_names_map[a.node_id].append(a.name)
 
     out = []
     seen_node_ids = set()
 
-    # Tìm kiếm linh hoạt: so khớp từng từ trong query với tên + tòa nhà
-    for alias in all_aliases:
-        node = node_dict.get(alias.node_id)
-        if not node:
-            continue
-            
+    for node_id, names in node_names_map.items():
+        node = node_dict.get(node_id)
+        if not node: continue
+
         map_data = map_info.get(node.map_id, {})
         building_name = map_data.get("building_name") or ""
-        
-        name_lower = alias.name.lower()
         building_lower = building_name.lower()
-        combined_name = f"{name_lower} {building_lower}".strip()
+        is_building_match = node.building_id in matching_building_ids
 
-        # Fuzzy match với toàn bộ query
-        score_name = fuzz.token_set_ratio(norm_q, name_lower)
-        score_combined = fuzz.token_set_ratio(norm_q, combined_name)
-        full_score = max(score_name, score_combined)
+        best_node_score = 0
+        best_name_used = node.name
 
-        # Đếm số từ khớp
-        words_matched = sum(1 for w in query_words if w in combined_name)
+        for name in names:
+            name_lower = name.lower()
+            combined_name = f"{name_lower} {building_lower}".strip()
 
-        # Nếu có từ nào khớp hoặc fuzzy score đủ cao
-        if words_matched > 0 or full_score > 40:
-            if alias.node_id not in seen_node_ids:
-                # Ưu tiên kết quả có nhiều từ khớp hơn
-                if words_matched >= 3:
-                    final_score = max(words_matched * 25, full_score + 30)
-                else:
-                    final_score = full_score
+            score_name = fuzz.token_set_ratio(norm_q, name_lower)
+            score_combined = fuzz.token_set_ratio(norm_q, combined_name)
+            current_score = max(score_name, score_combined)
 
-                # Bonus for building name match if query contains it
-                if building_lower and building_lower in norm_q:
-                    final_score += 15
+            # Nếu khớp hoàn toàn (không tính hoa thường, khoảng trắng)
+            if norm_q == name_lower or norm_q == combined_name:
+                current_score = 100.0
+            # Bonus nếu khớp một phần cụ thể (ví dụ "Phòng 101" trong "Phòng 101 B4")
+            elif norm_q in name_lower or norm_q in combined_name:
+                current_score += 10
 
-                out.append(
-                    AliasSearchOut(
-                        node_id=alias.node_id,
-                        alias_id=alias.id,
-                        name=alias.name,
-                        score=float(final_score),
-                        map_id=node.map_id,
-                        floor=map_data.get("floor"),
-                        building_id=map_data.get("building_id"),
-                        building_name=building_name,
-                        node_type=node.type,
-                    )
-                )
-                seen_node_ids.add(alias.node_id)
+            if current_score > best_node_score:
+                best_node_score = current_score
+                best_name_used = name
 
-    # Tìm trong Node table (cho các node không có alias)
-    for n in all_nodes:
-        if n.id in seen_node_ids:
-            continue
-
-        map_data = map_info.get(n.map_id, {})
-        building_name = map_data.get("building_name") or ""
+        # Tính toán final score cho node này
+        words_matched = sum(1 for w in query_words if w in f"{best_name_used} {building_name}".lower())
         
-        name_lower = n.name.lower()
-        building_lower = building_name.lower()
-        combined_name = f"{name_lower} {building_lower}".strip()
-        
-        full_score = max(fuzz.token_set_ratio(norm_q, name_lower), fuzz.token_set_ratio(norm_q, combined_name))
-        words_matched = sum(1 for w in query_words if w in combined_name)
-
-        if words_matched > 0 or full_score > 40:
-            final_score = max(words_matched * 25, full_score)
+        if words_matched > 0 or best_node_score > 40 or is_building_match:
+            final_score = max(words_matched * 25, best_node_score)
             
             if building_lower and building_lower in norm_q:
                 final_score += 15
 
+            if is_building_match:
+                final_score = max(final_score, 85.0)
+                final_score += 10
+
+            # Lấy alias_id nếu cái tên được chọn là một alias
+            alias_id = 0
+            for a in all_aliases:
+                if a.node_id == node_id and a.name == best_name_used:
+                    alias_id = a.id
+                    break
+
             out.append(
                 AliasSearchOut(
-                    node_id=n.id,
-                    alias_id=0,
-                    name=n.name,
+                    node_id=node_id,
+                    alias_id=alias_id,
+                    name=best_name_used,
                     score=float(final_score),
-                    map_id=n.map_id,
+                    map_id=node.map_id,
                     floor=map_data.get("floor"),
                     building_id=map_data.get("building_id"),
                     building_name=building_name,
-                    node_type=n.type,
+                    node_type=node.type,
                 )
             )
 

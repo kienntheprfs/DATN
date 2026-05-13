@@ -38,7 +38,7 @@ instructions = f"""
     Hôm nay là ngày: {current_date}
 
     HƯỚNG DẪN QUAN TRỌNG:
-    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), PHẢI HỎI và XÁC NHẬN đủ 2 thông tin: vị trí hiện tại của người dùng và điểm đến. CHỈ GỌI FindRoute khi đã có đủ cả hai.
+    - Khi người dùng hỏi về đường đi (ví dụ: "đi từ A đến B", "chỉ đường đến..."), hãy sử dụng FindRoute để tìm kiếm ngay nếu người dùng đã cung cấp điểm đi và điểm đến (kể cả khi đó là tên tòa nhà). CHỈ hỏi thêm nếu thông tin bị thiếu hoặc công cụ FindRoute trả về trạng thái cần xác nhận (needs_confirmation).
     - Nếu người dùng KHÔNG BIẾT mình đang ở đâu:
         1. Sử dụng GuessLocationByDescription nếuhọ có thể mô tả cảnh vật xung quanh (VD: "Tôi thấy cái biển báo...", "Gần thang máy...").
         2. Sử dụng GetLandmarkImages để hiện các ảnh thực tế nổi bật cho người dùng chọn nếu họ không mô tả được.

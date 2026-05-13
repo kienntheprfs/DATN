@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -13,16 +13,10 @@ import {
 } from "@/components/ui/breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAgent } from "@/contexts/agent-context";
-import { Loader2, Settings } from "lucide-react";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useAppStore } from "@/stores/app.store";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { Suspense, useMemo } from "react";
 
 const routeDictionary: Record<string, string> = {
 	dashboard: "Bảng điều khiển",
@@ -63,10 +57,23 @@ function StatusBadge() {
 	);
 }
 
-export function AppHeader() {
+function HeaderContent() {
 	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const threadId = searchParams.get("thread_id");
+	const history = useAppStore((s) => s.history);
+
 	usePageTitle();
+
 	const pathSegments = pathname === "/" ? [] : pathname.split("/").filter((segment) => segment);
+
+	const threadTitle = useMemo(() => {
+		if (threadId) {
+			const item = history.find((h) => h.id === threadId);
+			return item?.title || "Cuộc trò chuyện mới";
+		}
+		return null;
+	}, [threadId, history]);
 
 	return (
 		<header className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
@@ -87,7 +94,13 @@ export function AppHeader() {
 					{pathSegments.map((segment, index) => {
 						const href = `/${pathSegments.slice(0, index + 1).join("/")}`;
 						const isLast = index === pathSegments.length - 1;
-						const title = routeDictionary[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
+
+						let title = routeDictionary[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
+
+						// Nếu đang ở trang chat và có thread_id, hiển thị tiêu đề cuộc hội thoại
+						if (segment === "chat" && isLast && threadTitle) {
+							title = threadTitle;
+						}
 
 						return (
 							<React.Fragment key={href}>
@@ -108,9 +121,33 @@ export function AppHeader() {
 				</BreadcrumbList>
 			</Breadcrumb>
 
-			<div className="ml-auto flex items-center gap-3">
+			<div className="flex-1 flex justify-center overflow-hidden">
+				{threadTitle && (
+					<h2 className="text-sm font-semibold truncate max-w-[200px] md:max-w-[400px] text-foreground/90">
+						{threadTitle}
+					</h2>
+				)}
+			</div>
+
+			<div className="flex items-center gap-3">
 				<StatusBadge />
 			</div>
 		</header>
+	);
+}
+
+export function AppHeader() {
+	return (
+		<Suspense
+			fallback={
+				<header className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+					<SidebarTrigger className="-ml-3" />
+					<div className="mr-2 h-4 w-px bg-border" />
+					<div className="h-4 w-32 animate-pulse bg-muted rounded" />
+				</header>
+			}
+		>
+			<HeaderContent />
+		</Suspense>
 	);
 }

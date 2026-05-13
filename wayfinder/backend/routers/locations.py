@@ -61,6 +61,9 @@ def guess_location(
         })
         
     for n in nodes:
+        if n.name and n.name.lower() == "new node":
+            continue
+            
         # Lấy aliases của node này
         node_aliases = [a.name for a in aliases if a.node_id == n.id]
         alias_text = " ".join(node_aliases)
@@ -89,7 +92,7 @@ def guess_location(
     
     final_results = []
     for match_text, score, idx in results:
-        if score > 60: # Threshold tối thiểu
+        if score >= 80: # Threshold tối thiểu
             item = search_pool[idx]
             # Nếu là node, lấy thêm thông tin map/building nếu cần
             if item["type"] == "node":
