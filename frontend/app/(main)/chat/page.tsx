@@ -380,8 +380,6 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 
 export default function ChatPage() {
 	const router = useRouter();
-	const searchParams = useSearchParams();
-	const urlThreadId = searchParams.get("thread_id");
 	const refreshHistory = useAppStore((s) => s.refreshHistory);
 
 	const handleVoiceToggle = () => {
@@ -396,7 +394,7 @@ export default function ChatPage() {
 
 	return (
 		<Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-			<ChatContent key={urlThreadId || "new"} onVoiceToggle={handleVoiceToggle} onConversationStart={handleConversationStart} />
+			<ChatContent onVoiceToggle={handleVoiceToggle} onConversationStart={handleConversationStart} />
 		</Suspense>
 	);
 }

@@ -113,7 +113,7 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 						let found = false;
 						// Try to find any of the terms
 						for (const term of searchTerms) {
-							if (window.find(term, false, false, true, false, true, false)) {
+							if ((window as any).find(term, false, false, true, false, true, false)) {
 								found = true;
 								setSearchQuery(term);
 								setSearchResults(1);
@@ -135,12 +135,12 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 	const handleSearch = () => {
 		if (!searchQuery.trim() || !containerRef.current) return;
 		
-		const found = window.find(searchQuery, false, false, true, false, true, false);
+		const found = (window as any).find(searchQuery, false, false, true, false, true, false);
 		if (found) {
 			setCurrentResult((prev) => prev + 1);
 		} else {
 			// Reset to first if no more results
-			const foundFirst = window.find(searchQuery, false, false, true, false, false, false);
+			const foundFirst = (window as any).find(searchQuery, false, false, true, false, false, false);
 			if (foundFirst) {
 				setCurrentResult(1);
 			}
