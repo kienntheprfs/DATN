@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, MouseEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEditorStore } from '@/stores/editor.store';
 import { useBuildingStore } from '@/stores/building.store';
@@ -11,6 +11,7 @@ import { MapData, MapNode, MapEdge, ToolType, Building } from '@/types';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { BuildingModal } from './BuildingModal';
 import { EditorInspector } from './EditorInspector';
+import { EditorHeader } from './EditorHeader';
 import { MapOverlay } from './MapOverlay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,8 @@ export default function EditorPage() {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isWheeling, setIsWheeling] = useState(false);
+  const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [edgeStartNodeId, setEdgeStartNodeId] = useState<number | null>(null);
   const [drawingPath, setDrawingPath] = useState<{ x: number; y: number }[]>([]);
   const [virtualMouse, setVirtualMouse] = useState({ x: 0, y: 0 });
@@ -195,11 +198,66 @@ export default function EditorPage() {
     return { x: point.x, y: point.y };
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((s) => Math.min(Math.max(s * delta, 0.5), 5));
-  };
+  const zoomWithAnchor = useCallback(
+    (nextScale: number, anchor?: { clientX: number; clientY: number }) => {
+      const clampedScale = Math.min(Math.max(nextScale, 0.5), 5);
+      if (clampedScale === scale) return;
+
+      const svg = svgRef.current;
+      if (!svg) {
+        setScale(clampedScale);
+        return;
+      }
+
+      const rect = svg.getBoundingClientRect();
+      // If no anchor provided, use center of SVG
+      const clientX = anchor ? anchor.clientX : rect.left + rect.width / 2;
+      const clientY = anchor ? anchor.clientY : rect.top + rect.height / 2;
+
+      const ratio = clampedScale / scale;
+      
+      const newX = clientX - (clientX - position.x) * ratio;
+      const newY = clientY - (clientY - position.y) * ratio;
+
+      setScale(clampedScale);
+      setPosition({ x: newX, y: newY });
+    },
+    [scale, position]
+  );
+
+  useEffect(() => {
+    const handleNativeWheel = (e: WheelEvent) => {
+      const svg = svgRef.current;
+      if (!svg) return;
+
+      // Check if mouse is over the SVG or its children
+      const isOverSvg = svg.contains(e.target as Node);
+      if (!isOverSvg) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        // Use a slightly smaller factor for smoother zoom
+        const delta = Math.max(-120, Math.min(120, e.deltaY));
+        const zoomFactor = Math.exp(-delta * 0.0015);
+        zoomWithAnchor(scale * zoomFactor, { clientX: e.clientX, clientY: e.clientY });
+      } else {
+        // Panning with touchpad (2 fingers) or mouse wheel
+        e.preventDefault();
+        
+        setIsWheeling(true);
+        if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+        wheelTimeoutRef.current = setTimeout(() => setIsWheeling(false), 100);
+
+        setPosition(pos => ({
+          x: pos.x - e.deltaX,
+          y: pos.y - e.deltaY
+        }));
+      }
+    };
+
+    window.addEventListener('wheel', handleNativeWheel, { passive: false, capture: true });
+    return () => window.removeEventListener('wheel', handleNativeWheel, true);
+  }, [scale, zoomWithAnchor]);
 
   const handleMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -621,9 +679,8 @@ export default function EditorPage() {
             <div className="absolute inset-0 flex items-center justify-center">
               <svg
                 ref={svgRef}
-                className={`w-full h-full touch-none ${cursorStyle}`}
+                className={`w-full h-full touch-none outline-none ${cursorStyle}`}
                 viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
-                onWheel={handleWheel}
                 onMouseDown={(e) => {
                   if (activeTool === 'select') handleMouseDown(e);
                 }}
@@ -635,11 +692,11 @@ export default function EditorPage() {
                 {currentMap && (
                   <g
                     ref={groupRef}
-                    style={{
-                      transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                      transformOrigin: '0 0',
-                      transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    }}
+                        style={{
+                          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                          transformOrigin: '0 0',
+                          transition: (isDragging || isWheeling) ? 'transform 0.05s linear' : 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)',
+                        }}
                   >
                     <image
                       href={getFullImageUrl(currentMap.image_url)}
@@ -764,7 +821,7 @@ export default function EditorPage() {
                 <span className="material-symbols-outlined text-xl">mouse</span>
                 <span className="text-sm">
                   {activeTool === 'select'
-                    ? 'Kéo để di chuyển • Cuộn để Zoom'
+                    ? 'Chuột trái để di chuyển • Ctrl + Cuộn để Zoom • Cuộn/2-ngón để Pan'
                     : activeTool === 'add-node'
                       ? 'Click để đặt Node'
                       : 'Click Node bắt đầu -> Click nền thêm điểm -> Click Node kết thúc'}
@@ -823,162 +880,4 @@ export default function EditorPage() {
   );
 }
 
-function EditorHeader({
-  maps,
-  currentMapId,
-  onMapChange,
-  onDelete,
-  onOpenBuildingModal,
-}: {
-  maps: MapData[];
-  currentMapId?: number;
-  onMapChange: (mapId: number) => void;
-  onDelete?: () => void;
-  onOpenBuildingModal?: () => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const currentMap = maps.find(m => m.id === currentMapId);
 
-  useEffect(() => {
-    const handleClickOutside = (event: globalThis.MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const campusMaps = maps.filter(m => !m.building_id);
-  const buildingMaps = maps.filter(m => m.building_id);
-
-  const router = useRouter();
-
-  return (
-    <header className="h-11 bg-background border-b border-border flex items-center justify-between px-4 shrink-0 z-30 relative">
-      <div className="flex-1 flex items-center justify-start">
-        <button
-          onClick={() => router.push('/')}
-          className="group flex items-center justify-center w-8 h-8 rounded-md bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-sm"
-          title="Quay lại Dashboard"
-        >
-          <span className="material-symbols-outlined text-base group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
-        </button>
-      </div>
-
-      <div className="flex-1 flex justify-center min-w-0 px-2" ref={dropdownRef}>
-        <div className="relative w-full max-w-xs">
-          <div
-            onClick={() => setIsOpen(!isOpen)}
-            className={`flex items-center justify-between gap-2 px-3 py-1 rounded-md border bg-background cursor-pointer transition-all select-none h-8
-              ${isOpen ? 'border-primary ring-1 ring-primary/20 shadow-sm' : 'border-border hover:border-primary/50'}`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-5 h-5 flex items-center justify-center text-primary shrink-0">
-                <span className="material-symbols-outlined text-base">
-                  {currentMap?.building_id ? 'apartment' : 'map'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <h1 className="text-xs font-bold text-foreground truncate max-w-[150px]">
-                  {currentMap ? currentMap.name : 'Chọn bản đồ...'}
-                </h1>
-                {currentMap && (
-                  <Badge variant="outline" className="h-4 px-1.5 text-[8px] font-bold uppercase tracking-tighter opacity-50 border-none bg-muted">
-                    {currentMap.building_id ? 'BLDG' : 'CAMPUS'}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <span className={`material-symbols-outlined text-sm text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary' : ''}`}>expand_more</span>
-          </div>
-
-          {isOpen && (
-            <div className="absolute top-full mt-1 w-full bg-popover border border-border rounded-md shadow-lg overflow-hidden z-50 py-1">
-              <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
-                {campusMaps.length > 0 && (
-                  <div className="mb-1">
-                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest bg-muted/30">
-                      Bản đồ khuôn viên
-                    </div>
-                    {campusMaps.map(map => (
-                      <button
-                        key={map.id}
-                        onClick={() => { onMapChange(map.id); setIsOpen(false); }}
-                        className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${map.id === currentMapId ? 'bg-primary text-white' : 'hover:bg-muted'}`}
-                      >
-                        <span className="material-symbols-outlined text-base">map</span>
-                        <span className="text-xs font-bold truncate flex-1">{map.name}</span>
-                        {map.id === currentMapId && (
-                          <span className="material-symbols-outlined text-xs">check</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {buildingMaps.length > 0 && (
-                  <div className="border-t border-border/50">
-                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest bg-muted/30">
-                      Bản đồ tòa nhà
-                    </div>
-                    {buildingMaps.map(map => (
-                      <button
-                        key={map.id}
-                        onClick={() => { onMapChange(map.id); setIsOpen(false); }}
-                        className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${map.id === currentMapId ? 'bg-primary text-white' : 'hover:bg-muted'}`}
-                      >
-                        <span className="material-symbols-outlined text-base">apartment</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold truncate">{map.name}</div>
-                          {map.building_id && (
-                            <div className={`text-[9px] uppercase tracking-tighter ${map.id === currentMapId ? 'text-white/60' : 'text-muted-foreground'}`}>ID: #{map.building_id}</div>
-                          )}
-                        </div>
-                        {map.id === currentMapId && (
-                          <span className="material-symbols-outlined text-xs">check</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {maps.length === 0 && (
-                  <div className="p-4 text-center text-xs text-muted-foreground italic">
-                    Chưa có bản đồ nào
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-end gap-2">
-        {onOpenBuildingModal && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenBuildingModal}
-            className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-primary"
-          >
-            <span className="material-symbols-outlined text-base mr-2">apartment</span>
-            Thiết lập
-          </Button>
-        )}
-        {currentMapId && onDelete && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDelete}
-            className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-          >
-            <span className="material-symbols-outlined text-base mr-2">delete</span>
-            Xóa
-          </Button>
-        )}
-      </div>
-    </header>
-  );
-}

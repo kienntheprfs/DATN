@@ -1,16 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, User, Square, ChevronDown, Loader2 } from "lucide-react";
+import { Bot, User, Square, ChevronDown, Loader2, Navigation2, CheckCircle2, AlertTriangle, Navigation } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/services/agent";
-import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MapData, MapNode, Instruction } from "@/types";
 import { useRouter } from "next/navigation";
-import { Navigation } from "lucide-react";
 import { RatingButtons } from "./RatingButtons";
 import { MiniNavigation } from "./MapPreview";
 import { LandmarkCarousel } from "./LandmarkCarousel";
@@ -111,18 +109,50 @@ function ThinkingIndicator() {
 function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (opt: string) => void }) {
 	const needsStart = data.start_options && data.start_options.length > 1;
 	const needsEnd = data.end_options && data.end_options.length > 1;
+	
+	const [selectedStart, setSelectedStart] = useState<string | null>(needsStart ? null : data.start_name || null);
+	const [selectedEnd, setSelectedEnd] = useState<string | null>(needsEnd ? null : data.end_name || null);
+
+	const handleConfirm = () => {
+		if (needsStart && needsEnd) {
+			onSelect(`Tôi muốn đi từ ${selectedStart} đến ${selectedEnd}`);
+		} else if (needsStart) {
+			onSelect(`Chọn điểm bắt đầu là ${selectedStart}`);
+		} else if (needsEnd) {
+			onSelect(`Chọn điểm đến là ${selectedEnd}`);
+		}
+	};
+
+	const canConfirm = (!needsStart || selectedStart) && (!needsEnd || selectedEnd);
 
 	return (
-		<div className="flex flex-col gap-4 p-5 rounded-none shadow-sm border bg-background border-border">
-			<div className="text-sm font-medium text-foreground mb-1">{data.message || "Tôi tìm thấy một vài địa điểm phù hợp, vui lòng chọn chính xác:"}</div>
-			
+		<div className="flex flex-col gap-4 p-5 rounded-2xl bg-card border border-border shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+			<div className="flex items-center gap-3 mb-1">
+				<div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+					<Navigation2 className="w-5 h-5 fill-current" />
+				</div>
+				<div>
+					<h4 className="font-bold text-sm text-foreground">Xác nhận địa điểm</h4>
+					<p className="text-xs text-muted-foreground">Vui lòng chọn chính xác vị trí bạn muốn</p>
+				</div>
+			</div>
+
 			<div className="space-y-4">
 				{needsStart && (
-					<div className="space-y-2">
-						<div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Điểm bắt đầu: "{data.start_name}"</div>
+					<div className="space-y-2.5">
+						<div className="flex items-center gap-2">
+							<div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+							<div className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Điểm xuất phát: "{data.start_name}"</div>
+						</div>
 						<div className="flex flex-wrap gap-2">
-							{data.start_options?.map((opt, i) => (
-								<Button key={i} variant="outline" size="sm" onClick={() => onSelect(opt)} className="rounded-full border-primary/20 hover:border-primary hover:bg-primary/5">
+							{data.start_options?.map((opt) => (
+								<Button
+									key={opt}
+									variant={selectedStart === opt ? "default" : "outline"}
+									size="sm"
+									className={`text-xs rounded-xl h-9 px-4 transition-all ${selectedStart === opt ? "shadow-lg shadow-primary/20 scale-105" : "hover:bg-primary/5"}`}
+									onClick={() => setSelectedStart(opt)}
+								>
 									{opt}
 								</Button>
 							))}
@@ -131,11 +161,20 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 				)}
 
 				{needsEnd && (
-					<div className="space-y-2">
-						<div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Điểm đến: "{data.end_name}"</div>
+					<div className="space-y-2.5">
+						<div className="flex items-center gap-2">
+							<div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+							<div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Điểm đến: "{data.end_name}"</div>
+						</div>
 						<div className="flex flex-wrap gap-2">
-							{data.end_options?.map((opt, i) => (
-								<Button key={i} variant="outline" size="sm" onClick={() => onSelect(opt)} className="rounded-full border-primary/20 hover:border-primary hover:bg-primary/5">
+							{data.end_options?.map((opt) => (
+								<Button
+									key={opt}
+									variant={selectedEnd === opt ? "default" : "outline"}
+									size="sm"
+									className={`text-xs rounded-xl h-9 px-4 transition-all ${selectedEnd === opt ? "shadow-lg shadow-primary/20 scale-105" : "hover:bg-primary/5"}`}
+									onClick={() => setSelectedEnd(opt)}
+								>
 									{opt}
 								</Button>
 							))}
@@ -143,12 +182,21 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					</div>
 				)}
 
-				<div className="pt-2 border-t border-border mt-2">
+				<div className="pt-2 border-t border-border mt-2 flex flex-col gap-3">
+					<Button 
+						className="w-full h-11 rounded-xl gap-2 font-bold uppercase tracking-wide shadow-lg transition-all active:scale-[0.98]"
+						disabled={!canConfirm}
+						onClick={handleConfirm}
+					>
+						<CheckCircle2 className="w-4 h-4" />
+						Xác nhận lộ trình
+					</Button>
+
 					<Button 
 						variant="ghost" 
 						size="sm" 
 						onClick={() => onSelect("Tôi không biết chính xác ở đâu")}
-						className="text-muted-foreground hover:text-foreground"
+						className="text-muted-foreground hover:text-foreground text-xs"
 					>
 						Tôi không biết chính xác ở đâu
 					</Button>
@@ -424,7 +472,7 @@ export function ChatWindow({
 }: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
 	const scrollRef = useRef<HTMLDivElement>(null);
-	
+
 	const visibleMessages = messages;
 	
 	const lastBotMessage = visibleMessages.filter(m => m.role === "assistant").pop();
@@ -492,36 +540,6 @@ export function ChatWindow({
 		return groups;
 	}, [visibleMessages, currentTools]);
 
-	// Get routeData for display - combines history data and current streaming tools
-	const routeDataForDisplay = useMemo(() => {
-		// First check currentTools for streaming
-		if (currentTools.length > 0) {
-			const routeTool = currentTools.find(tool => {
-				const name = tool.name.toLowerCase();
-				return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
-			});
-			if (routeTool?.content) {
-				try {
-					const parsed = JSON.parse(routeTool.content);
-					if (parsed.type === 'route' && parsed.status === 'success') {
-						return parsed as RouteData;
-					}
-				} catch {
-					// Not JSON
-				}
-			}
-		}
-
-		// Then check last assistant group in history
-		const assistantGroups = groupedMessages.filter(g => g.role === "assistant");
-		const lastGroup = assistantGroups[assistantGroups.length - 1];
-		if (lastGroup?.routeData) {
-			return lastGroup.routeData;
-		}
-
-		return null;
-	}, [groupedMessages, currentTools]);
-
 	const confirmationData = useMemo(() => {
 		const parseConfirmation = (content: string) => {
 			try {
@@ -553,6 +571,36 @@ export function ChatWindow({
 				return parseConfirmation(confirmationToolMsg.content);
 			}
 		}
+		return null;
+	}, [groupedMessages, currentTools]);
+
+	// Get routeData for display - combines history data and current streaming tools
+	const routeDataForDisplay = useMemo(() => {
+		// First check currentTools for streaming
+		if (currentTools.length > 0) {
+			const routeTool = currentTools.find(tool => {
+				const name = tool.name.toLowerCase();
+				return (name.includes('route') || name.includes('find') || name.includes('map')) && tool.status === "done";
+			});
+			if (routeTool?.content) {
+				try {
+					const parsed = JSON.parse(routeTool.content);
+					if (parsed.type === 'route' && parsed.status === 'success') {
+						return parsed as RouteData;
+					}
+				} catch {
+					// Not JSON
+				}
+			}
+		}
+
+		// Then check last assistant group in history
+		const assistantGroups = groupedMessages.filter(g => g.role === "assistant");
+		const lastGroup = assistantGroups[assistantGroups.length - 1];
+		if (lastGroup?.routeData) {
+			return lastGroup.routeData;
+		}
+
 		return null;
 	}, [groupedMessages, currentTools]);
 
@@ -589,6 +637,17 @@ export function ChatWindow({
 		}
 		return null;
 	}, [groupedMessages, currentTools]);
+	
+	useEffect(() => {
+		if (routeDataForDisplay || confirmationData || landmarkData || isStreaming) {
+			setTimeout(() => {
+				scrollRef.current?.scrollTo({
+					top: scrollRef.current.scrollHeight,
+					behavior: "smooth",
+				});
+			}, 100);
+		}
+	}, [routeDataForDisplay, confirmationData, landmarkData, isStreaming]);
 
 	const getGroupRunId = (group: GroupedMessages): string | undefined => {
 		if (group.role !== "assistant") return undefined;

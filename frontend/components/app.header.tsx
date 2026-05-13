@@ -121,13 +121,7 @@ function HeaderContent() {
 				</BreadcrumbList>
 			</Breadcrumb>
 
-			<div className="flex-1 flex justify-center overflow-hidden">
-				{threadTitle && (
-					<h2 className="text-sm font-semibold truncate max-w-[200px] md:max-w-[400px] text-foreground/90">
-						{threadTitle}
-					</h2>
-				)}
-			</div>
+			<div className="flex-1" />
 
 			<div className="flex items-center gap-3">
 				<StatusBadge />

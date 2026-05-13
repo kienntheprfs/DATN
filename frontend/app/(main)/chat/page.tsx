@@ -268,13 +268,20 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		if (voice.state === "connected") {
 			voice.stopConversation();
 		} else if (voice.state === "idle" || voice.state === "disconnected" || voice.state === "error") {
-			onVoiceToggle();
+			// If we already have a threadId, just start conversation instead of redirecting
+			if (threadId) {
+				voice.startConversation();
+			} else {
+				onVoiceToggle();
+			}
 		}
 	};
 
 	const handleSendMessage = (message: string, queryMode?: QueryMode) => {
 		if (voice.state === "connected") {
+			addUserMessage(message);
 			voice.sendTextMessage(message);
+			clearVoiceTools();
 		} else {
 			sendMessage(message, queryMode);
 		}
@@ -299,6 +306,12 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			voice.startConversation();
 		}
 	}, [shouldStartVoice, voice.state, isReadOnly]);
+
+	useEffect(() => {
+		if (voice.state === "connected") {
+			console.log(`[Voice] Agent switched to: ${agent}`);
+		}
+	}, [agent, voice.state]);
 
 	return (
 		<>
