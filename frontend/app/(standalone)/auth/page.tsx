@@ -21,6 +21,7 @@ interface FormErrors {
 }
 
 function AuthForm() {
+	usePageTitle();
 	const [isLogin, setIsLogin] = useState(true);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
@@ -487,7 +488,6 @@ function AuthForm() {
 }
 
 export default function AuthPage() {
-	usePageTitle();
 	return (
 		<Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
 			<AuthForm />

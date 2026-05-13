@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { Button } from "@/components/ui/button";
 import { useAgent } from "@/contexts/agent-context";
 import { useChat } from "@/hooks/use-chat";
 
-export default function AdminRatingConversationPage() {
+function ConversationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { model, agent } = useAgent();
@@ -65,5 +65,18 @@ export default function AdminRatingConversationPage() {
         Chế độ chỉ đọc: bạn chỉ có thể xem lại hội thoại gốc, không thể gửi tin nhắn mới.
       </div>
     </div>
+  );
+}
+
+export default function AdminRatingConversationPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-text-secondary">Đang tải cuộc trò chuyện...</p>
+      </div>
+    }>
+      <ConversationContent />
+    </Suspense>
   );
 }
