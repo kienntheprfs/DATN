@@ -451,7 +451,11 @@ ws.run_forever()
 ```python
 # Agent processes transcribed text
 transcript = transcribe_audio(audio_file)
-response = agent_client.invoke(transcript)
+# Thêm agent_config để sử dụng khả năng phân tích sâu (Deep Mode)
+response = agent_client.invoke(
+    transcript, 
+    agent_config={"query_mode": "deep"}
+)
 audio_response = synthesize_speech(response['content'])
 play_audio(audio_response)
 ```

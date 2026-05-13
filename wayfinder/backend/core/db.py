@@ -18,11 +18,24 @@ ENV_URL = os.getenv("WAYFINDER_DB_URL") or os.getenv("DATABASE_URL")
 
 if ENV_URL:
     DB_URL = ENV_URL
-    engine = create_engine(DB_URL, echo=False)
+    engine = create_engine(
+        DB_URL, 
+        echo=False,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=3,
+        max_overflow=2
+    )
 else:
     DB_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     engine = create_engine(
-        DB_URL, echo=False, connect_args={"options": f"-c search_path={DB_SCHEMA}"}
+        DB_URL, 
+        echo=False, 
+        connect_args={"options": f"-c search_path={DB_SCHEMA}"},
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=3,
+        max_overflow=2
     )
 
     with engine.connect() as conn:

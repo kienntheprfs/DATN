@@ -451,53 +451,47 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   }, [state, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
 
   const sendTextMessage = useCallback(async (text: string) => {
-    if (!pcIdRef.current || !text.trim()) return;
+    if (!text.trim()) return;
 
-    try {
-      const authHeaders = getAuthHeaders();
-      await fetch("/api/voice/chat/text", {
-        method: "POST",
-        headers: { 
-          ...authHeaders,
-        },
-        body: JSON.stringify({
-          pc_id: pcIdRef.current,
-          message: text,
-          user_id: userId || "guest",
-          agent_id: agentId,
-          thread_id: threadId,
-        }),
-      });
-    } catch (err) {
-      console.error("Failed to send text message to voice pipeline:", err);
+    if (dcRef.current && dcRef.current.readyState === "open") {
+      console.log("[Voice] Sending text via Data Channel:", text);
+      try {
+        dcRef.current.send(JSON.stringify({
+          id: crypto.randomUUID(),
+          label: "rtvi-ai",
+          type: "chat-text",
+          data: { text }
+        }));
+      } catch (err) {
+        console.error("[Voice] Error sending via Data Channel:", err);
+      }
+    } else {
+      console.warn("[Voice] Cannot send text: Data Channel not open");
     }
-  }, [userId, agentId, threadId]);
+  }, []);
 
   const stopConversation = useCallback(() => {
     cleanup();
   }, [cleanup]);
 
   useEffect(() => {
-    if (state === "connected" && pcIdRef.current && (agentId || threadId)) {
-      const updateAgent = async () => {
+    if (state === "connected" && (agentId || threadId)) {
+      if (dcRef.current && dcRef.current.readyState === "open") {
+        console.log("[useVoice] Updating agent/thread via Data Channel:", agentId, threadId);
         try {
-          const authHeaders = getAuthHeaders();
-          await fetch("/api/voice/chat/text", {
-            method: "POST",
-            headers: { ...authHeaders },
-            body: JSON.stringify({
-              pc_id: pcIdRef.current,
+          dcRef.current.send(JSON.stringify({
+            id: crypto.randomUUID(),
+            label: "rtvi-ai",
+            type: "update-agent",
+            data: {
               agent_id: agentId,
-              thread_id: threadId,
-              message: "", // Empty message just to trigger update
-            }),
-          });
-          console.log(`[useVoice] Agent/Thread updated: ${agentId} / ${threadId}`);
+              thread_id: threadId
+            }
+          }));
         } catch (err) {
-          console.error("Failed to update agent/thread mid-conversation:", err);
+          console.error("[useVoice] Error updating agent via Data Channel:", err);
         }
-      };
-      updateAgent();
+      }
     }
   }, [agentId, threadId, state]);
 

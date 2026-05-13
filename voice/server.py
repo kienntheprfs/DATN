@@ -4,14 +4,9 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-import argparse
 import sys
-from contextlib import asynccontextmanager
-
-import uvicorn
 import uuid
 from dotenv import load_dotenv
-from datetime import datetime
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -24,6 +19,7 @@ from pipecat.transports.smallwebrtc.request_handler import (
 )
 
 from bot import run_bot
+from agent_llm import DirectAPIAgentLLMService
 
 # Load environment variables
 load_dotenv(override=True)
@@ -41,26 +37,25 @@ app.add_middleware(
 # Initialize the SmallWebRTC request handler
 small_webrtc_handler: SmallWebRTCRequestHandler = SmallWebRTCRequestHandler()
 
-# Store active tasks for text injection: pc_id -> PipelineTask
+# Store active tasks for text injection: id -> PipelineTask
 active_tasks = {}
 
-
-async def task_callback(pc_id: str, task):
+async def task_callback(session_id: str, task):
+    """Callback to register/unregister active bot tasks."""
+    session_id = str(session_id)
     if task:
-        active_tasks[pc_id] = task
-        logger.info(f"Registered active task for pc_id: {pc_id}")
+        active_tasks[session_id] = task
+        logger.info(f"Session {session_id} registered.")
     else:
-        if pc_id in active_tasks:
-            del active_tasks[pc_id]
-            logger.info(f"Unregistered task for pc_id: {pc_id}")
-
+        if session_id in active_tasks:
+            del active_tasks[session_id]
+            logger.info(f"Session {session_id} unregistered.")
 
 @app.post("/api/offer")
 async def offer(req: Request, background_tasks: BackgroundTasks):
-    """Handle WebRTC offer requests - parse manually to debug."""
+    """Handle WebRTC offer requests."""
     try:
         body = await req.json()
-        logger.info(f"Raw request body: {body}")
     except Exception as e:
         logger.error(f"Failed to parse request: {e}")
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
@@ -82,11 +77,11 @@ async def offer(req: Request, background_tasks: BackgroundTasks):
         thread_id = request_data.get("thread_id")
         query_mode = request_data.get("query_mode", "normal")
 
-    logger.info(
-        f"Voice offer: agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, query_mode={query_mode}"
-    )
+    logger.info(f"Incoming voice offer: agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}")
 
     async def webrtc_connection_callback(connection):
+        # We use connection.id as the session identifier
+        session_id = str(connection.id)
         background_tasks.add_task(
             run_bot,
             connection,
@@ -94,7 +89,7 @@ async def offer(req: Request, background_tasks: BackgroundTasks):
             user_id,
             thread_id,
             query_mode,
-            connection.id,
+            session_id,
             task_callback,
         )
 
@@ -102,36 +97,33 @@ async def offer(req: Request, background_tasks: BackgroundTasks):
         request=request,
         webrtc_connection_callback=webrtc_connection_callback,
     )
+    
+    logger.info(f"Sent answer for pc_id: {answer.get('pc_id')}")
     return answer
-
 
 @app.patch("/api/offer")
 async def ice_candidate(req: Request):
     """Handle ICE candidate patch requests."""
     try:
         body = await req.json()
-        logger.debug(f"Received patch body: {body}")
-        
         pc_id = body.get("pc_id")
         candidates_data = body.get("candidates", [])
         
         from pipecat.transports.smallwebrtc.request_handler import IceCandidate, SmallWebRTCPatchRequest
         
-        candidates = []
-        for c in candidates_data:
-            candidates.append(IceCandidate(
+        candidates = [
+            IceCandidate(
                 candidate=c.get("candidate"),
                 sdp_mid=c.get("sdp_mid"),
                 sdp_mline_index=c.get("sdp_mline_index")
-            ))
+            ) for c in candidates_data
+        ]
             
         request = SmallWebRTCPatchRequest(pc_id=pc_id, candidates=candidates)
         
-        valid_candidates = [
-            c for c in request.candidates if c.candidate and len(c.candidate.split(":")) >= 8
-        ]
+        # Simple validation
+        valid_candidates = [c for c in request.candidates if c.candidate and len(c.candidate.split(":")) >= 8]
         if not valid_candidates:
-            logger.warning(f"Skipping invalid ICE candidates")
             return {"status": "skipped"}
             
         request.candidates = valid_candidates
@@ -141,102 +133,55 @@ async def ice_candidate(req: Request):
         logger.error(f"Failed to process ICE candidate patch: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)
 
-
-@app.get("/")
-async def serve_index():
-    return FileResponse("index.html")
-
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "active_sessions": len(active_tasks)
+    }
 
 @app.post("/api/chat/text")
 async def chat_text(req: Request):
-    """Inject text into an active pipeline or update agent settings."""
+    """Inject text into an active pipeline (Legacy/Fallback)."""
     try:
         body = await req.json()
-    except Exception as e:
-        logger.error(f"Failed to parse request: {e}")
+    except Exception:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
     message = body.get("message", "")
-    pc_id = body.get("pc_id")
-    user_id = body.get("user_id", "guest")
+    pc_id = str(body.get("pc_id", ""))
     new_agent_id = body.get("agent_id")
     new_thread_id = body.get("thread_id")
 
-    logger.info(f"Received text chat request for pc_id {pc_id}. Msg: '{message}', Agent: {new_agent_id}, Thread: {new_thread_id}")
-
-    if pc_id:
-        task = active_tasks.get(pc_id)
+    # Try to find task by ID
+    task = active_tasks.get(pc_id)
+    
+    # Fuzzy match if not found (internal vs external IDs often differ in smallwebrtc)
+    if not task:
+        for k, v in active_tasks.items():
+            if pc_id.endswith(str(k)) or str(k).endswith(pc_id):
+                task = v
+                break
+    
+    if task:
+        # Update agent settings if provided
+        for processor in task.pipeline.processors:
+            if isinstance(processor, DirectAPIAgentLLMService):
+                if new_agent_id:
+                    processor.set_agent_name(new_agent_id)
+                if new_thread_id:
+                    processor.set_thread_id(new_thread_id)
         
-        # Fallback: If not found exactly, try to find by suffix (case where prefix might differ)
-        if not task:
-            for active_id, active_task in active_tasks.items():
-                if pc_id.endswith(active_id) or active_id.endswith(pc_id):
-                    logger.info(f"Matched session {pc_id} via fallback to {active_id}")
-                    task = active_task
-                    pc_id = active_id # Use the registered ID
-                    break
-        
-        if task:
-            # Update agent settings if provided
-            from agent_llm import DirectAPIAgentLLMService
-            for processor in task.pipeline.processors:
-                if isinstance(processor, DirectAPIAgentLLMService):
-                    if new_agent_id:
-                        processor.set_agent_name(new_agent_id)
-                        logger.info(f"Updated agent for session {pc_id} to {new_agent_id}")
-                    if new_thread_id:
-                        processor.set_thread_id(new_thread_id)
-                        logger.info(f"Updated thread for session {pc_id} to {new_thread_id}")
-                    break
-
-            # Push TranscriptionFrame only if there is a message
-            if message.strip():
-                logger.info(f"Injecting transcription frame for session {pc_id}: {message}")
-                await task.queue_frames(
-                    [
-                        TranscriptionFrame(
-                            text=message, user_id=user_id, timestamp=datetime.now().isoformat(), finalized=True
-                        ),
-                        LLMRunFrame(),
-                    ]
-                )
+        # Inject message if provided
+        if message:
+            await task.queue_frames([TranscriptionFrame(text=message, user_id="user")])
+        else:
+            await task.queue_frames([LLMRunFrame()])
             
-            return JSONResponse({"status": "ok", "agent_id": new_agent_id, "message": "Cấu hình/Tin nhắn đã được xử lý."})
-
-    logger.warning(f"Session {pc_id} not found. Active sessions: {list(active_tasks.keys())}")
-    return JSONResponse(
-        {
-            "status": "error",
-            "message": f"Không tìm thấy phiên voice hoạt động (pc_id: {pc_id}). Đang có {len(active_tasks)} phiên.",
-        },
-        status_code=404
-    )
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield  # Run app
-    await small_webrtc_handler.close()
-
+        return {"status": "success"}
+    
+    return JSONResponse({"error": "Session not found"}, status_code=404)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WebRTC demo")
-    parser.add_argument(
-        "--host", default="localhost", help="Host for HTTP server (default: localhost)"
-    )
-    parser.add_argument(
-        "--port", type=int, default=7860, help="Port for HTTP server (default: 7860)"
-    )
-    parser.add_argument("--verbose", "-v", action="count")
-    args = parser.parse_args()
-
-    try:
-        logger.remove(0)
-    except ValueError:
-        pass
-    if args.verbose:
-        logger.add(sys.stderr, level="TRACE")
-    else:
-        logger.add(sys.stderr, level="DEBUG")
-
-    uvicorn.run(app, host=args.host, port=args.port)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)

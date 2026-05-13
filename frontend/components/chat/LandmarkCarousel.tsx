@@ -32,14 +32,21 @@ export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: Lan
   return (
     <div className="flex flex-col gap-3 my-2 max-w-full overflow-hidden">
       <div className="relative group rounded-2xl overflow-hidden bg-slate-900 aspect-video shadow-2xl border border-border/50">
-        <img
-          src={getFullImageUrl(current.real_image_url)}
-          alt={current.name}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-        />
+        {current.real_image_url ? (
+          <img
+            src={getFullImageUrl(current.real_image_url)}
+            alt={current.name}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800/50 text-slate-400 gap-3">
+            <MapPin className="w-12 h-12 opacity-20" />
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">Không có hình ảnh</span>
+          </div>
+        )}
 
         {/* Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
 
         <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none">
           <div className="flex items-center gap-2 mb-1">
@@ -47,7 +54,9 @@ export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: Lan
             <span className="text-[10px] font-black uppercase tracking-widest text-primary/90">Landmark Found</span>
           </div>
           <h4 className="text-white font-bold text-base leading-tight mb-1">{current.name}</h4>
-          <p className="text-white/70 text-xs line-clamp-2 leading-relaxed italic">"{current.description}"</p>
+          {current.description && (
+            <p className="text-white/70 text-xs line-clamp-2 leading-relaxed italic">"{current.description}"</p>
+          )}
         </div>
 
         {/* Navigation Arrows */}

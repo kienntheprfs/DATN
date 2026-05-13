@@ -86,12 +86,6 @@ export function ChatInput({
       return;
     }
 
-    if (voiceState === "connected" && onSendVoiceTextMessage) {
-      onSendVoiceTextMessage(trimmedMessage);
-      setMessage("");
-      return;
-    }
-
     if (onSubmitMessage) {
       onSubmitMessage(trimmedMessage, queryMode);
       setMessage(""); 
@@ -216,7 +210,7 @@ export function ChatInput({
             )}
 
             <VoiceButton
-              agentId={voiceAgentId}
+              agentId={agent}
               userId={userId}
               model={voiceModel}
               onTranscript={onVoiceTranscript}

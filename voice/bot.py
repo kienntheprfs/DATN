@@ -16,7 +16,8 @@ from loguru import logger
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import LLMRunFrame, OutputTransportMessageFrame
+from pipecat.frames.frames import LLMRunFrame, OutputTransportMessageFrame, TranscriptionFrame
+import time
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -179,92 +180,118 @@ async def run_bot(
     logger.info(
         f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}"
     )
-    pipecat_transport = SmallWebRTCTransport(
-        webrtc_connection=webrtc_connection,
-        params=TransportParams(
-            audio_in_enabled=True,
-            audio_out_enabled=True,
-            audio_out_10ms_chunks=2,
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
-        ),
-    )
-
-    async with aiohttp.ClientSession() as session:
-        stt = SherpaSTTService(model_dir="./zipformer_stt", model="zipformer", language="vi")
-        # tts = CartesiaTTSService(
-        #     api_key=os.getenv("CARTESIA_API_KEY"),
-        #     # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
-        #     text_transforms=[("*", tts_preprocessing)],
-        #     settings=CartesiaTTSService.Settings(
-        #         voice="0e58d60a-2f1a-4252-81bd-3db6af45fb41",  # Thay ID giọng tiếng Việt của bạn vào đây
-        #         model="sonic-3",  # Bắt buộc dùng sonic-3 để config hoạt động tốt nhất
-        #         language="vi",
-        #         generation_config=GenerationConfig(volume=1.8, speed=1.0),  # Khuếch đại âm lượng (Giới hạn cho phép từ 0.5 đến 2.0)  # Tốc độ đọc (Giới hạn từ 0.6 đến 1.5)
-        #     ),
-        # )
-        tts = PiperTTSService(
-            base_url="http://localhost:5000",
-            aiohttp_session=session,
-            sample_rate=24000,
-            voice_id="vi_VN-vais1000-medium",
-            text_transforms=[("*", tts_preprocessing)],
+    
+    try:
+        pipecat_transport = SmallWebRTCTransport(
+            webrtc_connection=webrtc_connection,
+            params=TransportParams(
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+                audio_out_10ms_chunks=2,
+                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            ),
         )
-        llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id, query_mode)
 
-        if USE_AGENT_API:
-            system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Hãy trả lời ngắn gọn, tự nhiên như đang nói chuyện. Không dùng markdown hay bullet points."
-        else:
-            system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Mục tiêu của bạn là thể hiện khả năng của mình một cách ngắn gọn. Đầu ra của bạn sẽ được nói to, vì vậy hãy tránh các ký tự đặc biệt không thể nói dễ dàng, chẳng hạn như biểu tượng cảm xúc hoặc dấu đầu dòng. Hãy sáng tạo và hữu ích trong phản hồi của bạn đối với những gì người dùng đã nói."
+        async with aiohttp.ClientSession() as session:
+            logger.debug("Initializing STT service...")
+            stt = SherpaSTTService(model_dir="./zipformer_stt", model="zipformer", language="vi")
+            
+            logger.debug("Initializing TTS service...")
+            tts = PiperTTSService(
+                base_url="http://127.0.0.1:5000",
+                aiohttp_session=session,
+                sample_rate=24000,
+                voice_id="vi_VN-vais1000-medium",
+                text_transforms=[("*", tts_preprocessing)],
+            )
+            
+            logger.debug("Initializing LLM service...")
+            llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id, query_mode)
 
-        messages = [
-            {
-                "role": "system",
-                "content": system_content,
-            },
-        ]
+            if USE_AGENT_API:
+                system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Hãy trả lời ngắn gọn, tự nhiên như đang nói chuyện. Không dùng markdown hay bullet points."
+            else:
+                system_content = "Bạn là một trợ lý ảo thân thiện và hữu ích. Mục tiêu của bạn là thể hiện khả năng của mình một cách ngắn gọn. Đầu ra của bạn sẽ được nói to, vì vậy hãy tránh các ký tự đặc biệt không thể nói dễ dàng, chẳng hạn như biểu tượng cảm xúc hoặc dấu đầu dòng. Hãy sáng tạo và hữu ích trong phản hồi của bạn đối với những gì người dùng đã nói."
 
-        context = LLMContext(messages)
-        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
-            context,
-            user_params=LLMUserAggregatorParams(
-                user_turn_strategies=UserTurnStrategies(
-                    stop=[
-                        TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
-                    ]
+            messages = [{"role": "system", "content": system_content}]
+            context = LLMContext(messages)
+
+            async def on_app_message(transport, message, *args):
+                logger.info(f"Received app message from client: {message}")
+                msg_type = message.get("type")
+                msg_data = message.get("data", {})
+                
+                if msg_type == "chat-text":
+                    text = msg_data.get("text")
+                    if text:
+                        logger.info(f"Directly injecting user text: {text}")
+                        # Directly append to history and trigger LLM
+                        context.messages.append({"role": "user", "content": text})
+                        await task.queue_frames([LLMRunFrame()])
+                
+                elif msg_type == "update-agent":
+                    new_agent_id = msg_data.get("agent_id")
+                    new_thread_id = msg_data.get("thread_id")
+                    
+                    if new_agent_id:
+                        llm.agent_name = new_agent_id
+                    if new_thread_id:
+                        llm.thread_id = new_thread_id
+                    
+                    await task.queue_frames([LLMRunFrame()])
+
+            pipecat_transport.add_event_handler("on_app_message", on_app_message)
+            context = LLMContext(messages)
+            user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+                context,
+                user_params=LLMUserAggregatorParams(
+                    user_turn_strategies=UserTurnStrategies(
+                        stop=[
+                            TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
+                        ]
+                    ),
                 ),
-            ),
-        )
+            )
 
-        pipeline = Pipeline(
-            [
-                pipecat_transport.input(),
-                stt,
-                user_aggregator,
-                llm,
-                tts,
-                pipecat_transport.output(),
-                assistant_aggregator,
-            ]
-        )
+            pipeline = Pipeline(
+                [
+                    pipecat_transport.input(),
+                    stt,
+                    user_aggregator,
+                    llm,
+                    tts,
+                    pipecat_transport.output(),
+                    assistant_aggregator,
+                ]
+            )
 
-        task = PipelineTask(
-            pipeline,
-            params=PipelineParams(
-                enable_metrics=True,
-                enable_usage_metrics=True,
-            ),
-        )
+            task = PipelineTask(
+                pipeline,
+                params=PipelineParams(
+                    enable_metrics=True,
+                    enable_usage_metrics=True,
+                ),
+            )
 
-        if task_callback and pc_id:
-            await task_callback(pc_id, task)
-
-        messages.append({"role": "system", "content": "Hãy tự giới thiệu bản thân với người dùng."})
-        await task.queue_frames([LLMRunFrame()])
-
-        runner = PipelineRunner(handle_sigint=False)
-
-        try:
-            await runner.run(task)
-        finally:
             if task_callback and pc_id:
-                await task_callback(pc_id, None)
+                logger.info(f"Registering task for pc_id: {pc_id}")
+                await task_callback(pc_id, task)
+
+            logger.info("Bot pipeline ready, sending intro message...")
+            messages.append({"role": "system", "content": "Hãy tự giới thiệu bản thân với người dùng."})
+            await task.queue_frames([LLMRunFrame()])
+
+            runner = PipelineRunner(handle_sigint=False)
+            logger.info("Starting pipeline runner...")
+            await runner.run(task)
+            logger.info("Pipeline runner finished normally.")
+            
+    except Exception as e:
+        logger.error(f"!!! CRITICAL ERROR in run_bot: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    finally:
+        if task_callback and pc_id:
+            logger.info(f"Cleaning up session for pc_id: {pc_id}")
+            await task_callback(pc_id, None)
+        logger.info(f"Bot session for {pc_id} has ended.")
