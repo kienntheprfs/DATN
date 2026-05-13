@@ -110,6 +110,12 @@ const adminNavItems = [
         icon: "map",
         isActive: true,
     },
+    // {
+    //     title: "Cài đặt API",
+    //     url: "#",
+    //     icon: "settings",
+    //     isActive: true,
+    // },
     {
         title: "Quản lý sự kiện",
         url: "/events",
@@ -133,7 +139,7 @@ function isRouteActive(pathname: string, url: string): boolean {
 export function AppSidebar() {
     const router = useRouter();
     const pathname = usePathname();
-    const { user, history, isLoadingHistory, hasMoreHistory, login, fetchMoreHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle, logout } = useAppStore();
+    const { user, history, isLoadingHistory, isErrorHistory, hasMoreHistory, login, fetchMoreHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle, logout } = useAppStore();
     const [renamingItem, setRenamingItem] = useState<{ id: string; title: string } | null>(null);
     const [newTitle, setNewTitle] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -291,6 +297,13 @@ export function AppSidebar() {
                                                                         </SidebarMenuSubItem>
                                                                     ))}
                                                                 </>
+                                                            ) : isErrorHistory ? (
+                                                                <SidebarMenuSubItem>
+                                                                    <SidebarMenuSubButton onClick={() => refreshHistory()} className="text-red-400/80 hover:text-red-400 hover:bg-white/5 cursor-pointer">
+                                                                        <span className="material-symbols-outlined text-[16px]">error</span>
+                                                                        <span className="text-xs">Không thể tải. Thử lại?</span>
+                                                                    </SidebarMenuSubButton>
+                                                                </SidebarMenuSubItem>
                                                             ) : history.length > 0 ? (
                                                                 <>
                                                                     {history.map((historyItem, index) => (

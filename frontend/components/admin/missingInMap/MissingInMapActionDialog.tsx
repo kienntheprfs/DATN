@@ -30,7 +30,7 @@ export function MissingInMapActionDialog({
 }: MissingInMapActionDialogProps) {
   return (
     <Dialog open={pendingAction !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={!isSubmitting} className="max-w-md rounded-md border border-slate-200 bg-white">
+      <DialogContent showCloseButton={!isSubmitting} className="max-w-md rounded-md border border-slate-200 bg-white p-6">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-text-main">{actionMeta?.actionLabel}</DialogTitle>
           <DialogDescription className="text-sm text-slate-600">{actionMeta?.description}</DialogDescription>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MissingInMapActionDialog } from "./MissingInMapActionDialog";
+import { MissingInMapDetailModal } from "./MissingInMapDetailModal";
 import { MissingInMapControls } from "./MissingInMapControls";
 import { MissingInMapLocationTable } from "./MissingInMapLocationTable";
 import { MissingInMapPagination } from "./MissingInMapPagination";
@@ -16,16 +18,26 @@ import type {
   Status,
   StatusFilterOption,
   TabKey,
+  TimeFilter,
+  TimeFilterOption,
 } from "./MissingInMapTypes";
 import { missingInMapApi } from "@/services";
 
 const PAGE_SIZE = 5;
 const LOCATION_STATUS_OPTIONS: StatusFilterOption[] = [
   { value: "ALL", label: "Tất cả trạng thái" },
-  { value: "PENDING", label: "PENDING" },
-  { value: "IN_PROGRESS", label: "IN PROGRESS" },
-  { value: "RESOLVED", label: "ĐÃ XỬ LÝ" },
-  { value: "REMOVED", label: "ĐÃ LOẠI BỎ" },
+  { value: "PENDING", label: "Chờ xử lý" },
+  // { value: "IN_PROGRESS", label: "Đang xử lý" },
+  { value: "RESOLVED", label: "Đã xử lý" },
+  { value: "REMOVED", label: "Đã loại bỏ" },
+];
+
+const TIME_FILTER_OPTIONS: TimeFilterOption[] = [
+  { value: "all", label: "Tất cả thời gian" },
+  { value: "1d", label: "Trong 24 giờ qua" },
+  { value: "1w", label: "Trong 1 tuần qua" },
+  { value: "2w", label: "Trong 2 tuần qua" },
+  { value: "1m", label: "Trong 1 tháng qua" },
 ];
 
 function mapLocationStatus(status: string): Status {
@@ -74,11 +86,14 @@ type MissingInMapLocationPanelProps = {
 
 export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInMapLocationPanelProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | Status>("ALL");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("1m");
   const [currentPage, setCurrentPage] = useState(1);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [detailRow, setDetailRow] = useState<LocationRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const locationsQuery = useQuery({
@@ -96,9 +111,9 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
     queryFn: () => missingInMapApi.getRouteStats(),
   });
 
-  const updateLocationMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: Parameters<typeof missingInMapApi.updateLocation>[1] }) =>
-      missingInMapApi.updateLocation(id, payload),
+  const updateLocationStatusMutation = useMutation({
+    mutationFn: ({ id, status, note }: { id: number; status: any; note?: string }) =>
+      missingInMapApi.updateLocationStatus(id, status, note),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["missing-locations"] }),
@@ -136,8 +151,10 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const now = new Date();
 
     return rows.filter((row) => {
+      // Search filter
       const matchesSearch =
         query.length === 0 ||
         row.id.toLowerCase().includes(query) ||
@@ -146,10 +163,29 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
         row.requestedBy.toLowerCase().includes(query) ||
         row.adminNote.toLowerCase().includes(query);
 
+      // Status filter
       const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
-      return matchesSearch && matchesStatus;
+
+      // Time filter
+      let matchesTime = true;
+      if (timeFilter !== "all") {
+        // We need to use the original data's createdAt for accurate filtering
+        const originalItem = locationsQuery.data?.find((item) => item.id === row.rowId);
+        if (originalItem?.created_at) {
+          const createdAt = new Date(originalItem.created_at);
+          const diffMs = now.getTime() - createdAt.getTime();
+          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+          if (timeFilter === "1d") matchesTime = diffDays <= 1;
+          else if (timeFilter === "1w") matchesTime = diffDays <= 7;
+          else if (timeFilter === "2w") matchesTime = diffDays <= 14;
+          else if (timeFilter === "1m") matchesTime = diffDays <= 30;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesTime;
     });
-  }, [rows, search, statusFilter]);
+  }, [rows, search, statusFilter, timeFilter, locationsQuery.data]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, pageCount);
@@ -184,23 +220,20 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
 
     try {
       if (pendingAction.type === "add-location") {
-        await updateLocationMutation.mutateAsync({
+        await updateLocationStatusMutation.mutateAsync({
           id: pendingAction.rowId,
-          payload: {
-            status: "approved",
-            admin_note: "Đã chuyển cho đội bản đồ xử lý.",
-          },
+          status: "resolved",
+          note: "Đã chuyển cho đội bản đồ xử lý.",
         });
         showActionSuccess(pendingAction.type);
+        router.push("/navigation/editor");
       }
 
       if (pendingAction.type === "remove") {
-        await updateLocationMutation.mutateAsync({
+        await updateLocationStatusMutation.mutateAsync({
           id: pendingAction.rowId,
-          payload: {
-            status: "rejected",
-            admin_note: "Đã loại bỏ theo xác nhận của quản trị viên.",
-          },
+          status: "rejected",
+          note: "Đã loại bỏ theo xác nhận của quản trị viên.",
         });
         showActionSuccess(pendingAction.type);
       }
@@ -212,7 +245,7 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
     }
   }
 
-  const isSubmitting = updateLocationMutation.isPending;
+  const isSubmitting = updateLocationStatusMutation.isPending;
   const isLoading = locationsQuery.isLoading || locationStatsQuery.isLoading;
 
   return (
@@ -225,6 +258,8 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
           search={search}
           statusFilter={statusFilter}
           statusOptions={LOCATION_STATUS_OPTIONS}
+          timeFilter={timeFilter}
+          timeOptions={TIME_FILTER_OPTIONS}
           rangeStart={rangeStart}
           rangeEnd={rangeEnd}
           totalResults={filteredRows.length}
@@ -236,6 +271,10 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
           }}
           onStatusFilterChange={(value) => {
             setStatusFilter(value);
+            setCurrentPage(1);
+          }}
+          onTimeFilterChange={(value) => {
+            setTimeFilter(value);
             setCurrentPage(1);
           }}
         />
@@ -265,6 +304,7 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
             isLoading={locationsQuery.isLoading}
             onAddLocation={(row) => setPendingAction({ rowId: row.rowId, displayId: row.id, type: "add-location" })}
             onRemove={(row) => setPendingAction({ rowId: row.rowId, displayId: row.id, type: "remove" })}
+            onRowClick={(row) => setDetailRow(row)}
           />
         </div>
 
@@ -287,6 +327,13 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
         isSubmitting={isSubmitting}
         onClose={() => setPendingAction(null)}
         onConfirm={confirmAction}
+      />
+
+      <MissingInMapDetailModal
+        isOpen={!!detailRow}
+        onClose={() => setDetailRow(null)}
+        data={detailRow}
+        type="location"
       />
     </>
   );

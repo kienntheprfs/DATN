@@ -54,7 +54,7 @@ export function RatingFilterPanel({
             </div>
             <input
               type="text"
-              placeholder="Search toàn bảng..."
+              placeholder="Tìm kiếm toàn bảng..."
               value={filters.search}
               onChange={(event) => onFiltersChange({ ...filters, search: event.target.value })}
               className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-400 focus:outline-none focus:placeholder-slate-300 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm transition-all h-9.5"
@@ -63,7 +63,7 @@ export function RatingFilterPanel({
         </div>
 
         <div className="w-full sm:w-35">
-          <label className="block text-xs font-semibold text-text-secondary uppercase mb-1.5 ml-1">Rating</label>
+          <label className="block text-xs font-semibold text-text-secondary uppercase mb-1.5 ml-1">Phản hồi</label>
           <select
             value={filters.rating}
             onChange={(event) =>
@@ -104,15 +104,15 @@ export function RatingFilterPanel({
 
       {/* <p className="text-xs text-text-secondary">Bộ lọc tự động áp dụng sau một khoảng trễ ngắn để tối ưu truy vấn.</p> */}
 
-      <div className="flex flex-wrap gap-3 pt-1">
+      {/* <div className="flex flex-wrap gap-3 pt-1">
         <button
           type="button"
           onClick={onExport}
-          title="Export Excel"
+          title="Xuất tệp Excel"
           className="flex items-center gap-2 bg-white border border-border-color hover:bg-slate-50 text-text-main px-4 py-1.5 rounded-md shadow-sm transition-colors text-sm font-medium"
         >
           <span className="material-symbols-outlined text-[18px]">table_view</span>
-          <span>Export Excel</span>
+          <span>Xuất Excel</span>
         </button>
 
         <button
@@ -122,9 +122,9 @@ export function RatingFilterPanel({
           className="flex items-center gap-2 bg-white border border-border-color hover:bg-slate-50 text-text-main px-4 py-1.5 rounded-md shadow-sm transition-colors text-sm font-medium"
         >
           <span className="material-symbols-outlined text-[18px]">print</span>
-          <span>Print</span>
+          <span>In</span>
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }

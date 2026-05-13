@@ -7,8 +7,8 @@ services:
       - ./data:/data
     command: 
       - --model-id
-      - sentence-transformers/all-MiniLM-L6-v2
-      # - hiieu/halong_embedding
+      # - sentence-transformers/all-MiniLM-L6-v2
+      - hiieu/halong_embedding
       # - sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
       - --max-batch-tokens
       - "2048"

@@ -640,9 +640,9 @@ export function ChatWindow({
 					if (group.role === "user") {
 						return (
 							<div key={`group-${groupIndex}`} className="flex gap-4 justify-end animate-in fade-in slide-in-from-bottom-2 duration-300">
-								<div className="flex size-10 shrink-0 items-center justify-center bg-secondary text-secondary-foreground rounded-none shadow-sm">
+								{/* <div className="flex size-10 shrink-0 items-center justify-center bg-secondary text-secondary-foreground rounded-none shadow-sm">
 									<User className="size-6" />
-								</div>
+								</div> */}
 								<div className="group relative max-w-[85%]">
 									<div className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
 										{group.messages.map(m => m.content).filter(Boolean).join(" ")}

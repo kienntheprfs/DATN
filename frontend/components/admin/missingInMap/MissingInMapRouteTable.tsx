@@ -8,6 +8,7 @@ type MissingInMapRouteTableProps = {
   isLoading?: boolean;
   onDrawRoute: (row: RouteRow) => void;
   onRemove: (row: RouteRow) => void;
+  onRowClick: (row: RouteRow) => void;
 };
 
 export function MissingInMapRouteTable({
@@ -17,6 +18,7 @@ export function MissingInMapRouteTable({
   isLoading = false,
   onDrawRoute,
   onRemove,
+  onRowClick,
 }: MissingInMapRouteTableProps) {
   if (isLoading) {
     return (
@@ -24,13 +26,13 @@ export function MissingInMapRouteTable({
         <thead>
           <tr className="border-b border-slate-200 bg-white">
             <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">ID</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Start Point</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">End Point</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reason / Notes</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Status</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reported By</th>
-            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Created At</th>
-            <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Actions</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Điểm bắt đầu</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Điểm kết thúc</th>
+            {/* <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Lý do / Ghi chú</th> */}
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Trạng thái</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Người báo cáo</th>
+            <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Ngày tạo</th>
+            <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Thao tác</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -39,7 +41,6 @@ export function MissingInMapRouteTable({
               <td className="px-6 py-4"><div className="h-4 w-20 rounded bg-slate-100" /></td>
               <td className="px-6 py-4"><div className="h-4 w-36 rounded bg-slate-100" /><div className="mt-2 h-3 w-24 rounded bg-slate-100" /></td>
               <td className="px-6 py-4"><div className="h-4 w-36 rounded bg-slate-100" /><div className="mt-2 h-3 w-24 rounded bg-slate-100" /></td>
-              <td className="px-6 py-4"><div className="h-4 w-48 rounded bg-slate-100" /></td>
               <td className="px-6 py-4"><div className="h-5 w-20 rounded bg-slate-100" /></td>
               <td className="px-6 py-4"><div className="h-4 w-28 rounded bg-slate-100" /></td>
               <td className="px-6 py-4"><div className="h-4 w-24 rounded bg-slate-100" /></td>
@@ -61,19 +62,19 @@ export function MissingInMapRouteTable({
       <thead>
         <tr className="border-b border-slate-200 bg-white">
           <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">ID</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Start Point</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">End Point</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reason / Notes</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Status</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Reported By</th>
-          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Created At</th>
-          <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Actions</th>
+          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Điểm bắt đầu</th>
+          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Điểm kết thúc</th>
+          {/* <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Lý do / Ghi chú</th> */}
+          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Trạng thái</th>
+          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Người báo cáo</th>
+          <th className="px-6 py-4 text-[12px] font-bold text-slate-500 uppercase tracking-widest">Ngày tạo</th>
+          <th className="px-6 py-4 text-right text-[12px] font-bold text-slate-500 uppercase tracking-widest">Thao tác</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
         {rows.length === 0 && (
           <tr>
-            <td colSpan={8} className="px-6 py-8 text-center text-sm text-slate-500">
+            <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-500">
               Không có dữ liệu phù hợp với bộ lọc hiện tại.
             </td>
           </tr>
@@ -82,7 +83,11 @@ export function MissingInMapRouteTable({
           const rowBusy = isSubmitting && pendingActionId === data.rowId;
 
           return (
-            <tr key={data.id} className="transition-colors hover:bg-slate-50/80">
+            <tr 
+              key={data.id} 
+              className="transition-colors hover:bg-slate-50/80 cursor-pointer group"
+              onClick={() => onRowClick(data)}
+            >
               <td className="px-6 py-4 font-mono text-[13px] font-medium text-slate-600">{data.id}</td>
               <td className="px-6 py-4">
                 <div className="text-sm font-bold text-text-main">{data.startPoint}</div>
@@ -92,11 +97,11 @@ export function MissingInMapRouteTable({
                 <div className="text-sm font-bold text-text-main">{data.endPoint}</div>
                 <div className="font-mono text-[11px] text-slate-500 uppercase">{data.endMeta}</div>
               </td>
-              <td className="px-6 py-4">
+              {/* <td className="px-6 py-4">
                 <div className="max-w-55 truncate text-sm text-slate-700" title={data.reason}>
                   {data.reason}
                 </div>
-              </td>
+              </td> */}
               <td className="px-6 py-4">
                 <span
                   className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[11px] font-bold uppercase tracking-tight ${statusClasses(
@@ -133,7 +138,10 @@ export function MissingInMapRouteTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onDrawRoute(data)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDrawRoute(data);
+                      }}
                       className="bg-primary px-3 py-1.5 text-[10px] font-bold text-white uppercase shadow-sm transition-all hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
                       title="Vẽ tuyến đường lên bản đồ"
                     >
@@ -142,7 +150,10 @@ export function MissingInMapRouteTable({
                     <button
                       type="button"
                       disabled={rowBusy}
-                      onClick={() => onRemove(data)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(data);
+                      }}
                       className="border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Loại bỏ yêu cầu"
                     >

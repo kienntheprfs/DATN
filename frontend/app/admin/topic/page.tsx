@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -28,6 +29,7 @@ const PIPELINE_RANGE_TO_TIME_RANGE: Record<PipelineRange, string> = {
 
 export default function TopicPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   // --- UI state ---
   const [selectedKey, setSelectedKey] = useState<string | null>(null); // "topicType:topicId"
@@ -153,7 +155,10 @@ export default function TopicPage() {
       }),
     onSuccess: (_, variables) => {
       if (variables.pinned !== undefined) {
-        toast.success(variables.pinned ? "Đã ghim bài lên trang chủ" : "Đã bỏ ghim");
+        toast.success(variables.pinned ? "Đã đánh dấu ghim bài" : "Đã bỏ ghim");
+        if (variables.pinned) {
+          router.push("/admin/pinned-post");
+        }
       }
       if (variables.knowledgeUpdated !== undefined) {
         toast.success(
@@ -161,6 +166,9 @@ export default function TopicPage() {
             ? "Đã đánh dấu cập nhật tri thức"
             : "Đã bỏ đánh dấu tri thức"
         );
+        if (variables.knowledgeUpdated) {
+          router.push("/admin/knowledge");
+        }
       }
       // Refresh both lists so pin states update
       queryClient.invalidateQueries({ queryKey: ["topics", "list"] });
@@ -201,25 +209,13 @@ export default function TopicPage() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light md:-m-6">
+    <div className="-m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light text-base md:-m-6">
       <div
-        className={`grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[350px_minmax(0,1fr)] ${
+        className={`grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] ${
           showPipelineModal ? "select-none blur-xs" : ""
         }`}
       >
-        {/* Left: topic list panel — filters by topic_type client-side */}
-        <TopicListPanel
-          isLoading={isLoadingTopics}
-          isError={isTopicsError}
-          topics={allTopics}
-          selectedTopicKey={selectedKey}
-          currentJob={currentJob ?? null}
-          onTopicSelect={(key) => setSelectedKey(key)}
-          onOpenPipelineModal={() => setShowPipelineModal(true)}
-          onRetry={refetchTopics}
-        />
-
-        {/* Right: detail panel — topicType derived from selected topic */}
+         {/* Right: detail panel — topicType derived from selected topic */}
         <TopicDetailPanel
           isLoading={isLoadingTopics}
           isError={isTopicsError}
@@ -234,6 +230,19 @@ export default function TopicPage() {
           onPinTopic={handlePinTopic}
           onUpdateKnowledge={handleUpdateKnowledge}
         />
+        {/* Left: topic list panel — filters by topic_type client-side */}
+        <TopicListPanel
+          isLoading={isLoadingTopics}
+          isError={isTopicsError}
+          topics={allTopics}
+          selectedTopicKey={selectedKey}
+          currentJob={currentJob ?? null}
+          onTopicSelect={(key) => setSelectedKey(key)}
+          onOpenPipelineModal={() => setShowPipelineModal(true)}
+          onRetry={refetchTopics}
+        />
+
+       
       </div>
 
       {showPipelineModal && (

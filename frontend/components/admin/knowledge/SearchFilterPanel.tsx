@@ -89,8 +89,8 @@ export function SearchFilterPanel({ filters, onFiltersChange }: SearchFilterPane
           className="block w-full pl-3 pr-8 py-2 text-base border border-slate-300 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm rounded-md bg-white transition-all"
         >
           <option value="all">Tất cả</option>
-          <option value="normal">Normal document</option>
-          <option value="formal">Formal document</option>
+          <option value="normal">Văn bản thường</option>
+          <option value="formal">Văn bản chính quy</option>
         </select>
       </div>
     </div>

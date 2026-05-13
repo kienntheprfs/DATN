@@ -64,12 +64,12 @@ function formatRelativeDate(value: string | null): string {
   const diffMs = Date.now() - target.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays <= 0) {
-    return "UPDATED TODAY";
+    return "CẬP NHẬT HÔM NAY";
   }
   if (diffDays === 1) {
-    return "UPDATED 1 DAY AGO";
+    return "CẬP NHẬT 1 NGÀY TRƯỚC";
   }
-  return `UPDATED ${diffDays} DAYS AGO`;
+  return `CẬP NHẬT ${diffDays} NGÀY TRƯỚC`;
 }
 
 interface PinnedPostDataPanelProps {
@@ -168,7 +168,7 @@ export function PinnedPostDataPanel({ onCreateNew, onEdit, initialSortMode = "la
       return "N/A";
     }
     const ratio = Math.round((topCategoryCount / stats.totalPins) * 100);
-    return `${ratio}% OF ALL PINS`;
+    return `${ratio}% TRONG TỔNG SỐ`;
   }, [stats.topCategory, stats.totalPins, topCategoryCount]);
 
   const pageStartIndex = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;

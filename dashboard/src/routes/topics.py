@@ -338,17 +338,18 @@ async def get_topic_list(
         set(int(k) for k in (result.topic_keywords or {}).keys())
     )
 
+    all_source_dists = await TopicResultRepository.get_all_source_distributions(
+        db, result.id
+    )
+
     items: list[TopicListItem] = []
     for topic_id in topic_ids:
-        source_dist = await TopicResultRepository.get_source_distribution(
-            db, result.id, topic_id
-        )
         item = _build_topic_list_item(
             topic_id=topic_id,
             result=result,
             pins_map=pins_map,
             count=counts.get(topic_id, 0),
-            source_dist=source_dist,
+            source_dist=all_source_dists.get(topic_id, []),
         )
         items.append(item)
 
@@ -428,13 +429,14 @@ async def get_topic_trends(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no result found")
 
-    limit_map = {"day": 30, "week": 12, "month": 12}
-    limit = limit_map.get(view, 30)
+    limit_map = {"day": 7, "week": 4, "month": 12}
+    limit = limit_map.get(view, 7)
 
     rows = await TopicResultRepository.get_topic_trend_by_period(
         db,
         topic_type=topic_type.value,
         topic_id=topic_id,
+        result_id=result.id,
         period=view,
         limit=limit,
     )

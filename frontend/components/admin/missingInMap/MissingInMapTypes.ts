@@ -7,6 +7,13 @@ export type StatusFilterOption = {
   label: string;
 };
 
+export type TimeFilter = "1d" | "1w" | "2w" | "1m" | "all";
+
+export type TimeFilterOption = {
+  value: TimeFilter;
+  label: string;
+};
+
 export type LocationRow = {
   rowId: number;
   id: string;

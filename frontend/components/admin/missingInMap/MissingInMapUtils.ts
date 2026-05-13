@@ -1,8 +1,11 @@
 import type { PendingAction, Status } from "./MissingInMapTypes";
 
 export function formatStatus(status: Status) {
+  if (status === "PENDING") {
+    return "CHỜ XỬ LÝ";
+  }
   if (status === "IN_PROGRESS") {
-    return "IN PROGRESS";
+    return "ĐANG XỬ LÝ";
   }
   if (status === "RESOLVED") {
     return "ĐÃ XỬ LÝ";

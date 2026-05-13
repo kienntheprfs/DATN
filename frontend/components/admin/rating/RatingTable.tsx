@@ -16,7 +16,7 @@ export function RatingTable({ rows, onOpenDetail, isLoading }: RatingTableProps)
         <thead className="bg-slate-50 sticky top-0 z-10">
           <tr>
             <th scope="col" className="px-6 py-2 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-35">
-              Session ID
+              Mã phiên
             </th>
             <th scope="col" className="px-6 py-2 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-30">
               Thời gian
@@ -47,7 +47,7 @@ export function RatingTable({ rows, onOpenDetail, isLoading }: RatingTableProps)
                   <span className="text-xs font-mono text-text-secondary truncate w-25 block" title={row.sessionId}>
                     {row.sessionId}
                   </span>
-                  <span className="text-[10px] text-text-secondary">Pair {row.pair}</span>
+                  <span className="text-[10px] text-text-secondary">Cặp {row.pair}</span>
                 </div>
               </td>
 

@@ -8,7 +8,16 @@ interface ReactQueryProviderProps {
 }
 
 export function ReactQueryProvider({ children }: ReactQueryProviderProps) {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }

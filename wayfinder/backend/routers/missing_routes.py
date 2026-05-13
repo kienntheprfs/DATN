@@ -127,6 +127,7 @@ def get_missing_route_stats(session: Session = Depends(get_session)):
         "total": len(all_items),
         "pending": sum(1 for x in all_items if x.status == "pending"),
         "resolved": sum(1 for x in all_items if x.status == "resolved"),
+        "rejected": sum(1 for x in all_items if x.status == "rejected"),
     }
     return stats
 
@@ -154,6 +155,30 @@ def update_missing_route(
 
     for key, value in update_data.items():
         setattr(item, key, value)
+
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+@router.patch("/{item_id}/status", response_model=MissingRouteOut)
+def update_missing_route_status(
+    item_id: int,
+    status: str = Query(..., description="New status: pending, resolved, rejected"),
+    resolved_note: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    item = session.get(MissingRoute, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Missing route not found")
+
+    item.status = status
+    if resolved_note:
+        item.resolved_note = resolved_note
+
+    if status == "resolved":
+        item.resolved_at = datetime.now().isoformat()
 
     session.add(item)
     session.commit()

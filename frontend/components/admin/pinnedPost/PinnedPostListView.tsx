@@ -103,9 +103,9 @@ export function PinnedPostListView({
             <span>/</span>
             <span className="font-bold text-primary">PINNED TOPICS</span>
           </nav> */}
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Pinned Topics Management</h1>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Quản lý Bài ghim Chủ đề</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Manage prioritized regulations and announcements displayed on the faculty home screen.
+            Quản lý các quy định và thông báo ưu tiên được hiển thị trên trang chủ của khoa.
           </p>
         </div>
         <button
@@ -114,13 +114,13 @@ export function PinnedPostListView({
           className="inline-flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary-dark sm:w-auto"
         >
           <span className="material-symbols-outlined text-sm">push_pin</span>
-          Add New Pin
+          Thêm Bài ghim mới
         </button>
       </div>
 
       <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <article className="border border-border-color bg-white p-4">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Pins</div>
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Tổng số bài ghim</div>
           <div className="font-heading text-2xl font-bold text-slate-900">{overallTotalPins}</div>
           {/* <div className="mt-2 flex items-center gap-1 font-mono text-[11px] text-green-600">
             <span className="material-symbols-outlined text-[14px]">trending_up</span>
@@ -128,19 +128,19 @@ export function PinnedPostListView({
           </div> */}
         </article>
         <article className="border border-border-color bg-white p-4">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Slots</div>
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Vị trí đang dùng</div>
           <div className="font-heading text-2xl font-bold text-slate-900">{activeSlotsText}</div>
           <div className="mt-4 h-1 w-full bg-slate-100">
             <div className="h-1 bg-primary" style={{ width: `${activeSlotsWidth}%` }} />
           </div>
         </article>
         <article className="border border-border-color bg-white p-4">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Top Category</div>
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Danh mục phổ biến</div>
           <div className="font-heading truncate text-lg font-bold text-slate-900">{topCategoryText}</div>
           <div className="mt-2 font-mono text-[11px] text-slate-500">{topCategoryShareText}</div>
         </article>
         <article className="border border-border-color bg-white p-4">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Last Update</div>
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Cập nhật cuối</div>
           <div className="font-heading text-lg font-bold text-slate-900">{lastUpdateText}</div>
           <div className="mt-2 font-mono text-[11px] text-slate-500">{lastUpdateRelativeText}</div>
         </article>
@@ -154,7 +154,7 @@ export function PinnedPostListView({
               type="text"
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search by topic title or regulation ID..."
+              placeholder="Tìm kiếm theo tiêu đề hoặc mã quy định..."
               className="w-full rounded-sm border border-border-color py-2 pr-4 pl-10 text-sm focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -164,7 +164,7 @@ export function PinnedPostListView({
               onChange={(event) => onCategoryChange(event.target.value as "all" | PinnedCategory)}
               className="rounded-sm border border-border-color bg-white py-2 pr-8 pl-3 text-sm focus:ring-1 focus:ring-primary"
             >
-              <option value="all">All Categories</option>
+              <option value="all">Tất cả danh mục</option>
               <option value="Quy chế Đào tạo">Quy chế Đào tạo</option>
               <option value="Công tác Sinh viên">Công tác Sinh viên</option>
               <option value="Nghiên cứu Khoa học">Nghiên cứu Khoa học</option>
@@ -175,9 +175,9 @@ export function PinnedPostListView({
               onChange={(event) => onSortChange(event.target.value as PinnedSortMode)}
               className="rounded-sm border border-border-color bg-white py-2 pr-8 pl-3 text-sm focus:ring-1 focus:ring-primary"
             >
-              <option value="latest">Sort: Latest Pinned</option>
-              <option value="manual">Sort: Custom Order</option>
-              <option value="alphabetical">Sort: Alphabetical</option>
+              <option value="latest">Sắp xếp: Bài ghim mới nhất</option>
+              <option value="manual">Sắp xếp: Thứ tự tùy chỉnh</option>
+              <option value="alphabetical">Sắp xếp: Theo bảng chữ cái</option>
             </select>
           </div>
         </div>
@@ -201,11 +201,11 @@ export function PinnedPostListView({
           <table className="w-full min-w-260 text-left text-sm">
             <thead>
               <tr className="border-b border-border-color bg-slate-50">
-                <th className="w-16 px-4 py-3 text-center text-[11px] font-bold tracking-widest text-slate-600 uppercase">Order</th>
-                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Topic Title</th>
-                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Category</th>
-                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Pinned Date</th>
-                <th className="px-6 py-3 text-right text-[11px] font-bold tracking-widest text-slate-600 uppercase">Actions</th>
+                <th className="w-16 px-4 py-3 text-center text-[11px] font-bold tracking-widest text-slate-600 uppercase">Thứ tự</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Tiêu đề Chủ đề</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Danh mục</th>
+                <th className="px-6 py-3 text-[11px] font-bold tracking-widest text-slate-600 uppercase">Ngày ghim</th>
+                <th className="px-6 py-3 text-right text-[11px] font-bold tracking-widest text-slate-600 uppercase">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-color">
@@ -258,7 +258,7 @@ export function PinnedPostListView({
                   <td className="px-4 py-4 text-center">
                     <span
                       className={`material-symbols-outlined ${canReorder && !isReordering ? "cursor-grab text-slate-400 hover:text-primary active:cursor-grabbing" : "text-slate-300"}`}
-                      title={canReorder ? "Drag to reorder" : "Switch to manual sort and clear filters to reorder"}
+                      title={canReorder ? "Kéo để đổi thứ tự" : "Chuyển sang sắp xếp thủ công và xóa bộ lọc để đổi thứ tự"}
                     >
                       drag_indicator
                     </span>
@@ -289,7 +289,7 @@ export function PinnedPostListView({
                           <button
                             type="button"
                             className="rounded p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-primary"
-                            title="Edit"
+                            title="Chỉnh sửa"
                             onClick={() => onEditPin(item)}
                           >
                             <span className="material-symbols-outlined text-lg">edit_note</span>
@@ -303,7 +303,7 @@ export function PinnedPostListView({
                           <button
                             type="button"
                             className="rounded p-1.5 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
-                            title="Remove Pin"
+                            title="Gỡ ghim"
                             onClick={() => onRequestDelete(item)}
                           >
                             <span className="material-symbols-outlined text-lg">delete</span>
@@ -340,7 +340,7 @@ export function PinnedPostListView({
 
       <section className="mt-4 flex flex-col items-start justify-between gap-4 font-mono text-xs text-slate-500 md:flex-row md:items-center">
         <div>
-          SHOWING {pageStartIndex}-{pageEndIndex} OF {totalItems} MATCHED TOPICS ({overallTotalPins} TOTAL)
+          HIỂN THỊ {pageStartIndex}-{pageEndIndex} TRONG {totalItems} CHỦ ĐỀ ({overallTotalPins} TỔNG CỘNG)
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -351,7 +351,7 @@ export function PinnedPostListView({
           >
             <span className="material-symbols-outlined text-sm">chevron_left</span>
           </button>
-          <span className="px-2">PAGE {currentPage} OF {totalPages}</span>
+          <span className="px-2">TRANG {currentPage} TRONG {totalPages}</span>
           <button
             type="button"
             className="rounded-sm border border-slate-200 p-1 transition-colors hover:bg-slate-50 disabled:opacity-50"

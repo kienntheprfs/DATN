@@ -141,6 +141,30 @@ def update_missing_location(
     return item
 
 
+@router.patch("/{item_id}/status", response_model=MissingLocationOut)
+def update_missing_location_status(
+    item_id: int,
+    status: str = Query(..., description="New status: pending, approved, resolved, rejected"),
+    admin_note: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+):
+    item = session.get(MissingLocation, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Missing location not found")
+
+    item.status = status
+    if admin_note:
+        item.admin_note = admin_note
+
+    if status == "resolved":
+        item.resolved_at = datetime.now().isoformat()
+
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
 @router.post("/{item_id}/resolve")
 def resolve_missing_location(
     item_id: int,

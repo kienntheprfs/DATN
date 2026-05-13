@@ -196,6 +196,7 @@ class TopicResultRepository:
         db: AsyncSession,
         topic_type: str,
         topic_id: int,
+        result_id: UUID | None = None,
         period: str = "day",
         limit: int = 60,
     ) -> list[dict]:
@@ -207,6 +208,14 @@ class TopicResultRepository:
         """
         trunc = {"day": "day", "week": "week", "month": "month"}.get(period, "day")
         ts_expr = "COALESCE(a.original_created_at, a.created_at)"
+        
+        where_clause = "WHERE r.topic_type = :topic_type AND a.topic_id = :topic_id"
+        params = {"trunc": trunc, "topic_type": topic_type, "topic_id": topic_id, "limit": limit}
+        
+        if result_id:
+            where_clause += " AND r.id = :result_id"
+            params["result_id"] = result_id
+
         stmt = text(
             f"""
             SELECT
@@ -214,18 +223,23 @@ class TopicResultRepository:
                 COUNT(a.id)                   AS count
             FROM dashboard.dashboard_topic_assignments a
             JOIN dashboard.dashboard_topic_results r ON r.id = a.result_id
-            WHERE r.topic_type = :topic_type
-              AND a.topic_id   = :topic_id
+            {where_clause}
             GROUP BY period
-            ORDER BY period
+            ORDER BY period DESC
             LIMIT :limit
             """
         )
-        rows = await db.execute(
-            stmt,
-            {"trunc": trunc, "topic_type": topic_type, "topic_id": topic_id, "limit": limit},
-        )
-        return [{"period": str(row.period), "count": int(row.count)} for row in rows]
+        rows = await db.execute(stmt, params)
+        # Format and reverse to show chronological order (Past -> Present)
+        results = [
+            {
+                "period": row.period.strftime("%Y-%m-%d") if hasattr(row.period, "strftime") else str(row.period),
+                "count": int(row.count)
+            }
+            for row in rows
+        ]
+        results.reverse()
+        return results
 
     @staticmethod
     async def get_topic_count_by_result(
@@ -266,6 +280,35 @@ class TopicResultRepository:
         )
         rows = await db.execute(stmt)
         return [{"source": row.source, "count": int(row.count)} for row in rows]
+
+    @staticmethod
+    async def get_all_source_distributions(
+        db: AsyncSession,
+        result_id: UUID,
+    ) -> dict[int, list[dict]]:
+        """Return per-source document counts for all topics in a result."""
+        stmt = (
+            select(
+                DashboardTopicAssignment.topic_id,
+                DashboardTopicAssignment.source,
+                func.count(DashboardTopicAssignment.id).label("count"),
+            )
+            .where(DashboardTopicAssignment.result_id == result_id)
+            .group_by(DashboardTopicAssignment.topic_id, DashboardTopicAssignment.source)
+        )
+        rows = await db.execute(stmt)
+
+        dist: dict[int, list[dict]] = {}
+        for row in rows:
+            if row.topic_id not in dist:
+                dist[row.topic_id] = []
+            dist[row.topic_id].append({"source": row.source, "count": int(row.count)})
+
+        # Sort each list by count desc
+        for t_id in dist:
+            dist[t_id].sort(key=lambda x: x["count"], reverse=True)
+
+        return dist
 
     # ------------------------------------------------------------------
     # Pin state (stored as JSON on DashboardTopicResult.topic_marked)

@@ -51,7 +51,7 @@ export function MissingInMapHeader({ activeTab, onTabChange }: MissingInMapHeade
             Hệ thống quản lý và xử lý các điểm mù địa điểm và tuyến đường trong khuôn viên đại học.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {/* <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
@@ -68,7 +68,7 @@ export function MissingInMapHeader({ activeTab, onTabChange }: MissingInMapHeade
             <span className="material-symbols-outlined text-[18px]">export_notes</span>
             <span>Xuất báo cáo</span>
           </button>
-        </div>
+        </div> */}
       </div>
     </>
   );

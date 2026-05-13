@@ -8,7 +8,6 @@ import { MissingInMapRoutePanel } from "@/components/admin/missingInMap/MissingI
 import type { TabKey } from "@/components/admin/missingInMap/MissingInMapTypes";
 
 export default function MissingInMapPage() {
-  const [queryClient] = useState(() => new QueryClient());
   const [activeTab, setActiveTab] = useState<TabKey>("location");
 
   const handleTabChange = (tab: TabKey) => {
@@ -16,7 +15,6 @@ export default function MissingInMapPage() {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
       <div className="max-w-400 mx-auto w-full flex flex-col">
         <MissingInMapHeader activeTab={activeTab} onTabChange={handleTabChange} />
         {activeTab === "location" ? (
@@ -25,7 +23,6 @@ export default function MissingInMapPage() {
           <MissingInMapRoutePanel activeTab={activeTab} onTabChange={handleTabChange} />
         )}
       </div>
-    </QueryClientProvider>
   );
 }
 

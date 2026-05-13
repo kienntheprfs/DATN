@@ -1,5 +1,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Cell,
+  LabelList 
+} from "recharts";
 import { statusBadgeLabel } from "./TopicData";
 import type { TopicListItem, TrendView, TopicType } from "./TopicTypes";
 import topicService from "@/services/topic-api";
@@ -82,7 +92,6 @@ function TopicDetailLoading() {
 function TrendChart({
   topicType,
   topicId,
-  resultId,
   view,
 }: {
   topicType: TopicType;
@@ -90,60 +99,151 @@ function TrendChart({
   resultId: string;
   view: TrendView;
 }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ["topics", "trend", topicType, topicId, view],
     queryFn: () => topicService.getTrend({ topic_type: topicType, topic_id: topicId, view }),
-    enabled: !!topicId,
+    enabled: topicId !== undefined && topicId !== null,
   });
 
-  const points = data?.data ?? [];
-  const max = Math.max(...points.map((p) => p.count), 1);
-
-  // Period labels
-  const VIEW_LABELS: Record<TrendView, string[]> = {
-    day: ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
-    week: ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"],
-    month: ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"],
-  };
+  const rawPoints = data?.data ?? [];
 
   if (isLoading) {
     return (
-      <div className="animate-pulse h-32 w-full rounded border border-slate-100 bg-slate-50" />
+      <div className="animate-pulse h-64 w-full rounded-sm border border-slate-100 bg-slate-50" />
     );
   }
 
-  if (points.length === 0) {
+  if (rawPoints.length === 0) {
     return (
-      <div className="flex h-32 w-full items-center justify-center rounded border border-border-color bg-slate-50 text-xs text-slate-400">
+      <div className="flex h-64 w-full items-center justify-center rounded-sm border border-border-color bg-slate-50 text-sm text-slate-900">
         Chưa có dữ liệu xu hướng
       </div>
     );
   }
 
+  // Format data for Recharts
+  const chartData = rawPoints.map((p, i) => {
+    let label = "";
+    if (view === "day") {
+      try {
+        const date = new Date(p.period);
+        const day = date.getDay();
+        const dowMap: Record<number, string> = {
+          1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 0: "CN"
+        };
+        label = dowMap[day] || "";
+      } catch {
+        label = p.period;
+      }
+    } else if (view === "week") {
+      label = `Tuần ${i + 1}`;
+    } else {
+      label = p.period;
+    }
+
+    return {
+      name: label,
+      value: p.count,
+      fullDate: p.period,
+    };
+  });
+
+  // Calculate ranks for highlighting
+  const sortedValues = [...chartData].map(d => d.value).sort((a, b) => b - a);
+  const top1 = sortedValues[0];
+  const top2 = sortedValues[1];
+  const top3 = sortedValues[2];
+
+  const getCellColor = (val: number, index: number) => {
+    if (index === activeIndex) return '#166534'; // Green 800 (Dark green on hover/focus)
+    if (val === top1 && val > 0) return '#1e3a8a'; // Blue 900 (Rank 1)
+    if (val === top2 && val > 0) return '#2563eb'; // Blue 600 (Rank 2)
+    if (val === top3 && val > 0) return '#60a5fa'; // Blue 400 (Rank 3)
+    return '#bfdbfe'; // Blue 200 (Others - more visible)
+  };
+
+  const handleCellClick = (_data: any, index: number) => {
+    setActiveIndex(index === activeIndex ? null : index);
+  };
+
   return (
-    <>
-      <div className="flex h-32 w-full items-end justify-between gap-1 rounded-sm border border-border-color bg-slate-50 p-4">
-        {points.map((point, index) => {
-          const heightPct = Math.round((point.count / max) * 100);
-          const isMax = point.count === max;
-          return (
-            <div
-              key={point.period}
-              className={`w-full rounded-t-sm transition-all ${
-                isMax ? "bg-primary" : index % 2 === 0 ? "bg-blue-200" : "bg-blue-300"
-              }`}
-              style={{ height: `${Math.max(heightPct, 4)}%` }}
-              title={`${point.period}: ${point.count} truy vấn`}
+    <div className="w-full outline-none">
+      <div className="h-64 w-full rounded-sm border border-border-color bg-slate-50 p-3 outline-none">
+        <ResponsiveContainer width="100%" height="100%" className="outline-none">
+          <BarChart 
+            data={chartData} 
+            margin={{ top: 25, right: 10, left: -25, bottom: 0 }}
+            style={{ outline: 'none' }}
+            onClick={(state: any) => {
+               if (state && state.activeTooltipIndex !== undefined) {
+                 setActiveIndex(state.activeTooltipIndex);
+               }
+            }}
+          >
+            <XAxis 
+              dataKey="name" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#475569', fontSize: 11, fontWeight: 700 }}
+              interval={0}
             />
-          );
-        })}
+            <YAxis 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#94a3b8', fontSize: 10 }}
+              domain={[0, 'dataMax']}
+            />
+            <Tooltip
+              cursor={{ fill: 'rgba(0,0,0,0.03)' }}
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
+                  return (
+                    <div className="rounded-sm border border-slate-200 bg-white p-2 shadow-xl">
+                      <p className="text-[10px] font-bold uppercase text-slate-400">{data.fullDate}</p>
+                      <p className="text-sm font-bold text-primary">{data.value} truy vấn</p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Bar 
+              dataKey="value" 
+              radius={[4, 4, 0, 0]}
+              barSize={32}
+            >
+              <LabelList 
+                dataKey="value" 
+                position="top" 
+                style={{ fill: '#1e40af', fontSize: 12, fontWeight: 800 }} 
+              />
+              {chartData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  cursor="pointer"
+                  fill={getCellColor(entry.value, index)}
+                  className="transition-all duration-300"
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-      <div className="mt-2 flex justify-between overflow-x-auto font-mono text-[10px] text-slate-400">
-        {points.slice(0, VIEW_LABELS[view].length).map((p, i) => (
-          <span key={p.period}>{VIEW_LABELS[view][i] ?? ""}</span>
-        ))}
+      
+      {/* Dynamic info below chart when a bar is clicked/highlighted */}
+      <div className="mt-2 min-h-[20px]">
+        {activeIndex !== null && (
+          <div className="flex items-center gap-2 text-[12px] font-bold text-primary animate-in fade-in slide-in-from-top-1">
+            <span className="material-symbols-outlined text-[14px]">analytics</span>
+            <span>{chartData[activeIndex].name} ({chartData[activeIndex].fullDate}):</span>
+            <span className="text-slate-900">{chartData[activeIndex].value} truy vấn</span>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -172,7 +272,7 @@ function QuestionsTable({
         page_size: PAGE_SIZE,
         sort_by: sortBy,
       }),
-    enabled: !!topicId,
+    enabled: topicId !== undefined && topicId !== null,
     placeholderData: (prev) => prev,
   });
 
@@ -197,10 +297,10 @@ function QuestionsTable({
   return (
     <div className="mb-8 overflow-hidden rounded-sm border border-border-color bg-white">
       <div className="flex items-center justify-between border-b border-border-color bg-slate-50/50 px-6 py-3">
-        <h3 className="font-heading text-[12px] font-bold uppercase tracking-wider text-slate-700">
-          Danh sách câu hỏi thô
+        <h3 className="font-heading text-[16px] font-bold uppercase tracking-wider text-slate-700">
+          Danh sách câu hỏi
         </h3>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">
+        <span className="font-sans text-[12px] font-bold uppercase tracking-widest text-slate-900">
           {totalItems} câu hỏi
         </span>
       </div>
@@ -216,28 +316,28 @@ function QuestionsTable({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50">
-                <th className="border-b border-border-color px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-primary">
+                <th className="border-b border-border-color px-6 py-3 text-[15px] font-bold uppercase tracking-wider text-primary">
                   Câu hỏi
                 </th>
-                <th className="border-b border-border-color px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-primary">
+{/* <th className="border-b border-border-color px-6 py-3 text-[15px] font-bold uppercase tracking-wider text-primary">
                   Nguồn
-                </th>
+                </th> */}
                 <th
-                  className="flex cursor-pointer items-center gap-1 border-b border-border-color px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-blue-50"
+                  className="flex cursor-pointer items-center gap-1 border-b border-border-color px-6 py-3 text-[15px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-blue-50"
                   onClick={toggleSort}
                   title="Đổi thứ tự thời gian"
                 >
                   Thời gian
-                  <span className="material-symbols-outlined text-[14px]">
+                  <span className="material-symbols-outlined text-[16px]">
                     {sortBy === "created_desc" ? "arrow_downward" : "arrow_upward"}
                   </span>
                 </th>
               </tr>
             </thead>
-            <tbody className="text-xs text-slate-700">
+            <tbody className="text-[15px] text-slate-700">
               {questions.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-8 text-center text-slate-400">
+                  <td colSpan={3} className="px-6 py-8 text-center text-slate-900">
                     Không có câu hỏi nào
                   </td>
                 </tr>
@@ -248,10 +348,10 @@ function QuestionsTable({
                     className="border-b border-border-color transition-colors hover:bg-slate-50 last:border-b-0"
                   >
                     <td className="px-6 py-3 leading-relaxed">{q.question}</td>
-                    <td className="px-6 py-3 font-medium text-slate-500">
+{/* <td className="px-6 py-3 font-medium text-slate-500">
                       {q.source?.replace("_", " ") ?? "—"}
-                    </td>
-                    <td className="px-6 py-3 font-mono text-[10px] text-slate-500">
+                    </td> */}
+                    <td className="px-6 py-3 font-sans text-[14px] text-slate-500">
                       {formatDate(q.created_at)}
                     </td>
                   </tr>
@@ -269,18 +369,18 @@ function QuestionsTable({
             type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="text-[10px] font-bold uppercase tracking-widest text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-[14px] font-bold uppercase tracking-widest text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             ← Trang trước
           </button>
-          <span className="font-mono text-[10px] text-slate-500">
+          <span className="font-sans text-[14px] font-bold text-slate-500">
             {page} / {totalPages}
           </span>
           <button
             type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="text-[10px] font-bold uppercase tracking-widest text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-[14px] font-bold uppercase tracking-widest text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             Trang sau →
           </button>
@@ -329,7 +429,7 @@ export function TopicDetailPanel({
           ) : isError ? (
             <div className="flex flex-col items-center gap-4 pt-20 text-center">
               <span className="material-symbols-outlined text-5xl text-red-300">error_outline</span>
-              <p className="text-sm text-slate-500">Không thể tải thông tin chủ đề.</p>
+              <p className="text-base text-slate-500">Không thể tải thông tin chủ đề.</p>
             </div>
           ) : !selectedTopic ? (
             <div className="flex flex-col items-center gap-4 pt-20 text-center">
@@ -337,8 +437,8 @@ export function TopicDetailPanel({
                 <span className="material-symbols-outlined text-4xl text-blue-300">hub</span>
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-500">Chưa có dữ liệu chủ đề</p>
-                <p className="mt-1 max-w-sm text-xs leading-relaxed text-slate-400">
+                <p className="text-base font-medium text-slate-500">Chưa có dữ liệu chủ đề</p>
+                <p className="mt-1 max-w-sm text-sm leading-relaxed text-slate-900">
                   Chạy Pipeline Topic Modeling ở bảng bên trái để bắt đầu phân tích.
                   Hệ thống sẽ tự động trích xuất các chủ đề nổi bật.
                 </p>
@@ -350,32 +450,32 @@ export function TopicDetailPanel({
               <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
                 <div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="border border-border-color bg-slate-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-slate-500">
-                      ID: {selectedTopic.topic_id}
-                    </span>
+                    {/* <span className="border border-border-color bg-slate-100 px-2 py-0.5 font-sans text-[14px] uppercase tracking-widest text-slate-500">
+                      Mã chủ đề: {selectedTopic.topic_id}
+                    </span> */}
                     {selectedTopic.knowledge_updated && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-pink-600">
-                        <span className="material-symbols-outlined text-[10px]">history_edu</span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-pink-600">
+                        <span className="material-symbols-outlined text-[14px]">history_edu</span>
                         Đã cập nhật tri thức
                       </span>
                     )}
                     {selectedTopic.pinned && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-600">
-                        <span className="material-symbols-outlined text-[10px]">push_pin</span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-red-600">
+                        <span className="material-symbols-outlined text-[14px]">push_pin</span>
                         Đã ghim bài lên trang chủ
                       </span>
                     )}
                   </div>
-                  <h1 className="text-2xl font-bold text-slate-900">{selectedTopic.title}</h1>
+                  <h1 className="text-3xl font-bold text-slate-900">{selectedTopic.title}</h1>
                 </div>
                 <div className="flex gap-2">
-                  <button
+                  {/* <button
                     type="button"
                     className="rounded-sm border border-border-color p-2 text-slate-500 transition-colors hover:bg-white"
                     title="Chia sẻ"
                   >
                     <span className="material-symbols-outlined text-xl">share</span>
-                  </button>
+                  </button> */}
                   <button
                     type="button"
                     className="rounded-sm border border-border-color p-2 text-slate-500 transition-colors hover:bg-white"
@@ -384,24 +484,27 @@ export function TopicDetailPanel({
                   >
                     <span className="material-symbols-outlined text-xl">download</span>
                   </button>
-                  <button
+                  {/* <button
                     type="button"
                     className="rounded-sm border border-border-color p-2 text-slate-500 transition-colors hover:bg-white"
                     title="Thêm hành động"
                   >
                     <span className="material-symbols-outlined text-xl">more_horiz</span>
-                  </button>
+                  </button> */}
                 </div>
               </div>
 
               {/* KPI cards */}
-              <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-10">
                 {/* Featured entity */}
-                <div className="rounded-sm border border-white/10 bg-primary p-5">
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/60">
+                <div className="rounded-sm border border-white/10 bg-primary p-5 md:col-span-4 overflow-hidden">
+                  <div className="mb-1 text-[16px] font-bold uppercase tracking-widest text-white/60">
                     Từ khóa nổi bật
                   </div>
-                  <div className="break-all text-2xl font-bold leading-tight text-white">
+                  <div 
+                    className="break-words line-clamp-2 text-3xl font-bold leading-tight text-white"
+                    title={selectedTopic.featured_entity}
+                  >
                     {selectedTopic.featured_entity}
                   </div>
                   {/* <div className="mt-2 font-mono text-[11px] text-white/60">
@@ -413,11 +516,11 @@ export function TopicDetailPanel({
                 </div>
 
                 {/* Confidence */}
-                <div className="rounded-sm border border-border-color bg-white p-5">
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <div className="rounded-sm border border-border-color bg-white p-5 md:col-span-3">
+                  <div className="mb-3 text-[16px] font-bold uppercase tracking-widest text-slate-800">
                     Tỉ lệ xuất hiện của từ khóa
                   </div>
-                  <div className="font-mono text-[24px] font-bold leading-none text-slate-900">
+                  <div className="font-sans text-[26px] font-bold leading-none text-slate-900">
                     {selectedTopic.featured_entity_rate}%
                   </div>
                   <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-100">
@@ -430,10 +533,10 @@ export function TopicDetailPanel({
 
                 {/* Sync */}
                 {/* <div className="rounded-sm border border-border-color bg-white p-5">
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  <div className="mb-1 text-[12px] font-bold uppercase tracking-widest text-slate-900">
                     Đồng bộ cuối
                   </div>
-                  <div className="font-mono text-lg font-bold text-slate-900">
+                  <div className="font-mono text-xl font-bold text-slate-900">
                     {selectedTopic.sync_ago}
                   </div>
                   <div className="mt-2 flex items-center text-[10px] font-bold uppercase tracking-tight text-emerald-600">
@@ -442,11 +545,11 @@ export function TopicDetailPanel({
                   </div>
                 </div> */}
                 {/* Queries */}
-                <div className="rounded-sm border border-border-color bg-white p-5">
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                <div className="rounded-sm border border-border-color bg-white p-5 md:col-span-3">
+                  <div className="mb-6 text-[16px] font-bold uppercase tracking-widest text-slate-900">
                     Số câu hỏi
                   </div>
-                  <div className="font-mono text-lg font-bold text-slate-900">
+                  <div className="font-sans text-[26px] font-bold text-slate-900">
                     {selectedTopic.queries}
                   </div>
                   
@@ -456,17 +559,17 @@ export function TopicDetailPanel({
               {/* Analysis section */}
               <div className="mb-8 rounded-sm border border-border-color bg-white">
                 <div className="flex flex-col items-start justify-between gap-3 border-b border-border-color bg-slate-50/50 px-6 py-3 md:flex-row md:items-center">
-                  <h3 className="font-heading text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                  <h3 className="font-heading text-[14px] font-bold uppercase tracking-wider text-slate-700">
                     Báo cáo Phân tích Chi tiết
                   </h3>
                   {/* Trend view toggle */}
                   <div className="inline-flex rounded-sm border border-border-color bg-white p-0.5">
-                    {(["day", "week", "month"] as TrendView[]).map((v) => (
+                    {(["day", "week"/*, "month"*/] as TrendView[]).map((v) => (
                       <button
                         key={v}
                         type="button"
                         onClick={() => onTrendViewChange(v)}
-                        className={`px-3 py-1 text-[10px] font-bold ${
+                        className={`px-3 py-1 text-[12px] font-bold ${
                           trendView === v
                             ? "rounded-sm bg-primary text-white"
                             : "text-slate-500 hover:bg-slate-50"
@@ -482,14 +585,14 @@ export function TopicDetailPanel({
                   <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                     {/* Left: keywords + sources */}
                     <div>
-                      <h4 className="mb-4 font-heading text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                      <h4 className="mb-4 font-heading text-[16px] font-bold uppercase tracking-widest text-slate-900">
                         Từ khóa chính
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedTopic.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600"
+                            className="break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[13px] font-medium text-slate-600"
                             title={`Từ khóa: ${tag}`}
                           >
                             {tag}
@@ -497,27 +600,27 @@ export function TopicDetailPanel({
                         ))}
                       </div>
 
-                      <div className="mt-8">
-                        <h4 className="mb-4 font-heading text-[11px] font-bold uppercase tracking-widest text-slate-400">
+{/* <div className="mt-8">
+                        <h4 className="mb-4 font-heading text-[16px] font-bold uppercase tracking-widest text-slate-900">
                           Nguồn dữ liệu trích xuất
                         </h4>
                         <div className="space-y-2">
                           {selectedTopic.sources.map((source) => (
                             <div
                               key={source.label}
-                              className="flex items-center justify-between rounded-sm border border-border-color bg-slate-50 p-2 text-xs"
+                              className="flex items-center justify-between rounded-sm border border-border-color bg-slate-50 p-2 text-sm"
                             >
                               <span className="text-slate-700">{source.label}</span>
-                              <span className="font-mono text-slate-500">{source.percent}</span>
+                                <span className="font-sans font-bold text-slate-500">{source.percent}</span>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </div> */}
                     </div>
 
                     {/* Right: trend + sentiment */}
                     <div>
-                      <h4 className="mb-4 font-heading text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                      <h4 className="mb-4 font-heading text-[16px] font-bold uppercase tracking-widest text-slate-900">
                         Xu hướng truy vấn
                       </h4>
                       <TrendChart
@@ -528,12 +631,12 @@ export function TopicDetailPanel({
                       />
 
                       <div className="mt-8">
-                        <h4 className="mb-4 font-heading text-[11px] font-bold uppercase tracking-widest text-slate-400">
-                          Phân tích sắc thái (Sentiment)
+                        <h4 className="mb-4 font-heading text-[16px] font-bold uppercase tracking-widest text-slate-900">
+                          Tỉ lệ cảm xúc
                         </h4>
                         <div className="flex flex-col gap-4 sm:flex-row">
                           <div className="flex-1">
-                            <div className="mb-1 flex justify-between text-[10px] font-bold">
+                            <div className="mb-1 flex justify-between text-[12px] font-bold">
                               <span>TÍCH CỰC</span>
                               <span>{selectedTopic.sentiment.positive}%</span>
                             </div>
@@ -545,7 +648,7 @@ export function TopicDetailPanel({
                             </div>
                           </div>
                           <div className="flex-1">
-                            <div className="mb-1 flex justify-between text-[10px] font-bold">
+                            <div className="mb-1 flex justify-between text-[12px] font-bold">
                               <span>TRUNG TÍNH</span>
                               <span>{selectedTopic.sentiment.neutral}%</span>
                             </div>
@@ -574,12 +677,12 @@ export function TopicDetailPanel({
       </div>
 
       {/* Bottom action bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-end gap-3 border-t border-border-color bg-white/80 p-2 pb-1.5 backdrop-blur-md">
+      <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-center gap-3 border-t border-border-color bg-white/80 p-2 pb-1.5 backdrop-blur-md">
         <button
           type="button"
           onClick={onPinTopic}
           disabled={isPinning || isLoading || !selectedTopic}
-          className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-xs font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
           title={selectedTopic?.pinned ? "Bỏ ghim bài" : "Ghim bài viết lên trang chủ"}
         >
           {isPinning && (
@@ -591,7 +694,7 @@ export function TopicDetailPanel({
           type="button"
           onClick={onUpdateKnowledge}
           disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
-          className="inline-flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-lg transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
           title={
             selectedTopic?.knowledge_updated
               ? "Bỏ đánh dấu cập nhật tri thức"

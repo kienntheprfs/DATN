@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MissingInMapActionDialog } from "./MissingInMapActionDialog";
+import { MissingInMapDetailModal } from "./MissingInMapDetailModal";
 import { MissingInMapControls } from "./MissingInMapControls";
 import { MissingInMapPagination } from "./MissingInMapPagination";
 import { MissingInMapRouteTable } from "./MissingInMapRouteTable";
@@ -16,19 +18,33 @@ import type {
   Status,
   StatusFilterOption,
   TabKey,
+  TimeFilter,
+  TimeFilterOption,
 } from "./MissingInMapTypes";
 import { missingInMapApi } from "@/services";
 
 const PAGE_SIZE = 5;
 const ROUTE_STATUS_OPTIONS: StatusFilterOption[] = [
   { value: "ALL", label: "Tất cả trạng thái" },
-  { value: "PENDING", label: "PENDING" },
-  { value: "RESOLVED", label: "ĐÃ XỬ LÝ" },
+  { value: "PENDING", label: "Chờ xử lý" },
+  { value: "RESOLVED", label: "Đã xử lý" },
+  { value: "REMOVED", label: "Đã loại bỏ" },
+];
+
+const TIME_FILTER_OPTIONS: TimeFilterOption[] = [
+  { value: "all", label: "Tất cả thời gian" },
+  { value: "1d", label: "Trong 24 giờ qua" },
+  { value: "1w", label: "Trong 1 tuần qua" },
+  { value: "2w", label: "Trong 2 tuần qua" },
+  { value: "1m", label: "Trong 1 tháng qua" },
 ];
 
 function mapRouteStatus(status: string): Status {
   if (status === "resolved") {
     return "RESOLVED";
+  }
+  if (status === "rejected") {
+    return "REMOVED";
   }
   return "PENDING";
 }
@@ -66,11 +82,14 @@ type MissingInMapRoutePanelProps = {
 
 export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapRoutePanelProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | Status>("ALL");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("1m");
   const [currentPage, setCurrentPage] = useState(1);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [detailRow, setDetailRow] = useState<RouteRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const routesQuery = useQuery({
@@ -98,8 +117,9 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
     },
   });
 
-  const deleteRouteMutation = useMutation({
-    mutationFn: (id: number) => missingInMapApi.deleteRoute(id),
+  const updateRouteStatusMutation = useMutation({
+    mutationFn: ({ id, status, note }: { id: number; status: any; note?: string }) =>
+      missingInMapApi.updateRouteStatus(id, status, note),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["missing-routes"] }),
@@ -127,8 +147,10 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const now = new Date();
 
     return rows.filter((row) => {
+      // Search filter
       const matchesSearch =
         query.length === 0 ||
         row.id.toLowerCase().includes(query) ||
@@ -137,10 +159,29 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
         row.reportedBy.toLowerCase().includes(query) ||
         row.reason.toLowerCase().includes(query);
 
+      // Status filter
       const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
-      return matchesSearch && matchesStatus;
+
+      // Time filter
+      let matchesTime = true;
+      if (timeFilter !== "all") {
+        // We need to use the original data's createdAt for accurate filtering
+        const originalItem = routesQuery.data?.find((item) => item.id === row.rowId);
+        if (originalItem?.created_at) {
+          const createdAt = new Date(originalItem.created_at);
+          const diffMs = now.getTime() - createdAt.getTime();
+          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+          if (timeFilter === "1d") matchesTime = diffDays <= 1;
+          else if (timeFilter === "1w") matchesTime = diffDays <= 7;
+          else if (timeFilter === "2w") matchesTime = diffDays <= 14;
+          else if (timeFilter === "1m") matchesTime = diffDays <= 30;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesTime;
     });
-  }, [rows, search, statusFilter]);
+  }, [rows, search, statusFilter, timeFilter, routesQuery.data]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, pageCount);
@@ -161,7 +202,7 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
     pending: routeStatsQuery.data?.pending ?? 0,
     resolved: routeStatsQuery.data?.resolved ?? 0,
     inProgress: 0,
-    removed: 0,
+    removed: routeStatsQuery.data?.rejected ?? 0,
   };
 
   const actionMeta = useMemo(() => getActionMeta(pendingAction), [pendingAction]);
@@ -175,15 +216,21 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
 
     try {
       if (pendingAction.type === "draw-route") {
-        await resolveRouteMutation.mutateAsync({
+        await updateRouteStatusMutation.mutateAsync({
           id: pendingAction.rowId,
+          status: "resolved",
           note: "Đã vẽ và đồng bộ tuyến đường vào dữ liệu bản đồ.",
         });
         toast.success("Đã cập nhật tuyến đường thành công.");
+        router.push("/navigation/editor");
       }
 
       if (pendingAction.type === "remove") {
-        await deleteRouteMutation.mutateAsync(pendingAction.rowId);
+        await updateRouteStatusMutation.mutateAsync({
+          id: pendingAction.rowId,
+          status: "rejected",
+          note: "Đã loại bỏ theo xác nhận của quản trị viên.",
+        });
         toast.success("Đã loại bỏ yêu cầu thành công.");
       }
 
@@ -194,7 +241,7 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
     }
   }
 
-  const isSubmitting = resolveRouteMutation.isPending || deleteRouteMutation.isPending;
+  const isSubmitting = updateRouteStatusMutation.isPending;
   const isLoading = routesQuery.isLoading || routeStatsQuery.isLoading;
 
   return (
@@ -207,6 +254,8 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
           search={search}
           statusFilter={statusFilter}
           statusOptions={ROUTE_STATUS_OPTIONS}
+          timeFilter={timeFilter}
+          timeOptions={TIME_FILTER_OPTIONS}
           rangeStart={rangeStart}
           rangeEnd={rangeEnd}
           totalResults={filteredRows.length}
@@ -218,6 +267,10 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
           }}
           onStatusFilterChange={(value) => {
             setStatusFilter(value);
+            setCurrentPage(1);
+          }}
+          onTimeFilterChange={(value) => {
+            setTimeFilter(value);
             setCurrentPage(1);
           }}
         />
@@ -247,6 +300,7 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
             isLoading={routesQuery.isLoading}
             onDrawRoute={(row) => setPendingAction({ rowId: row.rowId, displayId: row.id, type: "draw-route" })}
             onRemove={(row) => setPendingAction({ rowId: row.rowId, displayId: row.id, type: "remove" })}
+            onRowClick={(row) => setDetailRow(row)}
           />
         </div>
 
@@ -269,6 +323,13 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
         isSubmitting={isSubmitting}
         onClose={() => setPendingAction(null)}
         onConfirm={confirmAction}
+      />
+
+      <MissingInMapDetailModal
+        isOpen={!!detailRow}
+        onClose={() => setDetailRow(null)}
+        data={detailRow}
+        type="route"
       />
     </>
   );

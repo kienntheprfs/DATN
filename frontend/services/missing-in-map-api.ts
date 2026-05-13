@@ -1,7 +1,7 @@
 import { apiClient } from "./auth-api";
 
-export type MissingLocationStatus = "pending" | "approved" | "resolved" | "rejected";
-export type MissingRouteStatus = "pending" | "resolved";
+ export type MissingLocationStatus = "pending" | "approved" | "resolved" | "rejected";
+ export type MissingRouteStatus = "pending" | "resolved" | "rejected";
 
 export type MissingLocationItem = {
   id: number;
@@ -92,6 +92,16 @@ export const missingInMapApi = {
     return response.data;
   },
 
+  updateLocationStatus: async (id: number, status: MissingLocationStatus, admin_note?: string) => {
+    const response = await apiClient.patch<MissingLocationItem>(`/wayfinder/api/missing-locations/${id}/status`, null, {
+      params: {
+        status,
+        ...(admin_note ? { admin_note } : {}),
+      },
+    });
+    return response.data;
+  },
+
   listRoutes: async (params?: {
     status?: MissingRouteStatus;
     building?: string;
@@ -120,6 +130,37 @@ export const missingInMapApi = {
 
   deleteRoute: async (id: number) => {
     const response = await apiClient.delete<{ message: string }>(`/wayfinder/api/missing-routes/${id}`);
+    return response.data;
+  },
+
+  updateRoute: async (
+    id: number,
+    payload: Partial<{
+      status: MissingRouteStatus;
+      resolved_note: string;
+      resolved_by: string;
+      resolved_at: string;
+      reported_by: string;
+      reason: string;
+      start_name: string;
+      start_building: string;
+      start_floor: number;
+      end_name: string;
+      end_building: string;
+      end_floor: number;
+    }>
+  ) => {
+    const response = await apiClient.patch<MissingRouteItem>(`/wayfinder/api/missing-routes/${id}`, payload);
+    return response.data;
+  },
+
+  updateRouteStatus: async (id: number, status: MissingRouteStatus, resolved_note?: string) => {
+    const response = await apiClient.patch<MissingRouteItem>(`/wayfinder/api/missing-routes/${id}/status`, null, {
+      params: {
+        status,
+        ...(resolved_note ? { resolved_note } : {}),
+      },
+    });
     return response.data;
   },
 };

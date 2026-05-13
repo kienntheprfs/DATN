@@ -1,4 +1,4 @@
-import type { Status, StatusFilterOption, TabKey } from "./MissingInMapTypes";
+import type { Status, StatusFilterOption, TabKey, TimeFilter, TimeFilterOption } from "./MissingInMapTypes";
 
 type MissingInMapControlsProps = {
   activeTab: TabKey;
@@ -7,6 +7,8 @@ type MissingInMapControlsProps = {
   search: string;
   statusFilter: "ALL" | Status;
   statusOptions: StatusFilterOption[];
+  timeFilter: TimeFilter;
+  timeOptions: TimeFilterOption[];
   rangeStart: number;
   rangeEnd: number;
   totalResults: number;
@@ -14,6 +16,7 @@ type MissingInMapControlsProps = {
   onTabChange: (tab: TabKey) => void;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: "ALL" | Status) => void;
+  onTimeFilterChange: (value: TimeFilter) => void;
 };
 
 export function MissingInMapControls({
@@ -23,6 +26,8 @@ export function MissingInMapControls({
   search,
   statusFilter,
   statusOptions,
+  timeFilter,
+  timeOptions,
   rangeStart,
   rangeEnd,
   totalResults,
@@ -30,6 +35,7 @@ export function MissingInMapControls({
   onTabChange,
   onSearchChange,
   onStatusFilterChange,
+  onTimeFilterChange,
 }: MissingInMapControlsProps) {
   const rangeLabel = isLoading ? "--" : `${rangeStart}-${rangeEnd}`;
   const totalLabel = isLoading ? "--" : totalResults;
@@ -88,6 +94,17 @@ export function MissingInMapControls({
             className="border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:outline-none"
           >
             {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={timeFilter}
+            onChange={(event) => onTimeFilterChange(event.target.value as TimeFilter)}
+            className="border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:outline-none"
+          >
+            {timeOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

@@ -57,7 +57,7 @@ async def list_admin_pinned_posts(
 ) -> PinnedPostAdminListResponse:
     """Return paginated pinned posts for admin table and cards."""
     _require_user_id(x_user_id)
-    _require_admin(x_user_roles)
+    # _require_admin(x_user_roles)
 
     params = PinnedPostAdminListParams(
         page=page,

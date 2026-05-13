@@ -41,4 +41,4 @@ export const statusBadgeLabel: Record<TopicStatus, string> = {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-export const formatQueries = (value: number) => `${value.toLocaleString("en-US")} Câu hỏi`;
+export const formatQueries = (value: number) => `${value.toLocaleString("vi-VN")} Câu hỏi`;

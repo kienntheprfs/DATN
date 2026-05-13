@@ -5,6 +5,22 @@ import { authService } from '@/services/auth-api'
 import { agentClient } from '@/services/agent'
 import { wayfindingMapApi } from '@/services/wayfinding-map-api'
 
+const fetchWithBackoff = async <T>(fn: () => Promise<T>, retries = 5, initialDelay = 1000): Promise<T> => {
+  let lastError: any;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (i < retries - 1) {
+        const delay = initialDelay * Math.pow(2, i);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+};
+
 const MOCK_USERS = [
   { name: "Nguyễn Văn A", email: "nguyen.van.a@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=nguyenvana" },
   { name: "Trần Thị Bảo Trân", email: "tran.thi.bao.tran@hcmut.edu.vn", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=baotran" },
@@ -18,6 +34,7 @@ export const useAppStore = create<AppState>()(
       history: [],
       isLoadingHistory: false,
       hasMoreHistory: true,
+      isErrorHistory: false,
       currentPage: 1,
 
       // Maps
@@ -70,9 +87,9 @@ export const useAppStore = create<AppState>()(
         const state = get();
         // Prevent concurrent refresh; keep existing history visible while fetching
         if (state.isLoadingHistory) return;
-        set({ isLoadingHistory: true, currentPage: 1, hasMoreHistory: true });
+        set({ isLoadingHistory: true, isErrorHistory: false, currentPage: 1, hasMoreHistory: true });
         try {
-          const response = await agentClient.getThreads(5, 0);
+          const response = await fetchWithBackoff(() => agentClient.getThreads(5, 0));
           const newFetchedItems: HistoryItem[] = response.items.map((thread) => ({
             id: thread.id,
             title: thread.title || "Cuộc trò chuyện mới",
@@ -84,11 +101,12 @@ export const useAppStore = create<AppState>()(
             history: newFetchedItems,
             currentPage: 2,
             isLoadingHistory: false,
-            hasMoreHistory: response.items.length === 5
+            hasMoreHistory: response.items.length === 5,
+            isErrorHistory: false
           });
         } catch (error) {
-          console.error("Lỗi khi tải lịch sử:", error);
-          set({ isLoadingHistory: false });
+          console.error("Lỗi khi tải lịch sử (sau 10 lần thử):", error);
+          set({ isLoadingHistory: false, isErrorHistory: true });
         }
       },
 
@@ -97,12 +115,9 @@ export const useAppStore = create<AppState>()(
         const state = get();
         
         if (state.isLoadingHistory || !state.hasMoreHistory) return;
-
-        set({ isLoadingHistory: true });
-
+        set({ isLoadingHistory: true, isErrorHistory: false });
         try {
-            const response = await agentClient.getThreads(5, (state.currentPage - 1) * 5);
-            
+            const response = await fetchWithBackoff(() => agentClient.getThreads(5, (state.currentPage - 1) * 5));
             const newFetchedItems: HistoryItem[] = response.items.map((thread) => ({
               id: thread.id,
               title: thread.title || "Cuộc trò chuyện mới",
@@ -115,12 +130,13 @@ export const useAppStore = create<AppState>()(
                 history: [...prevState.history, ...newFetchedItems],
                 currentPage: prevState.currentPage + 1,
                 isLoadingHistory: false,
-                hasMoreHistory: response.items.length === 5
+                hasMoreHistory: response.items.length === 5,
+                isErrorHistory: false
             }));
 
         } catch (error) {
-            console.error("Lỗi khi tải lịch sử:", error);
-            set({ isLoadingHistory: false });
+            console.error("Lỗi khi tải thêm lịch sử (sau 10 lần thử):", error);
+            set({ isLoadingHistory: false, isErrorHistory: true });
         }
       },
 

@@ -58,7 +58,7 @@ export function AdminSidebar() {
               <span className="material-symbols-outlined text-white text-[20px]">school</span>
             </div>
             <div>
-              <h1 className="font-heading font-semibold text-[14px] leading-tight text-white mb-0">Academic Nexus</h1>
+              <h1 className="font-heading font-semibold text-[14px] leading-tight text-white mb-0">Hệ thống BK-TBOT</h1>
               <p className="text-xs text-blue-200 font-display mt-0">Hệ thống Tra cứu</p>
             </div>
           </div>

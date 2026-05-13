@@ -9,6 +9,7 @@ export interface AppState {
   history: HistoryItem[];
   isLoadingHistory: boolean; // Đang chờ API trả về hay không
   hasMoreHistory: boolean;   // Backend báo còn data để tải nữa không?
+  isErrorHistory: boolean;   // Có lỗi khi tải lịch sử hay không
   currentPage: number;       // Đang ở trang mấy
 
   // Bản đồ
