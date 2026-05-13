@@ -15,8 +15,8 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5433/authdb"
-    db_pool_size: int = 10  # Number of connections in the pool
-    db_max_overflow: int = 20  # Max connections that can be created beyond pool_size
+    db_pool_size: int = 50  # Number of connections in the pool
+    db_max_overflow: int = 100  # Max connections that can be created beyond pool_size
     db_pool_timeout: float = 30.0  # Seconds to wait for a connection from the pool
     db_pool_recycle: int = (
         3600  # Recycle connections after N seconds (prevent stale connections)
