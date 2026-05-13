@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sơ đồ Mặt bằng Tòa nhà</title>
+    <style>
+        :root {
+            /* Tông màu nền và tường */
+            --bg-color: #ffffff;
+            --wall-color: #1e293b;
+            --corridor-color: #ffffff;
+
+            /* Tông màu phòng (pastel tinh tế) */
+            --room-blue: #dbeafe;
+            /* Dãy phòng, Phòng nhỏ */
+            --room-orange: #ffedd5;
+            /* Thang máy */
+            --room-purple: #f3e8ff;
+            /* Nhà vệ sinh */
+            --stair-bg: #f1f5f9;
+            /* Cầu thang */
+            --text-color: #334155;
+            --door-leaf: #d97706;
+            /* Màu cánh cửa gỗ */
+        }
+
+        body {
+            margin: 0;
+            padding: 80px 20px;
+            background-color: var(--bg-color);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 100px;
+        }
+
+        .floor-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 1000px;
+            /* Chiều rộng chuẩn */
+        }
+
+        .floor-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--wall-color);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        /* --- Khung chính của bản đồ --- */
+        .plan {
+            position: relative;
+            width: 100%;
+            height: 350px;
+            /* Chiều cao tổng thể */
+            background-color: var(--corridor-color);
+            border: 8px solid var(--wall-color);
+            border-radius: 16px;
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+            /* Giữ mọi thứ trong viền */
+        }
+
+        /* Nhãn Hành lang */
+        .corridor-label {
+            position: absolute;
+            top: 155px;
+            /* Căn giữa dọc */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 20px;
+            font-weight: 600;
+            color: #94a3b8;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* --- Component Phòng chung --- */
+        .room {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-color);
+            text-align: center;
+            box-sizing: border-box;
+            box-shadow: inset 0 -4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            z-index: 2;
+        }
+
+        .room:hover {
+            box-shadow: inset 0 -4px 15px rgba(0, 0, 0, 0.1), 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Tiện ích vẽ Tường (Borders) */
+        .b-top {
+            border-top: 8px solid var(--wall-color);
+        }
+
+        .b-right {
+            border-right: 8px solid var(--wall-color);
+        }
+
+        .b-bottom {
+            border-bottom: 8px solid var(--wall-color);
+        }
+
+        .b-left {
+            border-left: 8px solid var(--wall-color);
+        }
+
+        /* Màu sắc phòng */
+        .type-office {
+            background-color: var(--room-blue);
+        }
+
+        .type-elevator {
+            background-color: var(--room-orange);
+        }
+
+        .type-wc {
+            background-color: var(--room-purple);
+        }
+
+        .type-stairs {
+            background-color: var(--stair-bg);
+            padding: 0;
+        }
+
+        /* ================= VỊ TRÍ TẦNG 1 (BẢN ĐỒ TRÊN) ================= */
+        /* Hàng trên */
+        .t1-thangbo {
+            left: 0;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t1-thangmay {
+            left: 180px;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t1-nvs1 {
+            left: 280px;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t1-nvs2 {
+            left: 700px;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t1-cauthang {
+            right: 0;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        /* Hàng dọc bên trái */
+        .t1-phongnho1 {
+            left: 0;
+            top: 110px;
+            width: 100px;
+            height: 120px;
+        }
+
+        /* Hàng dưới */
+        .t1-phongdacbiet {
+            left: 0;
+            bottom: 0;
+            width: 180px;
+            height: 130px;
+        }
+
+        .t1-phongnho2 {
+            left: 180px;
+            bottom: 0;
+            width: 100px;
+            height: 130px;
+        }
+
+        .t1-dayphong {
+            left: 280px;
+            bottom: 0;
+            width: 720px;
+            height: 130px;
+        }
+
+        /* ================= VỊ TRÍ TẦNG TRỆT (BẢN ĐỒ DƯỚI) ================= */
+        .t0-thangbo {
+            left: 0;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t0-thangmay {
+            left: 180px;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t0-cauthang {
+            right: 0;
+            top: 0;
+            width: 100px;
+            height: 110px;
+        }
+
+        .t0-dayphong {
+            left: 180px;
+            bottom: 0;
+            width: 820px;
+            height: 130px;
+        }
+
+        /* --- Cửa (Doors) --- */
+        .door-symbol {
+            position: absolute;
+            z-index: 10;
+        }
+
+        /* SVG Styles chung */
+        .stair-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
+        }
+
+        .stair-block {
+            fill: #e2e8f0;
+            stroke: #94a3b8;
+            stroke-width: 1.5;
+        }
+
+        .stair-line {
+            stroke: #94a3b8;
+            stroke-width: 1.5;
+        }
+
+        .icon {
+            margin-top: 6px;
+            color: #475569;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ================= BẢN ĐỒ TRÊN (TẦNG 1) ================= -->
+    <div class="floor-wrapper">
+        <div class="floor-title">Mặt bằng Tầng 1</div>
+        <div class="plan">
+            <div class="corridor-label">Hành lang</div>
+
+            <!-- Hàng trên -->
+            <div class="room type-stairs b-right b-bottom t1-thangbo">
+                <span style="position: absolute; top: 8px;">Thang bộ</span>
+                <svg class="stair-svg" viewBox="0 0 100 110" style="margin-top: 15px;">
+                    <g transform="translate(10, 10)">
+                        <rect x="0" y="0" width="80" height="80" class="stair-block" />
+                        <line x1="0" y1="16" x2="80" y2="16" class="stair-line" />
+                        <line x1="0" y1="32" x2="80" y2="32" class="stair-line" />
+                        <line x1="0" y1="48" x2="80" y2="48" class="stair-line" />
+                        <line x1="0" y1="64" x2="80" y2="64" class="stair-line" />
+                    </g>
+                </svg>
+            </div>
+
+            <div class="room type-elevator b-left b-right b-bottom t1-thangmay">
+                Thang máy
+                <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    class="icon">
+                    <rect x="3" y="2" width="18" height="20" rx="2" />
+                    <line x1="12" y1="2" x2="12" y2="22" />
+                    <polyline points="8,9 12,5 16,9" />
+                    <polyline points="8,15 12,19 16,15" />
+                </svg>
+            </div>
+
+            <div class="room type-wc b-right b-bottom t1-nvs1">
+                Nhà vệ sinh
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    class="icon">
+                    <path d="M9 3v15M15 3v15M3 18h18M5 10a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v8H5v-8z" />
+                </svg>
+            </div>
+
+            <div class="room type-wc b-left b-right b-bottom t1-nvs2">
+                Nhà vệ sinh
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    class="icon">
+                    <path d="M9 3v15M15 3v15M3 18h18M5 10a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v8H5v-8z" />
+                </svg>
+            </div>
+
+            <div class="room type-stairs b-left b-bottom t1-cauthang">
+                <span style="position: absolute; top: 8px;">Cầu thang</span>
+                <svg class="stair-svg" viewBox="0 0 100 110" style="margin-top: 15px;">
+                    <g transform="translate(10, 10)">
+                        <rect x="0" y="0" width="80" height="80" class="stair-block" />
+                        <line x1="0" y1="16" x2="80" y2="16" class="stair-line" />
+                        <line x1="0" y1="32" x2="80" y2="32" class="stair-line" />
+                        <line x1="0" y1="48" x2="80" y2="48" class="stair-line" />
+                        <line x1="0" y1="64" x2="80" y2="64" class="stair-line" />
+                    </g>
+                </svg>
+            </div>
+
+            <!-- Cột trái giữa -->
+            <div class="room type-office b-right b-bottom t1-phongnho1">Phòng nhỏ</div>
+
+            <!-- Hàng dưới -->
+            <div class="room type-office b-right b-top t1-phongdacbiet">Phòng đặc biệt</div>
+            <div class="room type-office b-right b-top t1-phongnho2">Phòng nhỏ</div>
+            <div class="room type-office b-top t1-dayphong">Dãy phòng</div>
+        </div>
+    </div>
+
+
+    <!-- ================= BẢN ĐỒ DƯỚI (TẦNG TRỆT) ================= -->
+    <div class="floor-wrapper">
+        <div class="floor-title">Mặt bằng Tầng Trệt</div>
+        <div class="plan">
+            <div class="corridor-label">Hàng lang</div>
+
+            <!-- Các khối phòng -->
+            <div class="room type-stairs b-right b-bottom t0-thangbo">
+                <span style="position: absolute; top: 8px;">Thang bộ</span>
+                <svg class="stair-svg" viewBox="0 0 100 110" style="margin-top: 15px;">
+                    <g transform="translate(10, 10)">
+                        <rect x="0" y="0" width="80" height="80" class="stair-block" />
+                        <line x1="0" y1="16" x2="80" y2="16" class="stair-line" />
+                        <line x1="0" y1="32" x2="80" y2="32" class="stair-line" />
+                        <line x1="0" y1="48" x2="80" y2="48" class="stair-line" />
+                        <line x1="0" y1="64" x2="80" y2="64" class="stair-line" />
+                    </g>
+                </svg>
+            </div>
+
+            <div class="room type-elevator b-left b-right b-bottom t0-thangmay">
+                Thang máy
+                <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    class="icon">
+                    <rect x="3" y="2" width="18" height="20" rx="2" />
+                    <line x1="12" y1="2" x2="12" y2="22" />
+                    <polyline points="8,9 12,5 16,9" />
+                    <polyline points="8,15 12,19 16,15" />
+                </svg>
+            </div>
+
+            <div class="room type-stairs b-left b-bottom t0-cauthang">
+                <span style="position: absolute; top: 8px;">Cầu thang</span>
+                <svg class="stair-svg" viewBox="0 0 100 110" style="margin-top: 15px;">
+                    <g transform="translate(10, 10)">
+                        <rect x="0" y="0" width="80" height="80" class="stair-block" />
+                        <line x1="0" y1="16" x2="80" y2="16" class="stair-line" />
+                        <line x1="0" y1="32" x2="80" y2="32" class="stair-line" />
+                        <line x1="0" y1="48" x2="80" y2="48" class="stair-line" />
+                        <line x1="0" y1="64" x2="80" y2="64" class="stair-line" />
+                    </g>
+                </svg>
+            </div>
+
+            <div class="room type-office b-top b-left t0-dayphong">Dãy phòng</div>
+
+            <!-- Cửa Trái (Bản lề góc dưới, xoay 180 độ) -->
+            <div class="door-symbol"
+                style="left: -8px; bottom: 50px; width: 100px; height: 100px; transform: rotate(90deg);">
+                <svg width="100" height="100" viewBox="0 0 100 100">
+                    <path d="M12.5,12.5 A75,75 0 0,1 87.5,87.5" fill="rgba(59, 130, 246, 0.05)" stroke="#94a3b8"
+                        stroke-width="2" stroke-dasharray="4,4" />
+                    <rect x="9.5" y="12.5" width="6" height="75" fill="var(--door-leaf)" rx="3" />
+                    <circle cx="12.5" cy="87.5" r="5" fill="#1e293b" />
+                    <text x="45" y="55" font-family="'SF Pro Display', sans-serif" font-size="14" font-weight="700"
+                        fill="#94a3b8" text-anchor="middle" transform="rotate(-90 45 55)">CỬA</text>
+                </svg>
+            </div>
+
+            <!-- Cửa Phải (Bản lề góc dưới, xoay 180 độ) -->
+            <div class="door-symbol"
+                style="right: -8px; bottom: 120px; width: 100px; height: 100px; transform: rotate(270deg);">
+                <svg width="100" height="100" viewBox="0 0 100 100">
+                    <path d="M87.5,12.5 A75,75 0 0,0 12.5,87.5" fill="rgba(59, 130, 246, 0.05)" stroke="#94a3b8"
+                        stroke-width="2" stroke-dasharray="4,4" />
+                    <rect x="84.5" y="12.5" width="6" height="75" fill="var(--door-leaf)" rx="3" />
+                    <circle cx="87.5" cy="87.5" r="5" fill="#1e293b" />
+                    <text x="55" y="55" font-family="'SF Pro Display', sans-serif" font-size="14" font-weight="700"
+                        fill="#94a3b8" text-anchor="middle" transform="rotate(90 55 55)">CỬA</text>
+                </svg>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+
+</html>

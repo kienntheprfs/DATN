@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech Stack Icons</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f3f5;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            /* Hiển thị 2 cục mỗi hàng cho cân đối với 4 cục */
+            gap: 30px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                /* 1 cục trên màn hình nhỏ */
+            }
+        }
+
+        /* Styling cho từng cục (container) 4 icon */
+        .tech-block {
+            background-color: #fff;
+            border: 1px solid #e1e8ed;
+            border-radius: 16px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            /* 4 ô icon trong mỗi cục */
+            gap: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            justify-items: center;
+            align-items: center;
+        }
+
+        .tech-block:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+            border-color: #cbd5e1;
+        }
+
+        /* Styling cho từng ô chứa icon */
+        .tech-icon {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 65px;
+            height: 65px;
+        }
+
+        /* Đảm bảo icon vừa vặn và giữ tỷ lệ */
+        .tech-icon img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            filter: grayscale(15%);
+            transition: filter 0.3s ease, transform 0.2s ease;
+        }
+
+        .tech-icon:hover img {
+            filter: grayscale(0%);
+            transform: scale(1.1);
+            /* Phóng to nhẹ icon khi di chuột thẳng vào nó */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-container">
+        <!-- Nhóm 1: Frontend & Storage -->
+        <div class="tech-block">
+            <div class="tech-icon" title="Next.js"><img src="images/nextjs.png" alt="Next.js"></div>
+            <div class="tech-icon" title="Flutter"><img src="images/flutter.png" alt="Flutter"></div>
+            <div class="tech-icon" title="Azure SQL"><img src="images/azuresql.png" alt="Azure SQL"></div>
+            <div class="tech-icon" title="Backblaze"><img src="images/backblaze_jur1.jpg" alt="Backblaze"></div>
+        </div>
+
+        <!-- Nhóm 2: Core AI & RAG -->
+        <div class="tech-block">
+            <div class="tech-icon" title="LightRAG"><img src="images/lightRAG.png" alt="LightRAG"></div>
+            <div class="tech-icon" title="LangGraph"><img src="images/langgraph.png" alt="LangGraph"></div>
+            <div class="tech-icon" title="AI Model"><img src="images/aimodel.png" alt="AI Model"></div>
+            <div class="tech-icon" title="Embedding Model"><img src="images/embedding.svg" alt="Embedding"></div>
+        </div>
+
+        <!-- Nhóm 3: Voice & Tối ưu hóa -->
+        <div class="tech-block">
+            <div class="tech-icon" title="Pipecat"><img src="images/pipecat.png" alt="Pipecat"></div>
+            <div class="tech-icon" title="Cartesia"><img src="images/cartesia.png" alt="Cartesia"></div>
+            <div class="tech-icon" title="Tavily Search"><img src="images/tavily.png" alt="Tavily"></div>
+            <div class="tech-icon" title="Qdrant DB"><img src="images/qdrant.png" alt="Qdrant"></div>
+        </div>
+
+        <!-- Nhóm 4: Ops & Background Tasks -->
+        <div class="tech-block">
+            <div class="tech-icon" title="Celery"><img src="images/celery.png" alt="Celery"></div>
+            <div class="tech-icon" title="Docker"><img src="images/docker.png" alt="Docker"></div>
+            <!-- Để trống 2 ô cuối, CSS Grid sẽ tự động dồn trái rất đẹp -->
+            <div></div>
+            <div></div>
+        </div>
+    </div>
+
+</body>
+
+</html>

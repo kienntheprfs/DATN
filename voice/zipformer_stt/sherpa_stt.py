@@ -43,6 +43,11 @@ class SherpaSTTService(SegmentedSTTService):
         sample_rate: int = 16000,
         **kwargs,
     ):
+        # Initialize settings with model and language to satisfy validate_complete()
+        from pipecat.services.settings import STTSettings
+        if "settings" not in kwargs:
+            kwargs["settings"] = STTSettings(model=str(model), language="vi")
+            
         super().__init__(**kwargs)
         self._sample_rate = sample_rate
         self._device = device

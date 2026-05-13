@@ -19,7 +19,7 @@ interface UnifiedMapViewProps {
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
-const FLOOR_SPACING = 300;
+const FLOOR_SPACING = 180;
 
 export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
   floorMaps,
@@ -85,7 +85,7 @@ export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
   // Custom transform logic to keep the focused floor centered
   // In 3D, we want the stack to be slightly smaller and tilted.
   const containerTransform = is3D
-    ? `scale(${scale * 0.7}) rotateX(60deg) rotateZ(-45deg)`
+    ? `scale(${scale * 0.75}) rotateX(65deg) rotateZ(-45deg)`
     : `translate(${position?.x || 0}px, ${position?.y || 0}px) scale(${scale})`;
 
   return (

@@ -53,10 +53,12 @@ interface UseChatReturn {
 	clearVoiceTools: () => void;
 	stop: () => void;
 	isLoading: boolean;
+	isHistoryLoading: boolean;
 	isTyping: boolean;
 	currentTools: ToolCall[];
 	error: string | null;
 	threadId: string;
+	threadTitle: string | null;
 }
 
 interface BackendMessage {
@@ -75,10 +77,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 	const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
 	const [isLoading, setIsLoading] = useState(false);
+	const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 	const [isTyping, setIsTyping] = useState(false);
 	const [currentTools, setCurrentTools] = useState<ToolCall[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [threadId, setThreadId] = useState<string>(() => initialThreadId || "");
+	const [threadTitle, setThreadTitle] = useState<string | null>(null);
 
 	const abortControllerRef = useRef<AbortController | null>(null);
 	const processingRef = useRef(false);
@@ -126,8 +130,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 		const loadHistory = async () => {
 			console.log("[useChat] Loading history for thread:", initialThreadId);
+			setIsHistoryLoading(true);
 			try {
 				const history = await agentClient.getHistory(initialThreadId);
+				const thread = await agentClient.getThread(initialThreadId);
+				if (thread && thread.title) {
+					setThreadTitle(thread.title);
+				}
 				console.log("[useChat] History response:", history);
 				if (history.messages && history.messages.length > 0) {
 					const toolCallsMap: Record<string, string> = {};
@@ -159,6 +168,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			} catch {
 				setMessages([]);
 				setThreadId(initialThreadId);
+			} finally {
+				setIsHistoryLoading(false);
 			}
 		};
 
@@ -406,9 +417,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 		clearVoiceTools,
 		stop,
 		isLoading,
+		isHistoryLoading,
 		isTyping,
 		currentTools,
 		error,
 		threadId,
+		threadTitle
 	};
 }

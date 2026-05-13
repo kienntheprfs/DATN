@@ -56,11 +56,6 @@ class Node(SQLModel, table=True, metadata=metadata):
     )
     building: Optional[Building] = Relationship()
 
-    linked_node_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON))
-    linked_campus_node_id: Optional[int] = Field(
-        default=None, foreign_key="wayfinder_node.id"
-    )
-
     edges_from: List["Edge"] = Relationship(
         back_populates="start_node",
         sa_relationship_kwargs={"foreign_keys": "Edge.start_node_id"},
@@ -83,6 +78,8 @@ class Alias(SQLModel, table=True, metadata=metadata):
     node: Node = Relationship(back_populates="aliases")
 
 
+from sqlalchemy.dialects.postgresql import JSONB
+
 class Edge(SQLModel, table=True, metadata=metadata):
     __tablename__ = "wayfinder_edge"  # type: ignore[assignment]
 
@@ -95,7 +92,7 @@ class Edge(SQLModel, table=True, metadata=metadata):
     weight: float
     bidirectional: bool = Field(default=True)
 
-    polyline: Optional[List[List[float]]] = Field(default=None, sa_column=Column(JSON))
+    polyline: Optional[List[List[float]]] = Field(default=None, sa_column=Column(JSONB))
 
     start_node: Node = Relationship(
         back_populates="edges_from",

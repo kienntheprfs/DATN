@@ -38,9 +38,12 @@ interface RouteData {
 	path_node_ids: number[];
 	total_distance_m: number;
 	instructions: Instruction[];
+	floor_count?: number;
 	is_multi_floor?: boolean;
 	route_maps?: RouteMapData[];
-	floor_count?: number;
+	start_options?: string[];
+	end_options?: string[];
+	message?: string;
 }
 
 interface ChatMessageWithRoute extends ChatMessage {
@@ -51,6 +54,7 @@ interface ChatWindowProps {
 	messages: ChatMessage[];
 	error: string | null;
 	isStreaming?: boolean;
+	isHistoryLoading?: boolean;
 	isTyping?: boolean;
 	isVoiceMode?: boolean;
 	isListening?: boolean;
@@ -103,6 +107,57 @@ function ThinkingIndicator() {
 		</div>
 	);
 }
+
+function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (opt: string) => void }) {
+	const needsStart = data.start_options && data.start_options.length > 1;
+	const needsEnd = data.end_options && data.end_options.length > 1;
+
+	return (
+		<div className="flex flex-col gap-4 p-5 rounded-none shadow-sm border bg-background border-border">
+			<div className="text-sm font-medium text-foreground mb-1">{data.message || "Tôi tìm thấy một vài địa điểm phù hợp, vui lòng chọn chính xác:"}</div>
+			
+			<div className="space-y-4">
+				{needsStart && (
+					<div className="space-y-2">
+						<div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Điểm bắt đầu: "{data.start_name}"</div>
+						<div className="flex flex-wrap gap-2">
+							{data.start_options?.map((opt, i) => (
+								<Button key={i} variant="outline" size="sm" onClick={() => onSelect(opt)} className="rounded-full border-primary/20 hover:border-primary hover:bg-primary/5">
+									{opt}
+								</Button>
+							))}
+						</div>
+					</div>
+				)}
+
+				{needsEnd && (
+					<div className="space-y-2">
+						<div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Điểm đến: "{data.end_name}"</div>
+						<div className="flex flex-wrap gap-2">
+							{data.end_options?.map((opt, i) => (
+								<Button key={i} variant="outline" size="sm" onClick={() => onSelect(opt)} className="rounded-full border-primary/20 hover:border-primary hover:bg-primary/5">
+									{opt}
+								</Button>
+							))}
+						</div>
+					</div>
+				)}
+
+				<div className="pt-2 border-t border-border mt-2">
+					<Button 
+						variant="ghost" 
+						size="sm" 
+						onClick={() => onSelect("Tôi không biết chính xác ở đâu")}
+						className="text-muted-foreground hover:text-foreground"
+					>
+						Tôi không biết chính xác ở đâu
+					</Button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 
 function HistoryToolCollapsible({ name, content }: { name: string; content: string }) {
 	const [isOpen, setIsOpen] = useState(false);
@@ -353,6 +408,7 @@ export function ChatWindow({
 	messages, 
 	error, 
 	isStreaming, 
+	isHistoryLoading,
 	isTyping, 
 	isVoiceMode, 
 	isListening, 
@@ -466,6 +522,40 @@ export function ChatWindow({
 		return null;
 	}, [groupedMessages, currentTools]);
 
+	const confirmationData = useMemo(() => {
+		const parseConfirmation = (content: string) => {
+			try {
+				const parsed = JSON.parse(content);
+				if (parsed.type === 'route' && parsed.status === 'needs_confirmation') {
+					return parsed as RouteData;
+				}
+				return null;
+			} catch {
+				return null;
+			}
+		};
+
+		if (currentTools.length > 0) {
+			const confirmationTool = currentTools.find(
+				t => t.status === 'done' && t.content && t.content.includes('needs_confirmation')
+			);
+			if (confirmationTool?.content) {
+				return parseConfirmation(confirmationTool.content);
+			}
+		}
+		
+		const lastGroup = groupedMessages.filter(g => g.role === "assistant").pop();
+		if (lastGroup?.toolMessages) {
+			const confirmationToolMsg = lastGroup.toolMessages.find(
+				m => m.content && m.content.includes('needs_confirmation')
+			);
+			if (confirmationToolMsg?.content) {
+				return parseConfirmation(confirmationToolMsg.content);
+			}
+		}
+		return null;
+	}, [groupedMessages, currentTools]);
+
 	const landmarkData = useMemo(() => {
 		const parseLandmarks = (content: string) => {
 			try {
@@ -520,9 +610,18 @@ export function ChatWindow({
 			className={`flex-1 min-h-0 h-full overflow-y-auto p-4 md:p-8 ${readOnly ? "mb-0" : "mb-28"}`}
 			role="log"
 			aria-live="polite"
-			aria-label="Chat messages"
 		>
 			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
+				{isHistoryLoading && messages.length === 0 && (
+					<div className="flex gap-4 justify-start animate-in fade-in duration-300">
+						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+							<Bot className="size-6" />
+						</div>
+						<div className="flex-1 max-w-[85%]">
+							<ThinkingIndicator />
+						</div>
+					</div>
+				)}
 				{groupedMessages.map((group, groupIndex) => {
 					const isLastGroup = groupIndex === groupedMessages.length - 1;
 					const isMessageActive = isLastGroup && isActive;
@@ -544,12 +643,10 @@ export function ChatWindow({
 								<div className="flex size-10 shrink-0 items-center justify-center bg-secondary text-secondary-foreground rounded-none shadow-sm">
 									<User className="size-6" />
 								</div>
-								<div className="group relative max-w-[85%] space-y-2">
-									{group.messages.map((m) => (
-										<div key={m.id} className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide">
-											<p className="whitespace-pre-wrap">{String(m.content)}</p>
-										</div>
-									))}
+								<div className="group relative max-w-[85%]">
+									<div className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
+										{group.messages.map(m => m.content).filter(Boolean).join(" ")}
+									</div>
 								</div>
 							</div>
 						);
@@ -591,6 +688,11 @@ export function ChatWindow({
 								{showToolsForThisGroup && currentTools.map((tool) => (
 									<ToolCollapsible key={tool.id} tool={tool} />
 								))}
+								{displayRouteData && (
+									<div className="animate-in fade-in slide-in-from-top-2 duration-300">
+										<RouteMessage routeData={displayRouteData} />
+									</div>
+								)}
 								{combinedContent && (
 									<div className="p-5 text-base rounded-none shadow-sm transition-all duration-200 border bg-background border-border leading-relaxed tracking-wide">
 										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
@@ -639,6 +741,24 @@ export function ChatWindow({
 				</div>
 			)}
 
+			{confirmationData && (
+				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
+						<Bot className="size-6" />
+					</div>
+					<div className="flex-1 max-w-full">
+						<ConfirmationOptions 
+							data={confirmationData} 
+							onSelect={(option) => {
+								if (sendMessage) {
+									sendMessage(option);
+								}
+							}}
+						/>
+					</div>
+				</div>
+			)}
+
 			{landmarkData && (
 				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
@@ -647,6 +767,7 @@ export function ChatWindow({
 					<div className="flex-1 max-w-full">
 						<LandmarkCarousel 
 							landmarks={landmarkData} 
+							disabled={false}
 							onConfirm={(landmark) => {
 								if (sendMessage) {
 									sendMessage(`Tôi đang ở ${landmark.name}`);

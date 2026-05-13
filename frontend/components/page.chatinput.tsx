@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, MicOff, Sparkles, FileText } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation } from "lucide-react";
+import { useAgent } from "@/contexts/agent-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -28,6 +29,7 @@ interface ChatInputProps {
   onVoiceBotOutput?: (text: string) => void;
   onVoiceToggle?: () => void;
   onVoiceMute?: () => void;
+  onSendVoiceTextMessage?: (message: string) => void;
   showDocumentButton?: boolean;
   onDocumentToggle?: () => void;
 }
@@ -47,6 +49,7 @@ export function ChatInput({
   onVoiceBotOutput,
   onVoiceToggle,
   onVoiceMute,
+  onSendVoiceTextMessage,
   showDocumentButton = false,
   onDocumentToggle,
 }: ChatInputProps) {
@@ -54,6 +57,7 @@ export function ChatInput({
   const [message, setMessage] = useState("");
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { agent, setAgent, isOnline } = useAgent();
 
   useEffect(() => {
     setIsLoggedIn(authService.isAuthenticated());
@@ -79,6 +83,12 @@ export function ChatInput({
 
     if (trimmedMessage.length > 5000) {
       toast.error("Tin nhắn quá dài. Vui lòng nhập tối đa 5000 ký tự.");
+      return;
+    }
+
+    if (voiceState === "connected" && onSendVoiceTextMessage) {
+      onSendVoiceTextMessage(trimmedMessage);
+      setMessage("");
       return;
     }
 
@@ -111,8 +121,8 @@ export function ChatInput({
         
         <InputGroupTextarea 
           id="chat-textarea" 
-          aria-label="Nhập câu hỏi hoặc yêu cầu tra cứu"
-          placeholder="Nhập câu hỏi hoặc yêu cầu tra cứu..." 
+          aria-label={isVoiceConnected ? "Nhập tin nhắn văn bản vào Voice Chat" : "Nhập câu hỏi hoặc yêu cầu tra cứu"}
+          placeholder={isVoiceConnected ? "Gửi tin nhắn văn bản vào cuộc trò chuyện Voice..." : "Nhập câu hỏi hoặc yêu cầu tra cứu..." }
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -120,6 +130,36 @@ export function ChatInput({
 
         <div className="flex items-center justify-between bg-muted/20 px-3 pb-3 pt-1">
           <div className="flex items-center gap-1">
+            {/* Agent Switcher Integrated */}
+            {isOnline && (
+              <div className="flex items-center bg-muted/40 rounded-sm p-0.5 mr-1 border border-border/50 h-9">
+                <Button
+                  variant={agent === 'knowledge-base-agent' ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
+                    agent === 'knowledge-base-agent' 
+                      ? "bg-primary text-primary-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => setAgent('knowledge-base-agent')}
+                >
+                  Hỏi đáp
+                </Button>
+                <Button
+                  variant={agent === 'map-assistant' ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
+                    agent === 'map-assistant' 
+                      ? "bg-primary text-primary-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  onClick={() => setAgent('map-assistant')}
+                >
+                  Chỉ đường
+                </Button>
+              </div>
+            )}
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -129,6 +169,7 @@ export function ChatInput({
                   className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"} ${!isLoggedIn ? "opacity-50" : ""}`}
                   onClick={toggleQueryMode}
                   data-testid="deep-mode-toggle"
+                  disabled={isVoiceConnected}
                 >
                   <Sparkles className="size-4" aria-hidden="true" />
                 </Button>

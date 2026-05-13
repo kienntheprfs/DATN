@@ -50,8 +50,13 @@ interface EditorInspectorProps {
   onEdgeDelete: (id: number) => void;
   onSetEditing: (editing: boolean) => void;
   onRefreshNodes: () => void;
+  onRefreshEdges: () => void;
   buildings: Building[];
   onRefreshBuildings?: () => void;
+  buildingNodes?: MapNode[];
+  buildingMaps?: MapData[];
+  hasUnsavedChanges?: boolean;
+  onUnsavedEditsChange?: (hasEdits: boolean) => void;
 }
 
 export function EditorInspector({
@@ -67,15 +72,19 @@ export function EditorInspector({
   onEdgeDelete,
   onSetEditing,
   onRefreshNodes,
+  onRefreshEdges,
   buildings,
   onRefreshBuildings,
+  buildingNodes: propBuildingNodes = [],
+  buildingMaps = [],
+  hasUnsavedChanges: parentHasChanges = false,
+  onUnsavedEditsChange,
 }: EditorInspectorProps) {
   const confirm = useConfirmStore((state) => state.confirm);
   const [editedData, setEditedData] = useState<NodeFormData | EdgeFormData | null>(null);
   const [aliasInput, setAliasInput] = useState('');
   const [showBuildingModal, setShowBuildingModal] = useState(false);
-  const [buildingMaps, setBuildingMaps] = useState<MapData[]>([]);
-  const [buildingNodes, setBuildingNodes] = useState<MapNode[]>([]);
+  const buildingNodes = propBuildingNodes;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const rawData = useMemo(() => {
@@ -96,9 +105,9 @@ export function EditorInspector({
       const nodeData = rawData as MapNode;
       return {
         ...nodeData,
-        aliases: nodeData.aliases || [],
+        aliases: (nodeData.aliases || []).map(a => typeof a === 'string' ? { name: a } : a),
         linked_node_ids: nodeData.linked_node_ids || [],
-      };
+      } as NodeFormData;
     }
     if (selectedType === 'edge' && rawData) {
       return rawData as EdgeFormData;
@@ -107,34 +116,36 @@ export function EditorInspector({
   }, [rawData, selectedType, editedData]);
 
   useEffect(() => {
-    setEditedData(null);
-    setAliasInput('');
+    // We don't automatically clear editedData here anymore to allow confirmation logic
+    // unless the item actually changed and we have no edits
+    if (!editedData) {
+      setAliasInput('');
+    }
   }, [selectedId, selectedType]);
 
-  useEffect(() => {
-    const nodeFormData = formData as NodeFormData | null;
-    const buildingId = nodeFormData?.building_id;
-    if (buildingId) {
-      mapApi.getAll().then((maps) => {
-        const bMaps = maps.filter((m) => m.building_id === buildingId);
-        setBuildingMaps(bMaps);
-        Promise.all(bMaps.map((m) => editorApi.getNodes(m.id))).then((nodeArrays) => {
-          setBuildingNodes(nodeArrays.flat());
-        });
+  const handleSelectRequest = async (type: 'node' | 'edge' | null, id: number | null) => {
+    if (editedData) {
+      const confirmed = await confirm({
+        title: "Thay đổi chưa lưu",
+        description: "Bạn đang chỉnh sửa thông tin nhưng chưa lưu. Chuyển sang đối tượng khác sẽ mất các thay đổi này?",
+        variant: 'destructive',
+        style: 'square'
       });
-    } else {
-      queueMicrotask(() => {
-        setBuildingMaps([]);
-        setBuildingNodes([]);
-      });
+      if (!confirmed) return;
     }
-  }, [formData]);
+    setEditedData(null);
+    onSelect(type, id);
+  };
+
+
+
 
   const handleChange = (field: string, value: unknown) => {
     const currentData = formData;
     if (!currentData) return;
     const updated = { ...currentData, [field]: value };
     setEditedData(updated as NodeFormData | EdgeFormData);
+    onUnsavedEditsChange?.(true);
   };
 
   const handleSave = async () => {
@@ -163,8 +174,10 @@ export function EditorInspector({
         });
       }
       setEditedData(null);
+      onUnsavedEditsChange?.(false);
       onSetEditing(false);
       onRefreshNodes();
+      onRefreshEdges();
       toast.success('Lưu thành công!');
     } catch (error) {
       console.error('Error saving:', error);
@@ -251,12 +264,12 @@ export function EditorInspector({
   };
 
   if (!currentMap) {
-    return <aside className="w-80 bg-background border-l border-border" />;
+    return <aside className="w-[400px] bg-background border-l border-border shrink-0 overflow-x-hidden" />;
   }
 
   if (selectedId === null || !formData) {
     return (
-      <aside className="w-80 bg-background border-l border-border flex flex-col">
+      <aside className="w-[400px] bg-background border-l border-border flex flex-col shrink-0 overflow-x-hidden">
         <div className="h-32 bg-muted relative overflow-hidden shrink-0">
           <img
             src={getFullImageUrl(currentMap.image_url)}
@@ -289,7 +302,7 @@ export function EditorInspector({
 
   return (
     <>
-      <aside className="w-80 bg-background border-l border-border flex flex-col">
+      <aside className="w-[400px] bg-background border-l border-border flex flex-col shrink-0 overflow-x-hidden">
         <InspectorHeader
           id={formData.id}
           name={displayName}
@@ -345,9 +358,9 @@ export function EditorInspector({
               onNodeUpdate(selectedId!, updatedNode);
               setEditedData({
                 ...updatedNode,
-                aliases: (updatedNode.aliases || []) as string[],
+                aliases: (updatedNode.aliases || []).map(a => typeof a === 'string' ? { name: a } : a),
                 linked_node_ids: updatedNode.linked_node_ids || [],
-              } as unknown as NodeFormData);
+              } as NodeFormData);
             });
             onRefreshBuildings?.();
             setShowBuildingModal(false);
@@ -626,12 +639,12 @@ function NodeForm({
 
           <div className="space-y-1.5">
             <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tài nguyên hình ảnh</Label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 min-w-0">
               <Input 
                 disabled={true}
                 value={data.real_image_url || ''}
                 placeholder="Chưa có hình ảnh..."
-                className="h-9 text-[10px] font-mono bg-muted/20 border-border/50"
+                className="h-9 text-[10px] font-mono bg-muted/20 border-border/50 min-w-0"
               />
               <input
                 type="file"
@@ -682,8 +695,8 @@ function NodeForm({
 
         <div className="space-y-2 mb-2">
           {(data.aliases || []).map((alias, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <div className="flex-1 px-2 py-1.5 bg-muted rounded text-sm truncate">
+            <div key={index} className="flex items-center gap-2 min-w-0">
+              <div className="flex-1 px-2 py-1.5 bg-muted rounded text-sm truncate min-w-0">
                 {typeof alias === 'string' ? alias : alias.name}
               </div>
               {isEditing && (
@@ -755,26 +768,28 @@ function NodeForm({
         </div>
         
         {currentBuilding && (
-          <div className="p-2 bg-primary/5 rounded border border-primary/10 flex items-center gap-2">
+          <div className="p-2 bg-primary/5 rounded border border-primary/10 flex items-center gap-2 min-w-0">
             <div className="w-1 h-3 bg-primary rounded-full" />
-            <div className="text-[11px] font-bold text-primary truncate flex-1">{currentBuilding.name}</div>
+            <div className="text-[11px] font-bold text-primary truncate flex-1 min-w-0">{currentBuilding.name}</div>
           </div>
         )}
       </div>
 
-      {hasBuilding && buildingMaps.length > 0 && (
+      {buildingMaps.length > 0 && (
         <>
           <Separator />
           <div>
             <div className="flex justify-between items-center mb-2">
-              <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Liên kết tầng</h3>
+              <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                {hasBuilding ? "Liên kết tầng" : "Liên kết bản đồ"}
+              </h3>
               {(data.linked_node_ids?.length ?? 0) > 0 && (
                 <Badge variant="secondary">{(data.linked_node_ids?.length || 0)} node</Badge>
               )}
             </div>
 
             <p className="text-[10px] text-muted-foreground mb-2">
-              Chọn node cầu thang/thang máy ở tầng khác để liên kết
+              Chọn node ở bản đồ khác để liên kết (Cầu thang/Thang máy/Lối vào)
             </p>
 
             <Select
@@ -787,11 +802,15 @@ function NodeForm({
                 <SelectValue placeholder="-- Chọn node liên kết --" />
               </SelectTrigger>
               <SelectContent>
-                {linkedNodeOptions.map((n) => (
-                  <SelectItem key={n.id} value={String(n.id)}>
-                    {n.name} (Tầng {buildingMaps.find((m) => m.id === n.map_id)?.floor_level || '?'})
-                  </SelectItem>
-                ))}
+                {linkedNodeOptions.map((n) => {
+                  const map = buildingMaps.find((m) => m.id === n.map_id);
+                  const floorLabel = map?.floor_level !== undefined && map?.floor_level !== null ? `Tầng ${map.floor_level}` : "Campus";
+                  return (
+                    <SelectItem key={n.id} value={String(n.id)}>
+                      {n.name} ({floorLabel})
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
 
@@ -800,10 +819,12 @@ function NodeForm({
                 {data.linked_node_ids?.map((nodeId: number) => {
                   const linkedNode = buildingNodes.find((n) => n.id === nodeId);
                   if (!linkedNode) return null;
+                  const map = buildingMaps.find((m) => m.id === linkedNode.map_id);
+                  const floorLabel = map?.floor_level !== undefined && map?.floor_level !== null ? `Tầng ${map.floor_level}` : "Campus";
                   return (
-                    <div key={nodeId} className="flex items-center justify-between p-2 bg-muted rounded-lg">
-                      <span className="text-sm truncate">
-                        {linkedNode.name} (Tầng {buildingMaps.find((m) => m.id === linkedNode.map_id)?.floor_level || '?'})
+                    <div key={nodeId} className="flex items-center justify-between p-2 bg-muted rounded-lg min-w-0">
+                      <span className="text-sm truncate min-w-0 flex-1">
+                        {linkedNode.name} ({floorLabel})
                       </span>
                       {isEditing && (
                         <Button

@@ -25,75 +25,75 @@
 		},
 
 		// ==========================================
-		// 1. START SERVICES
+		// 1. START SERVICES (WITH INFISICAL INJECTION)
 		// ==========================================
 		{
 			"label": "Start LightRAG Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/LightRAG && uv run lightrag-server",
+			"command": "cd /d ${workspaceFolder}/LightRAG && npx @infisical/cli run --path=/lightRAG -- uv run lightrag-server",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start Knowledge Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/knowledge && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
+			"command": "cd /d ${workspaceFolder}/knowledge && npx @infisical/cli run --path=/knowledge -- uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start Wayfinder Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/wayfinder && uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8004",
+			"command": "cd /d ${workspaceFolder}/wayfinder && npx @infisical/cli run --path=/wayfinder -- uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8004",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start Piper TTS Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/voice/piper_tts && uv run uvicorn server:app --host 0.0.0.0 --port 5000",
+			"command": "cd /d ${workspaceFolder}/voice/piper_tts && npx @infisical/cli run --path=/voice -- uv run uvicorn server:app --host 0.0.0.0 --port 5000",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start Voice Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/voice && uv run python server.py",
+			"command": "cd /d ${workspaceFolder}/voice && npx @infisical/cli run --path=/voice -- uv run python server.py",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start API Gateway Auth Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/api_gateway && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008",
+			"command": "cd /d ${workspaceFolder}/api_gateway && npx @infisical/cli run --path=/api_gateway -- uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8008",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start Dashboard Service",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/dashboard && cd docker/ && docker compose up -d && cd .. && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8007",
+			"command": "cd /d ${workspaceFolder}/dashboard && npx @infisical/cli run --path=/dashboard -- uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8007",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		
 		{
 			"label": "Start Agent Service (Backend)",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && uv run python src/run_service.py",
+			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && npx @infisical/cli run --path=/agent -- uv run python src/run_service.py",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		
 		{
 			"label": "Start Frontend",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/frontend && npm run dev",
+			"command": "cd /d ${workspaceFolder}/frontend && npx @infisical/cli run --path=/frontend -- npm run dev",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
 			"label": "Start API Gateway (Docker)",
 			"type": "shell",
-			"command": "docker-compose up -d",
+			"command": "npx @infisical/cli run --path=/api_gateway -- docker-compose up -d",
 			"options": { "cwd": "${workspaceFolder}/api_gateway" },
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
-			"label": "Start Redis Stack (Docker)",
+			"label": "Start Dashboard Infrastructure (Docker)",
 			"type": "shell",
-			"command": "docker ps -a --format '{{.Names}}' | findstr redis_stack >nul && echo Redis already running || docker-compose -f dashboard/docker/docker-compose.yml up -d",
+			"command": "cd /d ${workspaceFolder}/dashboard/docker && npx @infisical/cli run --path=/dashboard -- docker compose up -d",
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 
@@ -111,7 +111,7 @@
 				"Start Voice Service",
 				"Start API Gateway Auth Service",
 				"Start API Gateway (Docker)",
-				"Start Redis Stack (Docker)",
+				"Start Dashboard Infrastructure (Docker)",
 				"Start Dashboard Service",
 				"Start Agent Service (Backend)",
 				"Start Frontend"
@@ -218,64 +218,56 @@
 		{
 			"label": "Download Secrets - LightRAG",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/lightRAG --format=dotenv --output-file=LightRAG/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Knowledge",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/knowledge --format=dotenv --output-file=knowledge/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Wayfinder",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/wayfinder --format=dotenv --output-file=wayfinder/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Voice",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/voice --format=dotenv --output-file=voice/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - API Gateway",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/api_gateway --format=dotenv --output-file=api_gateway/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Dashboard",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/dashboard --format=dotenv --output-file=dashboard/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Agent",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/agent --format=dotenv --output-file=agent-service-toolkit/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download Secrets - Frontend",
 			"type": "shell",
-			"command": "npx @infisical/cli export --path=/frontend --format=dotenv --output-file=frontend/.env",
+			"command": "echo Secrets will be injected at runtime",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Download All Secrets",
 			"dependsOrder": "sequence",
 			"dependsOn": [
-				"Check Infisical",
-				"Download Secrets - LightRAG",
-				"Download Secrets - Knowledge",
-				"Download Secrets - Wayfinder",
-				"Download Secrets - Voice",
-				"Download Secrets - API Gateway",
-				"Download Secrets - Dashboard",
-				"Download Secrets - Agent",
-				"Download Secrets - Frontend"
+				"Check Infisical"
 			]
 		},
 

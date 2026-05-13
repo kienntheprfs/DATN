@@ -10,11 +10,14 @@ import { RouteResponse, MapData, MapNode, MapEdge, Building, Instruction } from 
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { LocationSearch } from './LocationSearch';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Navigation, RefreshCw, Map as MapIcon, ChevronLeft } from 'lucide-react';
+import { ArrowUpDown, Navigation, RefreshCw, Map as MapIcon, ChevronLeft, Navigation2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAppStore } from '@/stores/app.store';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { UnifiedMapView } from './UnifiedMapView';
+import { locationApi } from '@/services/location-api';
 
 const ACTION_ICONS: Record<string, string> = {
   start: 'trip_origin',
@@ -57,8 +60,7 @@ interface FloorSegment {
 
 export default function NavigationPage() {
   const buildings = useBuildingStore((state) => state.buildings);
-
-
+  const { allMaps, fetchAllMaps, isLoadingMaps } = useAppStore();
   const fetchBuildings = useBuildingStore((state) => state.fetchBuildings);
   const isMobile = useIsMobile();
 
@@ -79,9 +81,9 @@ export default function NavigationPage() {
   const [route, setRoute] = useState<RouteResponse | null>(null);
   const [floorSegments, setFloorSegments] = useState<FloorSegment[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mapLoading, setMapLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
 
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -127,7 +129,7 @@ export default function NavigationPage() {
 
   // Auto-center map on load
   useEffect(() => {
-    if (floorMaps.length > 0 && !mapLoading) {
+    if (allMaps.length > 0 && !isLoadingMaps) {
       // Small delay to ensure container is rendered
       const timer = setTimeout(() => {
         if (svgRef.current) {
@@ -144,7 +146,7 @@ export default function NavigationPage() {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [floorMaps.length, mapLoading]);
+  }, [allMaps.length, isLoadingMaps]);
 
   useEffect(() => {
     fetchBuildings().then(() => {
@@ -161,60 +163,55 @@ export default function NavigationPage() {
   }, [buildings, selectedBuildingId]);
 
   useEffect(() => {
-    const loadMaps = async () => {
-      setMapLoading(true);
+    fetchAllMaps().then(async () => {
       try {
-        // Load all maps (campus + all buildings)
-        const allMaps = await wayfindingMapApi.getAllMaps();
-        console.log('[Nav] All maps:', allMaps.map(m => ({ id: m.id, name: m.name, floor: m.floor_level, building: m.building_id })));
+        // Also load all locations for search and URL mapping
+        const locations = await locationApi.getAll();
+        setAllNodes(locations.map(loc => ({
+          id: loc.node_id,
+          name: loc.name,
+          map_id: loc.map_id || 0,
+          type: (loc.node_type || 'room') as any,
+          x: 0, // Coordinates will come from path or lazy loaded data
+          y: 0,
+        })));
+      } catch (err) {
+        console.error('Failed to load locations:', err);
+      }
+    });
+  }, [fetchAllMaps]);
 
-        // Load nodes/edges for all maps
-        const allFloorData: FloorMap[] = await Promise.all(
-          allMaps.map(async (m) => {
-            const data = await wayfindingMapApi.getMapWithData(m.id);
-            return {
-              map: data.map,
-              nodes: data.nodes,
-              edges: data.edges,
-              isCampus: m.floor_level === null,
-            };
-          })
-        );
+  // Sync floorMaps with global store
+  useEffect(() => {
+    if (allMaps.length > 0) {
+      const allFloorData: FloorMap[] = allMaps.map(m => ({
+        ...m,
+        isCampus: m.map.floor_level === null,
+      }));
 
-        // Sort: campus first, then by floor level
-        allFloorData.sort((a, b) => {
-          if (a.isCampus) return -1;
-          if (b.isCampus) return 1;
-          return (a.map.floor_level || 0) - (b.map.floor_level || 0);
-        });
+      // Sort: campus first, then by floor level
+      allFloorData.sort((a, b) => {
+        if (a.isCampus) return -1;
+        if (b.isCampus) return 1;
+        return (a.map.floor_level || 0) - (b.map.floor_level || 0);
+      });
 
-        setFloorMaps(allFloorData);
-        setCurrentFloorIndex(0);
+      setFloorMaps(allFloorData);
+      
+      // If no current map, set initial
+      if (!currentMap && allFloorData.length > 0) {
         setCurrentMap(allFloorData[0].map);
         setNodes(allFloorData[0].nodes);
         setEdges(allFloorData[0].edges);
-
-        const allNodesCombined = allFloorData.flatMap(f => f.nodes);
-        const allEdgesCombined = allFloorData.flatMap(f => f.edges);
-        setAllNodes(allNodesCombined);
-        setAllEdges(allEdgesCombined);
-
-        console.log('[Nav] Total floors:', allFloorData.length);
-        console.log('[Nav] Maps loaded successfully');
-      } catch (err) {
-        console.error('Failed to load maps:', err);
-      } finally {
-        setMapLoading(false);
       }
-    };
-    loadMaps();
-  }, []);
+    }
+  }, [allMaps, currentMap]);
 
   const searchParams = useSearchParams();
   const initialLoadDone = useRef(false);
 
   useEffect(() => {
-    if (!mapLoading && allNodes.length > 0 && !initialLoadDone.current) {
+    if (!isLoadingMaps && allNodes.length > 0 && !initialLoadDone.current) {
       const startId = searchParams.get('start');
       const endId = searchParams.get('end');
 
@@ -234,7 +231,7 @@ export default function NavigationPage() {
         }
       }
     }
-  }, [mapLoading, allNodes, searchParams]);
+  }, [isLoadingMaps, allNodes, searchParams]);
 
   // Trigger find route automatically when IDs are set from URL
   useEffect(() => {
@@ -243,19 +240,19 @@ export default function NavigationPage() {
     }
   }, [startNodeId, endNodeId, route, loading, initialLoadDone.current]);
 
-  // Use separate effect for floor change
+  // Sync local nodes/edges when currentFloorIndex changes
   useEffect(() => {
-    console.log('[Nav] Effect triggered, index:', currentFloorIndex, 'map id:', floorMaps[currentFloorIndex]?.map?.id, 'len:', floorMaps.length);
-    if (floorMaps.length > 0) {
-      const newMap = floorMaps[currentFloorIndex];
-      if (newMap) {
-        setCurrentMap(newMap.map);
-        setNodes(newMap.nodes);
-        setEdges(newMap.edges);
-        console.log('[Nav] Switched to floor:', currentFloorIndex, 'map id:', newMap.map.id);
-      }
+    if (floorMaps.length === 0) return;
+    
+    const targetIdx = currentFloorIndex;
+    const newMap = floorMaps[targetIdx];
+    
+    if (newMap) {
+      setCurrentMap(newMap.map);
+      setNodes(newMap.nodes);
+      setEdges(newMap.edges);
     }
-  }, [currentFloorIndex]);
+  }, [currentFloorIndex, floorMaps]);
 
   useEffect(() => {
     if (svgRef.current && position === null) {
@@ -281,6 +278,36 @@ export default function NavigationPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Keyboard navigation for steps
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only navigate if route exists and no input is focused
+      if (!route || route.instructions.length === 0) return;
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        const nextIndex = Math.min(currentStepIndex + 1, route.instructions.length - 1);
+        if (nextIndex !== currentStepIndex) {
+          goToStep(nextIndex);
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const prevIndex = Math.max(currentStepIndex - 1, 0);
+        if (prevIndex !== currentStepIndex) {
+          goToStep(prevIndex);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [route, currentStepIndex]);
+
+  const goToStep = (index: number) => {
+    if (!route || index < 0 || index >= route.instructions.length) return;
+    const instr = route.instructions[index];
+    handleInstructionClick(instr.coordinate, index);
+  };
+
   const handleRefreshCache = async () => {
     try {
       const result = await wayfindingApi.refreshCache();
@@ -302,6 +329,7 @@ export default function NavigationPage() {
 
     setLoading(true);
     setError('');
+    setRoute(null);
 
     try {
       const result = await wayfindingApi.findRoute({
@@ -309,30 +337,30 @@ export default function NavigationPage() {
         start_node_id: startNodeId,
         end_node_id: endNodeId,
       });
-      setRoute(result);
+      setCurrentStepIndex(0);
 
-      // Group path_coords by floor based on path_node_ids (more accurate than coords)
+      // Use all available nodes from the store to build a complete node map
+      const allGraphNodes = allMaps.flatMap(m => m.nodes);
+      const nodeMap = new Map(allGraphNodes.map(n => [n.id, n]));
+
+
+      // Group path_coords by floor based on path_node_ids
       const floorPathMap = new Map<number, { coords: number[][], nodes: number[] }>();
 
       // Determine initial floor from first node ID
       let currentFloorIdx = 0;
       if (result.path_node_ids.length > 0) {
-        const firstNodeId = Number(result.path_node_ids[0]); // Ensure number
-        const firstNode = allNodes.find(n => n.id === firstNodeId);
-        console.log('[Nav] First node:', firstNodeId, 'type:', typeof firstNodeId, 'found:', !!firstNode, 'map_id:', firstNode?.map_id);
+        const firstNodeId = Number(result.path_node_ids[0]);
+        const firstNode = nodeMap.get(firstNodeId);
         if (firstNode) {
           const initialFloorIdx = floorMaps.findIndex(f => f.map.id === firstNode.map_id);
-          console.log('[Nav] Initial floor idx:', initialFloorIdx, 'target map id:', firstNode.map_id);
           if (initialFloorIdx !== -1) {
             currentFloorIdx = initialFloorIdx;
           }
         }
       }
 
-      // NOTE: Don't init - let it be created naturally when adding first node
-
       // Set initial floor to start node's floor
-      console.log('[Nav] Setting floor index to:', currentFloorIdx, 'floorMaps length:', floorMaps.length);
       setCurrentFloorIndex(currentFloorIdx);
 
       // Also directly set state
@@ -343,9 +371,6 @@ export default function NavigationPage() {
         setEdges(targetFloor.edges);
         console.log('[Nav] Direct set map id:', targetFloor.map.id);
       }
-
-      // Build map from node ID to node
-      const nodeMap = new Map(allNodes.map(n => [n.id, n]));
 
       // Process each node in path to determine floor
       let currentCoords: number[][] = [];
@@ -472,8 +497,16 @@ export default function NavigationPage() {
       }
 
       setFloorSegments(segments);
-      console.log('[Nav] Segments:', segments.map(s => ({ floorIndex: s.floorIndex, pathCoordsCount: s.pathCoords.length })));
-      console.log('[Nav] floorMaps ids:', floorMaps.map(f => f.map.id));
+
+      // Finally update the route state to trigger re-render
+      setRoute(result);
+      
+      // Automatically highlight and center the start node
+      if (result.instructions.length > 0) {
+        const startInstr = result.instructions[0];
+        setHighlightedCoord({ x: startInstr.coordinate[0], y: startInstr.coordinate[1] });
+        setCurrentStepIndex(0);
+      }
     } catch (err) {
       const errorMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Could not find route. Please try different locations.';
       setError(errorMsg);
@@ -483,37 +516,43 @@ export default function NavigationPage() {
     }
   };
 
-  const handleInstructionClick = (coord: number[]) => {
-    const node = allNodes.find(n =>
-      Math.abs(n.x - coord[0]) < 1 && Math.abs(n.y - coord[1]) < 1
-    );
+  const handleInstructionClick = (coord: [number, number], index?: number) => {
+    if (!route) return;
 
-    if (node) {
-      const floorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
-      if (floorIdx !== -1 && floorIdx !== currentFloorIndex) {
-        setCurrentFloorIndex(floorIdx);
-      }
-
-      setHighlightedCoord({ x: node.x, y: node.y });
-
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect();
-        const mapCenterX = MAP_WIDTH / 2;
-        const mapCenterY = MAP_HEIGHT / 2;
-        setPosition({
-          x: rect.width / 2 - node.x * scale,
-          y: rect.height / 2 - node.y * scale,
-        });
-      }
+    if (index !== undefined) {
+      setCurrentStepIndex(index);
     } else {
-      setHighlightedCoord({ x: coord[0], y: coord[1] });
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect();
-        setPosition({
-          x: rect.width / 2 - coord[0] * scale,
-          y: rect.height / 2 - coord[1] * scale,
-        });
+      const foundIdx = route.instructions.findIndex(i => 
+        Math.abs(i.coordinate[0] - coord[0]) < 1 && Math.abs(i.coordinate[1] - coord[1]) < 1
+      );
+      if (foundIdx !== -1) setCurrentStepIndex(foundIdx);
+    }
+
+    // Find node ID at this coordinate from the path to determine floor
+    const pathIdx = route.path_coords.findIndex(c => 
+      Math.abs(c[0] - coord[0]) < 1 && Math.abs(c[1] - coord[1]) < 1
+    );
+    
+    if (pathIdx !== -1) {
+      const nodeId = route.path_node_ids[pathIdx];
+      const node = allNodes.find(n => n.id === nodeId);
+      
+      if (node) {
+        const floorIdx = floorMaps.findIndex(f => f.map.id === node.map_id);
+        if (floorIdx !== -1 && floorIdx !== currentFloorIndex) {
+          setCurrentFloorIndex(floorIdx);
+        }
       }
+    }
+
+    setHighlightedCoord({ x: coord[0], y: coord[1] });
+
+    if (svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.width / 2 - coord[0] * scale,
+        y: rect.height / 2 - coord[1] * scale,
+      });
     }
   };
 
@@ -558,8 +597,28 @@ export default function NavigationPage() {
   // Map pan/zoom handlers
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    if (!svgRef.current || !position) return;
+
+    // Use the viewport coordinates for zooming
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale((s) => Math.min(Math.max(s * delta, 0.5), 3));
+    const newScale = Math.min(Math.max(scale * delta, 0.5), 10);
+
+    if (newScale !== scale) {
+      // Calculate how far the mouse is from the current map position in screen space
+      // then adjust the position so that same map point stays under the mouse
+      const dx = (mouseX - position.x) / scale;
+      const dy = (mouseY - position.y) / scale;
+
+      setPosition({
+        x: mouseX - dx * newScale,
+        y: mouseY - dy * newScale,
+      });
+      setScale(newScale);
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -579,10 +638,29 @@ export default function NavigationPage() {
     setIsDragging(false);
   };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!svgRef.current || !position) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const delta = 1.5;
+    const newScale = Math.min(scale * delta, 10);
+    
+    const dx = (mouseX - position.x) / scale;
+    const dy = (mouseY - position.y) / scale;
+    
+    setPosition({
+      x: mouseX - dx * newScale,
+      y: mouseY - dy * newScale,
+    });
+    setScale(newScale);
+  };
+
   // Get path d string for edge (matching editor style)
   const getEdgePath = (edge: MapEdge) => {
-    const startNode = nodes.find((n) => n.id === edge.start_node_id);
-    const endNode = nodes.find((n) => n.id === edge.end_node_id);
+    const startNode = allNodes.find((n) => n.id === edge.start_node_id);
+    const endNode = allNodes.find((n) => n.id === edge.end_node_id);
     if (!startNode || !endNode) return '';
 
     let d = `M ${startNode.x} ${startNode.y}`;
@@ -610,20 +688,23 @@ export default function NavigationPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between whitespace-nowrap border-b border-border bg-card px-4 py-3 z-20 shadow-sm">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-20 flex h-10 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 shadow-sm">
+        <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => window.location.href = '/'}
-            className="hover:bg-muted"
+            className="h-7 w-7 p-0 -ml-2 hover:bg-muted"
           >
-            <ChevronLeft className="size-5" />
+            <ChevronLeft className="size-4" />
           </Button>
-          <div className="size-8 bg-primary rounded-lg flex items-center justify-center">
-            <MapIcon className="size-5 text-primary-foreground" />
+          
+          <div className="mr-1 h-4 w-px bg-border" />
+          
+          <div className="size-6 bg-primary rounded flex items-center justify-center shrink-0">
+            <MapIcon className="size-3.5 text-primary-foreground" />
           </div>
-          <h2 className="text-card-foreground text-base sm:text-lg font-bold leading-tight truncate max-w-[150px] sm:max-w-none">
+          <h2 className="text-foreground text-sm font-bold leading-tight truncate max-w-[200px] sm:max-w-none">
             {currentMap?.name || 'Campus Pathfinding'}
           </h2>
         </div>
@@ -632,7 +713,7 @@ export default function NavigationPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Sidebar - Only show on desktop */}
         {!isMobile && (
-          <aside className="w-[320px] lg:w-[420px] border-r border-border flex flex-col bg-card overflow-y-visible z-10 shadow-lg relative">
+          <aside className="w-[320px] lg:w-[420px] border-r border-border flex flex-col bg-background/50 backdrop-blur-sm overflow-y-visible z-10 relative">
             <div className="p-4 space-y-4">
               {/* Search */}
               <div className="flex flex-col gap-2">
@@ -728,16 +809,20 @@ export default function NavigationPage() {
                   <div className="space-y-1 overflow-y-auto max-h-96 pr-2 custom-scrollbar">
                     {route.instructions.map((instruction, idx) => {
                       const isFloorChange = instruction.action === 'use_stairs' || instruction.action === 'use_elevator';
+                      const isActive = idx === currentStepIndex;
                       return (
                         <div
                           key={idx}
-                          onClick={() => handleInstructionClick(instruction.coordinate)}
-                          className={`flex gap-4 p-3 rounded-lg cursor-pointer ${instruction.action === 'start' || instruction.action === 'arrive'
-                            ? 'bg-primary/10 border-l-4 border-primary'
-                            : isFloorChange
-                              ? 'bg-accent border-l-4 border-primary'
-                              : 'hover:bg-muted border-l-4 border-transparent'
-                            } transition-colors`}
+                          id={`instruction-${idx}`}
+                          onClick={() => handleInstructionClick(instruction.coordinate, idx)}
+                          className={`flex gap-4 p-3 rounded-lg cursor-pointer ${isActive
+                            ? 'bg-primary/20 border-l-4 border-primary shadow-sm scale-[1.02]'
+                            : instruction.action === 'start' || instruction.action === 'arrive'
+                              ? 'bg-primary/5 border-l-4 border-primary/50'
+                              : isFloorChange
+                                ? 'bg-accent border-l-4 border-primary'
+                                : 'hover:bg-muted border-l-4 border-transparent'
+                            } transition-all duration-200`}
                           data-testid="instruction-item"
                         >
                           <div className="flex flex-col items-center">
@@ -859,6 +944,7 @@ export default function NavigationPage() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
           >
             {/* Smart Vertical Floor Selector */}
             {groupedFloors.length > 0 && (
@@ -980,9 +1066,19 @@ export default function NavigationPage() {
               </div>
             )}
 
-            {mapLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <span className="material-symbols-outlined text-4xl animate-spin text-muted-foreground">sync</span>
+            {isLoadingMaps ? (
+              <div className="flex items-center justify-center h-full bg-slate-950/5">
+                <div className="flex flex-col items-center gap-4">
+                  <Navigation2 className="size-12 animate-pulse text-primary/40" />
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-sm font-bold text-muted-foreground animate-pulse">ĐANG TẢI BẢN ĐỒ</p>
+                    <div className="flex gap-1">
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                       <div className="size-1 bg-primary/40 rounded-full animate-bounce"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : floorMaps.length === 0 ? (
               <div className="flex items-center justify-center h-full">
@@ -1023,7 +1119,7 @@ export default function NavigationPage() {
                               key={`route-seg-${idx}`}
                               d={pathData}
                               fill="none"
-                              stroke="#2563eb"
+                              stroke="#020260"
                               strokeWidth="4"
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -1033,135 +1129,88 @@ export default function NavigationPage() {
                         });
                       })()}
 
-                      {/* Nodes - only show all nodes if not in 3D */}
-                      {!is3D && isTargetFloor && fmNodes.map((node) => (
-                        <g key={node.id}>
-                          <circle
-                            cx={node.x}
-                            cy={node.y}
-                            r={node.type === 'room' ? 12 : 8}
-                            fill={NODE_COLORS[node.type] || NODE_COLORS.path}
-                            stroke="white"
-                            strokeWidth={2}
-                          />
-                          {node.name && node.name !== 'New Node' && (
-                            <text
-                              x={node.x}
-                              y={node.y - 15}
-                              textAnchor="middle"
-                              fill="#1f2937"
-                              fontSize="10"
-                              fontWeight="500"
-                            >
-                              {node.name}
-                            </text>
-                          )}
-                        </g>
-                      ))}
-
-                      {/* Start/End Markers */}
+                      {/* Start/End Markers - Minimalist style like MapPreview */}
                       {route && (() => {
-                        const startCoord = route.path_coords[0];
-                        const startNode = allNodes.find(n =>
-                          Math.abs(n.x - startCoord[0]) < 2 && Math.abs(n.y - startCoord[1]) < 2
-                        );
-                        const startFloorIdx = startNode
-                          ? floorMaps.findIndex(f => f.map.id === startNode.map_id)
-                          : -1;
+                        const startNodeId = route.path_node_ids[0];
+                        const startNode = allNodes.find(n => n.id === startNodeId);
+                        const startMapId = startNode?.map_id;
+                        
+                        const endNodeId = route.path_node_ids[route.path_node_ids.length - 1];
+                        const endNode = allNodes.find(n => n.id === endNodeId);
+                        const endMapId = endNode?.map_id;
 
-                        const endCoord = route.path_coords[route.path_coords.length - 1];
-                        const endNode = allNodes.find(n =>
-                          Math.abs(n.x - endCoord[0]) < 2 && Math.abs(n.y - endCoord[1]) < 2
-                        );
-                        const endFloorIdx = endNode
-                          ? floorMaps.findIndex(f => f.map.id === endNode.map_id)
-                          : -1;
+                        const currentMapId = fm.map.id;
 
                         return (
-                          <>
-                            {startFloorIdx === floorIndex && (
-                              <g>
-                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "20" : "14"} fill="#2563eb" />
-                                <circle cx={startCoord[0]} cy={startCoord[1]} r={is3D ? "12" : "8"} fill="white" />
-                                {!is3D && (
-                                  <text x={startCoord[0] + 20} y={startCoord[1] + 5} fill="#1e40af" fontSize="12" fontWeight="bold">
-                                    BẮT ĐẦU
-                                  </text>
-                                )}
+                          <g>
+                            {/* Start Marker */}
+                            {startMapId === currentMapId && (
+                              <g transform={`translate(${route.path_coords[0][0]}, ${route.path_coords[0][1]})`}>
+                                <circle r="8" fill="#020260" stroke="white" strokeWidth="2" className="drop-shadow-md" />
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">START</text>
                               </g>
                             )}
-                            {endFloorIdx === floorIndex && (
-                              <g>
-                                <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "20" : "14"} fill="#dc2626" />
-                                <circle cx={endCoord[0]} cy={endCoord[1]} r={is3D ? "12" : "8"} fill="white" />
-                                {!is3D && (
-                                  <text x={endCoord[0] + 20} y={endCoord[1] + 5} fill="#991b1b" fontSize="12" fontWeight="bold">
-                                    ĐÍCH ĐẾN
-                                  </text>
-                                )}
+
+                            {/* End Marker */}
+                            {endMapId === currentMapId && (
+                              <g transform={`translate(${route.path_coords[route.path_coords.length - 1][0]}, ${route.path_coords[route.path_coords.length - 1][1]})`}>
+                                <circle r="8" fill="#ef4444" stroke="white" strokeWidth="2" className="drop-shadow-md" />
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">END</text>
                               </g>
                             )}
-                          </>
+                          </g>
                         );
                       })()}
 
-                      {/* Highlighted instruction marker */}
+                      {/* Highlighted instruction marker - Pulsing like MapPreview */}
                       {!is3D && isTargetFloor && highlightedCoord && (
                         <g>
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="20" fill="#10b981" fillOpacity="0.3" />
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="12" fill="#10b981" stroke="white" strokeWidth="3" />
-                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="5" fill="white" />
+                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="20" fill="#10b981" fillOpacity="0.3" className="animate-pulse" />
+                          <circle cx={highlightedCoord.x} cy={highlightedCoord.y} r="10" fill="#10b981" stroke="white" strokeWidth="3" />
                         </g>
                       )}
 
-                      {/* TRANSITION BUTTONS */}
-                      {!is3D && isTargetFloor && route && floorSegments.length > 1 && (() => {
-                        const currentSeg = floorSegments.find(s => s.floorIndex === currentFloorIndex);
-                        const transitionNodes = fmNodes.filter(n =>
-                          (n.type === 'stairs' || n.type === 'elevator') &&
-                          currentSeg?.pathCoords.some(coord => Math.abs(n.x - coord[0]) < 2 && Math.abs(n.y - coord[1]) < 2)
-                        );
+                      {/* TRANSITION BUTTONS - Removed from map to match MapPreview minimalist style. 
+                          Users use the floor selector or follow the path. */}
 
-                        return transitionNodes.map((node, idx) => {
-                          const firstCoord = currentSeg?.pathCoords[0];
-                          const lastCoord = currentSeg?.pathCoords[currentSeg.pathCoords.length - 1];
-                          const isEntryPoint = firstCoord && Math.abs(node.x - firstCoord[0]) < 2 && Math.abs(node.y - firstCoord[1]) < 2;
-                          const isExitPoint = lastCoord && Math.abs(node.x - lastCoord[0]) < 2 && Math.abs(node.y - lastCoord[1]) < 2;
-
-                          let nextFloorIdx = -1;
-                          let prevFloorIdx = -1;
-                          const currentSegIdx = floorSegments.findIndex(s => s.floorIndex === currentFloorIndex);
-                          if (currentSegIdx < floorSegments.length - 1) nextFloorIdx = floorSegments[currentSegIdx + 1].floorIndex;
-                          if (currentSegIdx > 0) prevFloorIdx = floorSegments[currentSegIdx - 1].floorIndex;
-
-                          return (
-                            <g key={`trans-${currentFloorIndex}-${idx}`}>
-                              {isEntryPoint && prevFloorIdx !== -1 && (
-                                <g onClick={(e) => { e.stopPropagation(); handleFloorSwitch(prevFloorIdx); }} className="cursor-pointer">
-                                  <circle cx={node.x - 50} cy={node.y} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
-                                  <path d={`M${node.x - 40},${node.y - 6} L${node.x - 58},${node.y} L${node.x - 40},${node.y + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  <text x={node.x - 50} y={node.y + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
-                                    {floorMaps[prevFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[prevFloorIdx]?.map.floor_level}`}
-                                  </text>
-                                </g>
-                              )}
-                              {isExitPoint && nextFloorIdx !== -1 && (
-                                <g onClick={(e) => { e.stopPropagation(); handleFloorSwitch(nextFloorIdx); }} className="cursor-pointer">
-                                  <circle cx={node.x + 50} cy={node.y} r="24" fill="#fbbf24" stroke="white" strokeWidth="2" className="hover:fill-amber-500 transition-all" />
-                                  <path d={`M${node.x + 40},${node.y - 6} L${node.x + 58},${node.y} L${node.x + 40},${node.y + 6}`} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  <text x={node.x + 50} y={node.y + 40} textAnchor="middle" fill="#b45309" fontSize="10" fontWeight="600">
-                                    {floorMaps[nextFloorIdx]?.isCampus ? 'Campus' : `Tầng ${floorMaps[nextFloorIdx]?.map.floor_level}`}
-                                  </text>
-                                </g>
-                              )}
-                            </g>
-                          );
-                        });
-                      })()}
                     </g>
                   );
                 }}
               />
+            )}
+
+            {/* Step Navigator UI */}
+            {route && currentStepIndex !== -1 && (
+              <div className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card/90 backdrop-blur-md p-2 rounded-2xl border border-white/20 shadow-2xl transition-all duration-300 ${isMobile ? 'bottom-20 w-[90%]' : 'bottom-10'}`}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="size-10 rounded-xl hover:bg-primary/10 hover:text-primary"
+                  onClick={() => goToStep(Math.max(0, currentStepIndex - 1))}
+                  disabled={currentStepIndex <= 0}
+                >
+                  <span className="material-symbols-outlined">chevron_left</span>
+                </Button>
+                
+                <div className="flex-1 flex flex-col items-center min-w-[120px] px-2">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">
+                    Bước {currentStepIndex + 1} / {route.instructions.length}
+                  </div>
+                  <div className="text-xs font-semibold text-foreground text-center line-clamp-1">
+                    {route.instructions[currentStepIndex].text}
+                  </div>
+                </div>
+
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="size-10 rounded-xl hover:bg-primary/10 hover:text-primary"
+                  onClick={() => goToStep(Math.min(route.instructions.length - 1, currentStepIndex + 1))}
+                  disabled={currentStepIndex >= route.instructions.length - 1}
+                >
+                  <span className="material-symbols-outlined">chevron_right</span>
+                </Button>
+              </div>
             )}
 
             {/* Floor Change Notice Overlay */}

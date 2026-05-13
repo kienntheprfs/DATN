@@ -68,6 +68,10 @@ dependencies = [
     "langchain_tavily",
     "boto3",
     "redisvl>=0.16.0",
+    "torch>=2.11.0",
+    "transformers>=5.8.0",
+    "accelerate>=1.13.0",
+    "einops>=0.8.2",
 ]
 
 [dependency-groups]

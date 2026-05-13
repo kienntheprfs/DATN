@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useAppStore } from "@/stores/app.store";
 
 const routeTitles: Record<string, string> = {
 	"/": "Trang chủ",
@@ -26,11 +27,25 @@ const routeTitles: Record<string, string> = {
 
 export function usePageTitle() {
 	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const threadId = searchParams.get("thread_id");
+	const history = useAppStore((s) => s.history);
 
 	useEffect(() => {
-		const title = routeTitles[pathname];
+		let title = routeTitles[pathname];
+
+		// Xử lý tiêu đề động cho trang chat
+		if (pathname === "/chat" && threadId) {
+			const item = history.find((h) => h.id === threadId);
+			if (item?.title) {
+				title = item.title;
+			} else {
+				title = "Cuộc trò chuyện mới";
+			}
+		}
+
 		if (title) {
 			document.title = `${title} - Hệ thống Hỗ trợ sinh viên`;
 		}
-	}, [pathname]);
+	}, [pathname, threadId, history]);
 }

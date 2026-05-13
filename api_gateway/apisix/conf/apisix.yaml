@@ -283,6 +283,15 @@ routes:
         uri: /api/offer
     upstream_id: u-voice
 
+  - id: voice-chat-text-public
+    priority: 100
+    methods: ["POST"]
+    uri: /voice/chat/text
+    plugins:
+      proxy-rewrite:
+        uri: /api/chat/text
+    upstream_id: u-voice
+
   - id: voice-health-public
     priority: 100
     methods: ["GET"]

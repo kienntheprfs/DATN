@@ -306,8 +306,15 @@ def find_route_func(
             if len(results) == 1:
                 return results[0]["node_id"], format_location(results[0]), None
             
-            # If multiple results, check if the first one is clearly better
+            # If multiple results, check if the first one is a very strong match
             score1 = results[0].get("score", 0)
+            
+            # If match is >= 98% and unique enough, assume it is correct
+            if score1 >= 98:
+                score2 = results[1].get("score", 0) if len(results) > 1 else 0
+                if score1 - score2 >= 5:
+                    return results[0]["node_id"], format_location(results[0]), None
+
             score2 = results[1].get("score", 0)
             
             # If chênh lệch score >= 20, assume the first one is correct
@@ -315,7 +322,8 @@ def find_route_func(
                 return results[0]["node_id"], format_location(results[0]), None
             
             # Otherwise, it's ambiguous
-            opts = [format_location(r) for r in results[:3]]
+            # Tin tưởng hoàn toàn vào sắp xếp của Backend, lấy Top 10 gợi ý
+            opts = [format_location(r) for r in results[:10]]
             return None, None, opts
 
         start_node_id, start_display, start_opts = get_best_node(start_results, from_location)
