@@ -18,8 +18,12 @@ export interface ChatMessage {
 	citations?: Array<{
 		file_name: string;
 		s3_url: string;
-		text_preview: string;
+		text_preview?: string;
 		source_type: string;
+		doc_id?: string;
+		file_path?: string;
+		is_faq?: boolean;
+		faq_source?: string;
 	}>;
 }
 
@@ -36,8 +40,12 @@ export interface BackendChatMessage {
 	citations?: Array<{
 		file_name: string;
 		s3_url: string;
-		text_preview: string;
+		text_preview?: string;
 		source_type: string;
+		doc_id?: string;
+		file_path?: string;
+		is_faq?: boolean;
+		faq_source?: string;
 	}>;
 }
 
@@ -90,6 +98,11 @@ export const agentClient = {
 
 	async getHistory(threadId: string): Promise<ChatHistory> {
 		const response = await apiClient.post<ChatHistory>('/agent/history', { thread_id: threadId });
+		return response.data;
+	},
+	
+	async getThread(threadId: string): Promise<ThreadItem> {
+		const response = await apiClient.get<ThreadItem>(`/agent/threads/${threadId}`);
 		return response.data;
 	},
 

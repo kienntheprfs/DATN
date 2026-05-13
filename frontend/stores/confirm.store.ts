@@ -6,6 +6,7 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   variant?: 'default' | 'destructive';
+  style?: 'rounded' | 'square';
 }
 
 interface ConfirmState {
@@ -25,6 +26,7 @@ export const useConfirmStore = create<ConfirmState>((set) => ({
     confirmText: 'Xác nhận',
     cancelText: 'Hủy',
     variant: 'default',
+    style: 'rounded',
   },
   resolve: null,
 
@@ -37,6 +39,7 @@ export const useConfirmStore = create<ConfirmState>((set) => ({
           confirmText: options.confirmText || 'Xác nhận',
           cancelText: options.cancelText || 'Hủy',
           variant: options.variant || 'default',
+          style: options.style || 'rounded',
         },
         resolve,
       });

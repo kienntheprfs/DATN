@@ -157,7 +157,7 @@ export default function ProfilePage() {
 												{getRoleLabel()}
 											</Badge>
 											{user.is_superuser && (
-												<Badge className="bg-amber-500 text-white">
+												<Badge className="bg-primary text-white">
 													<Shield className="h-3 w-3 mr-1" />
 													Quản trị viên
 												</Badge>
@@ -272,7 +272,7 @@ export default function ProfilePage() {
 										</InputGroup>
 									</div>
 								</div>
-								<div className="flex items-start gap-2 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+								<div className="flex items-start gap-2 p-4 rounded-lg bg-primary/5 border border-primary/10 text-primary text-sm">
 									<Info className="h-4 w-4 mt-0.5 shrink-0" />
 									<span>Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số</span>
 								</div>

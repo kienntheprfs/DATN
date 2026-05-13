@@ -7,7 +7,7 @@ import { useBuildingStore } from '@/stores/building.store';
 import { mapApi } from '@/services/maps-api';
 import { editorApi } from '@/services/editor-api';
 import { useConfirmStore } from '@/stores/confirm.store';
-import { MapData, MapNode, MapEdge, ToolType, NodeFormData, EdgeFormData, Building } from '@/types';
+import { MapData, MapNode, MapEdge, ToolType, Building } from '@/types';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { BuildingModal } from './BuildingModal';
 import { EditorInspector } from './EditorInspector';
@@ -55,19 +55,34 @@ export default function EditorPage() {
   const [drawingPath, setDrawingPath] = useState<{ x: number; y: number }[]>([]);
   const [virtualMouse, setVirtualMouse] = useState({ x: 0, y: 0 });
   const [draggingNodeId, setDraggingNodeId] = useState<number | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // For node positions
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false); // For inspector fields
 
   const [localScaleRatio, setLocalScaleRatio] = useState<string>('1.0');
   const [isSavingScale, setIsSavingScale] = useState(false);
+  const [isLoadingMapData, setIsLoadingMapData] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const groupRef = useRef<SVGGElement>(null);
   const startPanRef = useRef({ x: 0, y: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
+  const [buildingNodes, setBuildingNodes] = useState<MapNode[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges || hasUnsavedEdits) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, hasUnsavedEdits]);
 
   useEffect(() => {
     if (currentMap) {
@@ -97,6 +112,7 @@ export default function EditorPage() {
     if (!currentMap?.id) return;
 
     const loadData = async () => {
+      setIsLoadingMapData(true);
       try {
         const [fetchedNodes, fetchedEdges] = await Promise.all([
           editorApi.getNodes(currentMap.id),
@@ -106,10 +122,62 @@ export default function EditorPage() {
         setEdges(fetchedEdges);
       } catch (error) {
         console.error('Failed to load map data:', error);
+      } finally {
+        setIsLoadingMapData(false);
       }
     };
     loadData();
   }, [currentMap?.id]);
+
+  const selectedNode = useMemo(() => 
+    selectedType === 'node' ? nodes.find(n => n.id === selectedId) : null
+  , [nodes, selectedId, selectedType]);
+
+  const nodeCache = useRef<Record<number, MapNode[]>>({});
+  const [buildingMaps, setBuildingMaps] = useState<MapData[]>([]);
+
+  // Calculate building maps based on current building/node
+  useEffect(() => {
+    const buildingId = currentMap?.building_id || selectedNode?.building_id;
+    if (!buildingId || !maps.length) {
+      setBuildingMaps([]);
+      return;
+    }
+
+    const bMaps = maps.filter((m) => 
+      m.building_id === buildingId && 
+      m.id !== currentMap?.id
+    );
+    setBuildingMaps(bMaps);
+  }, [maps, currentMap?.id, currentMap?.building_id, selectedNode?.building_id]);
+
+  useEffect(() => {
+    if (!buildingMaps.length) {
+      setBuildingNodes([]);
+      return;
+    }
+    
+    let isCurrent = true;
+    const loadBuildingNodes = async () => {
+      try {
+        const results = await Promise.all(buildingMaps.map(async (m) => {
+          if (!isCurrent) return [];
+          if (nodeCache.current[m.id]) {
+            return nodeCache.current[m.id];
+          }
+          const fetchedNodes = await editorApi.getNodes(m.id);
+          nodeCache.current[m.id] = fetchedNodes;
+          return fetchedNodes;
+        }));
+        if (isCurrent) setBuildingNodes(results.flat());
+      } catch (error) {
+        if (isCurrent) console.error('Failed to load building nodes:', error);
+      }
+    };
+
+    loadBuildingNodes();
+    return () => { isCurrent = false; };
+  }, [buildingMaps]);
 
   const getMapCoordinates = (e: MouseEvent) => {
     const svg = svgRef.current;
@@ -159,17 +227,29 @@ export default function EditorPage() {
 
   const handleMouseUp = async () => {
     if (draggingNodeId !== null) {
-      const node = nodes.find(n => n.id === draggingNodeId);
-      if (node) {
-        try {
-          await editorApi.updateNode(node.id, { x: node.x, y: node.y });
-        } catch (err) {
-          console.error('Error saving node:', err);
-        }
-      }
+      setHasUnsavedChanges(true);
       setDraggingNodeId(null);
     }
     setIsDragging(false);
+  };
+
+  const handleSavePositions = async () => {
+    if (!hasUnsavedChanges) return;
+    
+    setIsLoadingMapData(true);
+    try {
+      // Save all current nodes positions
+      await Promise.all(nodes.map(node => 
+        editorApi.updateNode(node.id, { x: node.x, y: node.y })
+      ));
+      setHasUnsavedChanges(false);
+      toast.success('Đã lưu vị trí các node!');
+    } catch (err) {
+      console.error('Error saving positions:', err);
+      toast.error('Lỗi khi lưu vị trí');
+    } finally {
+      setIsLoadingMapData(false);
+    }
   };
 
   const handleBgClick = async () => {
@@ -209,6 +289,16 @@ export default function EditorPage() {
       if (isEditing && selectedId === nodeId) {
         setDraggingNodeId(nodeId);
       } else {
+        if (hasUnsavedEdits) {
+          const confirmed = await confirm({
+            title: "Thay đổi chưa lưu",
+            description: "Bạn đang chỉnh sửa thông tin nhưng chưa lưu. Chuyển sang đối tượng khác sẽ mất các thay đổi này?",
+            variant: 'destructive',
+            style: 'square'
+          });
+          if (!confirmed) return;
+          setHasUnsavedEdits(false);
+        }
         selectItem('node', nodeId);
       }
     } else if (activeTool === 'add-edge') {
@@ -247,9 +337,19 @@ export default function EditorPage() {
     }
   };
 
-  const handleEdgeClick = (e: React.MouseEvent, edgeId: number) => {
+  const handleEdgeClick = async (e: React.MouseEvent, edgeId: number) => {
     e.stopPropagation();
     if (activeTool === 'select') {
+      if (hasUnsavedEdits) {
+        const confirmed = await confirm({
+          title: "Thay đổi chưa lưu",
+          description: "Bạn đang chỉnh sửa thông tin nhưng chưa lưu. Chuyển sang đối tượng khác sẽ mất các thay đổi này?",
+          variant: 'destructive',
+          style: 'square'
+        });
+        if (!confirmed) return;
+        setHasUnsavedEdits(false);
+      }
       selectItem('edge', edgeId);
     }
   };
@@ -316,7 +416,7 @@ export default function EditorPage() {
 
     setIsSavingScale(true);
     try {
-      const updatedMap = await mapApi.updateMap(currentMap.id, { scale_ratio: newRatio });
+      await mapApi.updateMap(currentMap.id, { scale_ratio: newRatio });
       updateMapInList(currentMap.id, { scale_ratio: newRatio });
 
       // Refresh edges since their weights might have changed in the backend
@@ -343,7 +443,18 @@ export default function EditorPage() {
       <EditorHeader
         maps={maps}
         currentMapId={currentMap?.id}
-        onMapChange={(newId) => {
+        onMapChange={async (newId) => {
+          if (hasUnsavedChanges || hasUnsavedEdits) {
+            const confirmed = await confirm({
+              title: "Thay đổi chưa lưu",
+              description: "Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn chuyển trang và mất các thay đổi này?",
+              variant: 'destructive',
+              style: 'square'
+            });
+            if (!confirmed) return;
+            setHasUnsavedChanges(false);
+            setHasUnsavedEdits(false);
+          }
           const selectedMap = maps.find(m => m.id === newId);
           if (selectedMap) setMap(selectedMap);
         }}
@@ -389,6 +500,20 @@ export default function EditorPage() {
               })}
             </div>
           </div>
+
+          {hasUnsavedChanges && (
+            <div className="flex flex-col gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider text-center">Có thay đổi vị trí</p>
+              <Button 
+                size="sm" 
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white border-none shadow-sm h-8 text-[11px] font-bold uppercase tracking-wider"
+                onClick={handleSavePositions}
+                disabled={isLoadingMapData}
+              >
+                {isLoadingMapData ? 'Đang lưu...' : 'Lưu tất cả'}
+              </Button>
+            </div>
+          )}
 
           {/* Map Configuration Section */}
           <div className="flex flex-col gap-4 p-4 bg-muted/10 border border-border/60 rounded-xl">
@@ -479,6 +604,20 @@ export default function EditorPage() {
               <MapOverlay onUploadSuccess={setMap} />
             )}
 
+            {(isLoadingMapData || !currentMap) && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-background/40 backdrop-blur-[2px]">
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary text-xl animate-pulse">map</span>
+                  </div>
+                </div>
+                <p className="mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-primary animate-pulse">
+                  Đang nạp dữ liệu bản đồ...
+                </p>
+              </div>
+            )}
+
             <div className="absolute inset-0 flex items-center justify-center">
               <svg
                 ref={svgRef}
@@ -515,6 +654,8 @@ export default function EditorPage() {
                       const pathData = getEdgePath(edge);
                       if (!pathData) return null;
                       const isSelected = selectedType === 'edge' && selectedId === edge.id;
+                      const isCrossFloor = !nodes.find(n => n.id === edge.start_node_id) || !nodes.find(n => n.id === edge.end_node_id);
+                      
                       return (
                         <g key={edge.id}>
                           <path
@@ -530,10 +671,11 @@ export default function EditorPage() {
                           <path
                             d={pathData}
                             fill="none"
-                            stroke={isSelected ? '#2563eb' : '#1C4D8D'}
+                            stroke={isSelected ? '#2563eb' : (isCrossFloor ? '#94a3b8' : '#1C4D8D')}
                             strokeWidth={isSelected ? 4 : 2}
                             strokeLinecap="round"
                             strokeLinejoin="round"
+                            strokeDasharray={isCrossFloor ? "5,5" : "none"}
                             className="pointer-events-none"
                           />
                         </g>
@@ -551,19 +693,23 @@ export default function EditorPage() {
                           <circle
                             cx={node.x}
                             cy={node.y}
-                            r={isSelected ? 14 : 10}
+                            r={isSelected ? 6 : 4}
                             fill={NODE_COLORS[node.type] || NODE_COLORS.path}
                             stroke={isSelected ? '#2563eb' : 'white'}
-                            strokeWidth={isSelected ? 3 : 2}
+                            strokeWidth={isSelected ? 2 : 1.5}
                           />
                           {node.name && node.name.toLowerCase() !== 'new node' && (
                             <text
                               x={node.x}
-                              y={node.y - 15}
+                              y={node.y - 12}
                               textAnchor="middle"
-                              fill="#1f2937"
-                              fontSize="10"
-                              fontWeight="500"
+                              fill="#020260"
+                              fontSize="12"
+                              fontWeight="800"
+                              className="select-none pointer-events-none uppercase tracking-tight"
+                              stroke="white"
+                              strokeWidth="2.5"
+                              paintOrder="stroke"
                             >
                               {node.name}
                             </text>
@@ -576,10 +722,10 @@ export default function EditorPage() {
                       <circle
                         cx={virtualMouse.x}
                         cy={virtualMouse.y}
-                        r="8"
+                        r="5"
                         fill="rgba(59, 130, 246, 0.5)"
                         stroke="#2563eb"
-                        strokeWidth="2"
+                        strokeWidth="1.5"
                         strokeDasharray="4 4"
                         className="pointer-events-none"
                       />
@@ -642,11 +788,25 @@ export default function EditorPage() {
           onSetEditing={setEditing}
           onRefreshNodes={() => {
             if (currentMap?.id) {
-              editorApi.getNodes(currentMap.id).then(setNodes);
+              editorApi.getNodes(currentMap.id).then((fetchedNodes) => {
+                setNodes(fetchedNodes);
+                // Update cache for the current map
+                nodeCache.current[currentMap.id] = fetchedNodes;
+              });
+            }
+            // Building nodes are already tracked via buildingMaps effect
+          }}
+          onRefreshEdges={() => {
+            if (currentMap?.id) {
+              editorApi.getEdges(currentMap.id).then(setEdges);
             }
           }}
           onRefreshBuildings={fetchBuildings}
           currentMap={currentMap}
+          buildingMaps={buildingMaps}
+          buildingNodes={buildingNodes}
+          hasUnsavedChanges={hasUnsavedChanges}
+          onUnsavedEditsChange={setHasUnsavedEdits}
         />
         {showBuildingModal && (
           <BuildingModal
@@ -820,500 +980,5 @@ function EditorHeader({
         )}
       </div>
     </header>
-  );
-}
-
-function OldEditorSidebar({ buildings, nodes }: { buildings: Building[]; nodes: MapNode[] }) {
-  const { currentMap, edges, selectedId, selectedType, isEditing, updateNode, deleteNode, deleteEdge, setEditing, selectItem } = useEditorStore();
-  const confirm = useConfirmStore((state) => state.confirm);
-
-  const data = selectedType === 'node' ? nodes.find(n => n.id === selectedId) : edges.find(e => e.id === selectedId);
-
-  const [editedData, setEditedData] = useState<NodeFormData | EdgeFormData | null>(null);
-  const [aliasInput, setAliasInput] = useState('');
-  const [linkedNodeSearch, setLinkedNodeSearch] = useState('');
-  const [showLinkedNodeDropdown, setShowLinkedNodeDropdown] = useState(false);
-  const [showBuildingModal, setShowBuildingModal] = useState(false);
-
-  const formData = useMemo(() => {
-    if (!data) return editedData;
-    if (selectedType === 'node') {
-      const nodeData = data as MapNode;
-      return {
-        ...nodeData,
-        aliases: nodeData.aliases || [],
-        linked_node_ids: nodeData.linked_node_ids || [],
-      };
-    }
-    return data as EdgeFormData;
-  }, [data, selectedType, editedData]);
-
-  const linkedNodeOptions = useMemo(() => {
-    const nodeData = formData as NodeFormData;
-    if (!nodeData) return [];
-    const currentLinkedIds = nodeData.linked_node_ids || [];
-    const searchLower = linkedNodeSearch.toLowerCase();
-    return nodes
-      .filter(n =>
-        n.id !== selectedId &&
-        !currentLinkedIds.includes(n.id) &&
-        (linkedNodeSearch === '' ||
-          n.name.toLowerCase().includes(searchLower) ||
-          String(n.id).includes(linkedNodeSearch))
-      )
-      .slice(0, 10);
-  }, [nodes, selectedId, linkedNodeSearch, formData]);
-
-  const linkedNodeNames = useMemo(() => {
-    const nodeData = formData as NodeFormData;
-    if (!nodeData?.linked_node_ids?.length) return [];
-    return nodeData.linked_node_ids
-      .map(id => nodes.find(n => n.id === id))
-      .filter(Boolean) as MapNode[];
-  }, [formData, nodes]);
-
-  const handleChange = (field: string, value: unknown) => {
-    if (!formData) return;
-    const currentData = { ...formData };
-    (currentData as Record<string, unknown>)[field] = value;
-    setEditedData(currentData as NodeFormData | EdgeFormData);
-  };
-
-  const handleSave = async () => {
-    if (!formData || !selectedId) return;
-    try {
-      if (selectedType === 'node' && 'name' in formData) {
-        const nodeData = formData as NodeFormData;
-        const aliases = nodeData.aliases?.map((a) => (typeof a === 'string' ? a : a.name)) || [];
-        await editorApi.updateNode(selectedId, {
-          name: nodeData.name,
-          type: nodeData.type,
-          aliases,
-          linked_node_ids: nodeData.linked_node_ids,
-          building_id: nodeData.building_id,
-        });
-        updateNode(selectedId, { ...nodeData, aliases });
-      }
-      setEditedData(null);
-      setEditing(false);
-      toast.success('Lưu thành công!');
-    } catch (error) {
-      console.error('Error saving:', error);
-      toast.error('Lỗi khi lưu!', {
-        description: error instanceof Error ? error.message : 'Vui lòng thử lại sau.',
-      });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selectedId) return;
-
-    const confirmed = await confirm({
-      title: `Xác nhận xóa ${selectedType === 'node' ? 'điểm' : 'đường đi'}`,
-      description: `Bạn có chắc chắn muốn xóa ${selectedType === 'node' ? 'điểm' : 'đường đi'} này?`,
-      variant: 'destructive'
-    });
-
-    if (!confirmed) return;
-    
-    try {
-      if (selectedType === 'node') {
-        await editorApi.deleteNode(selectedId);
-        deleteNode(selectedId);
-        toast.success('Đã xóa node!');
-      } else if (selectedType === 'edge') {
-        await editorApi.deleteEdge(selectedId);
-        deleteEdge(selectedId);
-        toast.success('Đã xóa edge!');
-      }
-      selectItem(null, null);
-    } catch (error) {
-      console.error('Error deleting:', error);
-      toast.error('Lỗi khi xóa!');
-    }
-  };
-
-  const handleAddAlias = () => {
-    if (!aliasInput.trim() || !formData || selectedType !== 'node') return;
-    const nodeData = formData as NodeFormData;
-    handleChange('aliases', [...(nodeData.aliases || []), { name: aliasInput.trim() }]);
-    setAliasInput('');
-  };
-
-  const handleRemoveAlias = (index: number) => {
-    if (!formData || selectedType !== 'node') return;
-    const nodeData = formData as NodeFormData;
-    const currentAliases = nodeData.aliases || [];
-    handleChange('aliases', currentAliases.filter((_: unknown, i: number) => i !== index));
-  };
-
-  const handleAddLinkedNode = (nodeId: number) => {
-    const nodeData = formData as NodeFormData;
-    handleChange('linked_node_ids', [...(nodeData.linked_node_ids || []), nodeId]);
-    setLinkedNodeSearch('');
-    setShowLinkedNodeDropdown(false);
-  };
-
-  const handleRemoveLinkedNode = (nodeId: number) => {
-    const nodeData = formData as NodeFormData;
-    handleChange('linked_node_ids', (nodeData.linked_node_ids || []).filter(id => id !== nodeId));
-  };
-
-  if (!currentMap) {
-    return <aside className="w-80 bg-card border-l border-border" />;
-  }
-
-  if (!formData || !selectedType) {
-    return (
-      <aside className="w-80 h-full border-l border-border bg-card flex flex-col p-0 shadow-xl z-20">
-        <div className="h-40 bg-muted relative overflow-hidden">
-          <img src={getFullImageUrl(currentMap.image_url)} className="w-full h-full object-cover opacity-50" alt={`Bản đồ ${currentMap.name}`} />
-          <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent"></div>
-          <div className="absolute bottom-4 left-6">
-            <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Current Map</span>
-            <h2 className="text-xl font-bold text-foreground mt-1 truncate w-64">{currentMap.name}</h2>
-          </div>
-        </div>
-        <div className="p-6 text-center text-muted-foreground">
-          <p className="text-sm">Chọn một đối tượng để xem chi tiết</p>
-        </div>
-      </aside>
-    );
-  }
-
-  const isNode = selectedType === 'node';
-  const nodeData = isNode ? (formData as NodeFormData) : null;
-  const edgeData = !isNode ? (formData as EdgeFormData) : null;
-
-  return (
-    <aside className="w-80 h-full border-l border-border bg-card flex flex-col shadow-xl z-20 animate-in slide-in-from-right duration-300">
-      <div className="px-6 py-5 border-b border-border bg-muted/50 flex justify-between items-start">
-        <div className="flex-1 mr-2">
-          <span className={`flex items-center gap-1.5 w-fit px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border mb-2
-            ${isNode ? 'bg-primary/10 text-primary border-primary/20' : 'bg-secondary text-secondary-foreground border-secondary'}`}>
-            {isNode ? 'Location' : 'Connection'} <span className="opacity-50 mx-1">|</span> #{formData.id}
-          </span>
-          {isEditing && isNode ? (
-            <input
-              type="text"
-              value={isNode ? (formData as NodeFormData).name : ''}
-              onChange={(e) => handleChange('name', e.target.value)}
-              className="w-full bg-background px-2 py-1 rounded border border-input focus:outline-none focus:ring-2 focus:ring-ring text-lg font-bold text-foreground"
-              autoFocus
-              placeholder="Tên địa điểm..."
-            />
-          ) : (
-            <h2 className="text-lg font-bold text-foreground leading-tight truncate">
-              {isNode ? (formData as NodeFormData).name : (formData as EdgeFormData).type}
-            </h2>
-          )}
-        </div>
-        <button
-          onClick={() => isEditing ? handleSave() : setEditing(true)}
-          className={`flex items-center justify-center w-8 h-8 rounded-full transition-all 
-            ${isEditing ? 'bg-primary text-primary-foreground shadow-lg hover:bg-primary/90' : 'bg-background text-muted-foreground border border-border hover:text-primary hover:border-primary'}`}
-        >
-          <span className="material-symbols-outlined text-lg">{isEditing ? 'check' : 'edit'}</span>
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-        {isNode && nodeData && (
-          <>
-            <div className="p-4 rounded-xl bg-muted border border-border">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Coordinates</h4>
-                {isEditing && <span className="text-[10px] text-primary italic animate-pulse">Kéo thả trên map</span>}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] text-muted-foreground font-medium mb-1 block">X</label>
-                  <div className="font-mono text-sm text-foreground font-bold bg-background px-2 py-1.5 rounded border border-border">
-                    {Math.round(nodeData.x || 0)}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground font-medium mb-1 block">Y</label>
-                  <div className="font-mono text-sm text-foreground font-bold bg-background px-2 py-1.5 rounded border border-border">
-                    {Math.round(nodeData.y || 0)}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-foreground mb-2 block">Loại địa điểm</label>
-              <Select
-                disabled={!isEditing}
-                value={nodeData.type}
-                onValueChange={(value) => handleChange('type', value)}
-              >
-                <SelectTrigger className={`w-full ${isEditing ? 'bg-background border-input' : 'bg-muted border-transparent cursor-not-allowed'}`}>
-                  <SelectValue placeholder="Chọn loại địa điểm" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="path">Điểm trung gian (Path)</SelectItem>
-                  <SelectItem value="room">Phòng (Room)</SelectItem>
-                  <SelectItem value="stairs">Cầu thang</SelectItem>
-                  <SelectItem value="elevator">Thang máy</SelectItem>
-                  <SelectItem value="entrance">Cổng ra vào</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="pt-4 border-t border-border">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Chi tiết tòa nhà</h4>
-                {nodeData.building_id && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Đã thiết lập</span>}
-              </div>
-
-              {nodeData.building_id ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-muted border border-border">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined">domain</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">Tòa nhà trực thuộc</div>
-                      <div className="text-sm font-bold truncate">
-                        {buildings.find(b => b.id === nodeData.building_id)?.name || `Building #${nodeData.building_id}`}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowBuildingModal(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-background border border-border text-muted-foreground text-xs font-bold hover:bg-muted hover:text-primary hover:border-primary/20 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                    Quản lý / Đổi tòa nhà
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowBuildingModal(true)}
-                  className="group relative w-full py-4 rounded-xl overflow-hidden bg-background border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 transition-all duration-300"
-                >
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                      <span className="material-symbols-outlined">domain_add</span>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm font-bold text-foreground">Thiết lập tòa nhà</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">Thêm tầng & bản đồ chi tiết</div>
-                    </div>
-                  </div>
-                </button>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-border">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Tên gọi khác (Alias)</h4>
-                {(nodeData.aliases?.length ?? 0) > 0 && (
-                  <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                    {nodeData.aliases?.length} tên
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-2 mb-3">
-                {(nodeData.aliases || []).map((alias, index) => {
-                  const aliasName = typeof alias === 'string' ? alias : alias.name;
-                  return (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="flex-1 px-3 py-2 bg-muted rounded-lg border border-border text-sm text-foreground">
-                        {aliasName}
-                      </div>
-                      {isEditing && (
-                        <button
-                          onClick={() => handleRemoveAlias(index)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {isEditing && (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Thêm tên gọi..."
-                    value={aliasInput}
-                    onChange={(e) => setAliasInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddAlias()}
-                    className="flex-1 px-3 py-2 rounded-lg border text-foreground border-input text-sm focus:outline-none focus:border-primary bg-background"
-                  />
-                  <Button onClick={handleAddAlias}>
-                    Thêm
-                  </Button>
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground mt-1">Nhấn Enter để thêm</p>
-            </div>
-
-            {isNode && (
-              <div className="pt-4 border-t border-border">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Node liên kết (Cross-floor)</h4>
-                  {linkedNodeNames.length > 0 && (
-                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                      {linkedNodeNames.length} nodes
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-2 mb-3">
-                  {linkedNodeNames.map((linkedNode) => (
-                    <div key={linkedNode.id} className="flex items-center gap-2">
-                      <div className="flex-1 px-3 py-2 bg-muted rounded-lg border border-border text-sm text-foreground">
-                        <span className="font-mono text-muted-foreground">#{linkedNode.id}</span> {linkedNode.name}
-                      </div>
-                      {isEditing && (
-                        <button
-                          onClick={() => handleRemoveLinkedNode(linkedNode.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {isEditing && (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Tìm node để liên kết..."
-                      value={linkedNodeSearch}
-                      onChange={(e) => {
-                        setLinkedNodeSearch(e.target.value);
-                        setShowLinkedNodeDropdown(true);
-                      }}
-                      onFocus={() => setShowLinkedNodeDropdown(true)}
-                      className="w-full px-3 py-2 rounded-lg border text-foreground border-input text-sm focus:outline-none focus:border-primary bg-background"
-                    />
-                    {showLinkedNodeDropdown && linkedNodeOptions.length > 0 && (
-                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {linkedNodeOptions.map((opt) => (
-                          <div
-                            key={opt.id}
-                            onClick={() => handleAddLinkedNode(opt.id)}
-                            className="px-3 py-2 cursor-pointer hover:bg-muted text-sm"
-                          >
-                            <span className="font-mono text-muted-foreground">#{opt.id}</span> {opt.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <p className="text-[10px] text-muted-foreground mt-1">Dùng để kết nối giữa các tầng/các tòa</p>
-              </div>
-            )}
-          </>
-        )}
-
-        {!isNode && edgeData && (
-          <>
-            <div className="flex items-center justify-between p-3 bg-muted rounded border border-border">
-              <div className="text-xs text-muted-foreground">Kết nối</div>
-              <div className="text-xs font-bold font-mono text-foreground">
-                #{edgeData.start_node_id} <span className="mx-1 text-muted-foreground">→</span> #{edgeData.end_node_id}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Weight</label>
-                <input
-                  type="number"
-                  disabled={!isEditing}
-                  value={edgeData.weight || 0}
-                  onChange={(e) => handleChange('weight', parseFloat(e.target.value))}
-                  className={`w-full px-3 py-2 rounded-lg border text-sm font-mono font-bold text-foreground outline-none ${isEditing ? 'bg-background border-input focus:border-primary' : 'bg-muted border-transparent'
-                    }`}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Type</label>
-                <Select
-                  disabled={!isEditing}
-                  value={edgeData.type}
-                  onValueChange={(value) => handleChange('type', value)}
-                >
-                  <SelectTrigger className={`w-full ${isEditing ? 'bg-background border-input' : 'bg-muted border-transparent'}`}>
-                    <SelectValue placeholder="Chọn loại" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="walk">Đi bộ</SelectItem>
-                    <SelectItem value="stairs">Thang bộ</SelectItem>
-                    <SelectItem value="elevator">Thang máy</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="bidirectional"
-                disabled={!isEditing}
-                checked={edgeData.bidirectional ?? true}
-                onChange={(e) => handleChange('bidirectional', e.target.checked)}
-                className="w-4 h-4 accent-primary"
-              />
-              <label htmlFor="bidirectional" className="text-sm text-foreground cursor-pointer">
-                Đường đi 2 chiều
-              </label>
-            </div>
-          </>
-        )}
-      </div>
-
-      {isEditing ? (
-        <div className="p-4 border-t border-border bg-background grid grid-cols-2 gap-3">
-          <Button variant="outline" onClick={() => setEditing(false)}>
-            Hủy bỏ
-          </Button>
-          <Button onClick={handleSave}>
-            Lưu thay đổi
-          </Button>
-        </div>
-      ) : (
-        <div className="p-4 border-t border-border bg-muted/50">
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            className="w-full"
-          >
-            <span className="material-symbols-outlined text-sm mr-2">delete</span> Xóa đối tượng
-          </Button>
-        </div>
-      )}
-
-      {showBuildingModal && selectedType === 'node' && (
-        <BuildingModal
-          initialBuildingId={nodeData?.building_id}
-          onClose={() => setShowBuildingModal(false)}
-          onSuccess={() => {
-            if (selectedId) {
-              editorApi.getNodeById(selectedId).then((updatedNode) => {
-                updateNode(selectedId, updatedNode);
-                setEditedData({
-                  ...updatedNode,
-                  aliases: (updatedNode.aliases || []) as string[],
-                  linked_node_ids: updatedNode.linked_node_ids || [],
-                } as unknown as NodeFormData);
-              });
-            }
-            setShowBuildingModal(false);
-          }}
-        />
-      )}
-    </aside>
   );
 }

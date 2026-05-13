@@ -9,6 +9,8 @@ import { Layers, Navigation2, Maximize2, ChevronRight, ChevronLeft } from 'lucid
 import { wayfindingMapApi } from '@/services/wayfinding-map-api';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 import { MapData, MapNode, Instruction, MapWithData } from '@/types/wayfinding';
+import { useAppStore } from '@/stores/app.store';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -34,28 +36,60 @@ interface MiniNavProps {
   routeData: RouteData;
 }
 
+function MapSkeleton() {
+  return (
+    <div className="flex flex-col border border-border/50 rounded-2xl overflow-hidden bg-card/30 backdrop-blur-sm shadow-xl max-w-full animate-pulse">
+      <div className="p-5 bg-muted/20 border-b border-border/30">
+        <div className="flex items-center justify-between">
+          <div className="space-y-3">
+            <div className="h-3 w-20 bg-primary/10 rounded-full" />
+            <div className="h-5 w-48 bg-primary/20 rounded-lg" />
+          </div>
+          <div className="h-9 w-24 bg-primary/20 rounded-full shadow-inner" />
+        </div>
+      </div>
+      <div className="h-[350px] bg-muted/10 flex items-center justify-center relative overflow-hidden">
+        <div className="relative z-10">
+          <Navigation2 className="w-12 h-12 text-primary/30" />
+        </div>
+        
+        {/* Animated decorative grid lines */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '20%' }} />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '40%' }} />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '60%' }} />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '80%' }} />
+          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '25%' }} />
+          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '50%' }} />
+          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '75%' }} />
+        </div>
+
+        {/* Decorative path simulation */}
+        <div className="absolute top-1/4 left-1/4 w-32 h-1.5 bg-primary/15 rounded-full rotate-45 blur-[1px]" />
+        <div className="absolute top-1/2 left-1/3 w-24 h-1.5 bg-primary/15 rounded-full -rotate-12 blur-[1px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-40 h-1.5 bg-primary/10 rounded-full rotate-[160deg] blur-[1px]" />
+      </div>
+      <div className="p-5 bg-background/50 border-t border-border/30 space-y-3">
+        <div className="h-3 w-24 bg-muted/30 rounded-full" />
+        <div className="h-4 w-full bg-muted/20 rounded-lg" />
+        <div className="h-4 w-3/4 bg-muted/20 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
 
 
 export function MiniNavigation({ routeData }: MiniNavProps) {
   const router = useRouter();
-  const [allMaps, setAllMaps] = useState<MapWithData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { allMaps, fetchAllMaps, isLoadingMaps } = useAppStore();
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const maps = await wayfindingMapApi.getAllMaps();
-        const data = await Promise.all(maps.map(m => wayfindingMapApi.getMapWithData(m.id)));
-        setAllMaps(data);
-      } catch (err) {
-        console.error('Failed to load maps:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+    fetchAllMaps();
+  }, [fetchAllMaps]);
+
+  const loading = isLoadingMaps || allMaps.length === 0;
 
   const floors = useMemo(() => {
     if (routeData.floors && routeData.floors.length > 0) {
@@ -140,7 +174,7 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
       if (width === 0 || height === 0) return; // Wait for layout
       
       const [x, y] = activeStep.coordinate;
-      const S = 2.0; // matching scale prop
+      const S = 1.3; // matching scale prop
       setPosition({
         x: width / 2 - x * S,
         y: height / 2 - y * S
@@ -210,11 +244,7 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
     router.push(`/navigation?${params.toString()}`);
   };
 
-  if (loading) return (
-    <div className="h-64 flex items-center justify-center bg-muted/20 rounded-xl border border-dashed border-border">
-      <Navigation2 className="w-6 h-6 animate-pulse text-muted-foreground" />
-    </div>
-  );
+  if (loading) return <MapSkeleton />;
 
   return (
     <div className="flex flex-col border border-border rounded-2xl overflow-hidden bg-card shadow-xl max-w-full">
@@ -254,7 +284,7 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
           floorMaps={allMaps}
           floorSegments={floorSegments}
           currentFloorIndex={activeFloorIdx}
-          scale={2.0}
+          scale={1.3}
           position={position}
           isDragging={false}
           svgRef={{ current: null }}
@@ -281,25 +311,15 @@ export function MiniNavigation({ routeData }: MiniNavProps) {
                 ))}
                 
                 {isCurrentStepOnThisFloor && (
-                  <g>
-                    <circle
-                      cx={activeStep.coordinate[0]}
-                      cy={activeStep.coordinate[1]}
-                      r="12"
-                      fill="#3b82f6"
-                      fillOpacity="0.2"
-                      className="animate-ping"
-                    />
-                    <circle
-                      cx={activeStep.coordinate[0]}
-                      cy={activeStep.coordinate[1]}
-                      r="6"
-                      fill="#ffffff"
-                      stroke="#3b82f6"
-                      strokeWidth="3"
-                      className="drop-shadow-md"
-                    />
-                  </g>
+                  <circle
+                    cx={activeStep.coordinate[0]}
+                    cy={activeStep.coordinate[1]}
+                    r="8"
+                    fill="#3b82f6"
+                    stroke="#ffffff"
+                    strokeWidth="3"
+                    className="drop-shadow-xl"
+                  />
                 )}
               </g>
             );

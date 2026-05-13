@@ -38,7 +38,8 @@ export interface UpdateFAQPayload {
 }
 
 export const faqApi = {
-  list: async (skip = 0, limit = 50): Promise<FAQListResponse> => {
+  list: async (params: { skip?: number; limit?: number } = {}): Promise<FAQListResponse> => {
+    const { skip = 0, limit = 50 } = params;
     console.log('[FAQ API] GET /faqs', { skip, limit });
     const response = await apiClient.get<FAQ[]>(FAQ_API_URL, {
       params: { skip, limit },

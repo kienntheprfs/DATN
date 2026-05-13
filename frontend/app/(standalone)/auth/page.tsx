@@ -21,6 +21,7 @@ interface FormErrors {
 }
 
 function AuthForm() {
+	usePageTitle();
 	const [isLogin, setIsLogin] = useState(true);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
@@ -67,7 +68,7 @@ function AuthForm() {
 
 		if (!email) newErrors.email = "Vui lòng nhập email";
 		if (!password) newErrors.password = "Vui lòng nhập mật khẩu";
-		
+
 		if (!isLogin) {
 			if (!fullname) newErrors.fullname = "Vui lòng nhập họ tên";
 			if (password !== confirmPassword) newErrors.confirmPassword = "Mật khẩu xác nhận không khớp";
@@ -137,8 +138,8 @@ function AuthForm() {
 				scope: 'openid email profile',
 				callback: async (response: any) => {
 					if (response.error) {
-						const errorMsg = response.error === 'popup_closed_by_user' 
-							? "Đã hủy đăng nhập Google" 
+						const errorMsg = response.error === 'popup_closed_by_user'
+							? "Đã hủy đăng nhập Google"
 							: `Lỗi Google: ${response.error}`;
 						setErrors({ general: errorMsg });
 						return;
@@ -199,8 +200,10 @@ function AuthForm() {
 					<div className="w-full max-w-md mx-auto">
 						{/* Logo & Title */}
 						<div className="text-center mb-10">
-							<div className="inline-flex items-center justify-center w-20 h-20 bg-primary text-white rounded-sm mb-6 shadow-md">
-								<GraduationCap className="size-10 fill-current" />
+							<div className="inline-flex items-center justify-center w-20 h-20 bg-primary text-white rounded-2xl mb-6 shadow-lg">
+								<div className="w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center">
+									<GraduationCap size={56} strokeWidth={1.5} className="text-white" />
+								</div>
 							</div>
 							<h1 className="font-heading text-text-main tracking-tight mb-3 text-4xl font-bold">BK-TBOT</h1>
 							<p className="text-text-secondary text-lg">Hệ thống Tra cứu Quy chế & Văn bản</p>
@@ -211,18 +214,16 @@ function AuthForm() {
 							<button
 								type="button"
 								onClick={() => handleTabChange(true)}
-								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
-									isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
-								}`}
+								className={`flex-1 pb-3 text-center font-semibold transition-colors ${isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
+									}`}
 							>
 								Đăng nhập
 							</button>
 							<button
 								type="button"
 								onClick={() => handleTabChange(false)}
-								className={`flex-1 pb-3 text-center font-semibold transition-colors ${
-									!isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
-								}`}
+								className={`flex-1 pb-3 text-center font-semibold transition-colors ${!isLogin ? "text-primary border-b-2 border-primary" : "text-text-secondary hover:text-text-main"
+									}`}
 							>
 								Đăng ký
 							</button>
@@ -487,7 +488,6 @@ function AuthForm() {
 }
 
 export default function AuthPage() {
-	usePageTitle();
 	return (
 		<Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
 			<AuthForm />

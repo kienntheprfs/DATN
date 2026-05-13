@@ -101,22 +101,46 @@ def clean_markdown_for_tts(text: str) -> str:
     if not text:
         return text
 
-    # Bỏ các đoạn code block dài (TTS đọc code rất tệ và mất thời gian)
+    # 1. Bỏ các đoạn code block dài (TTS đọc code rất tệ và mất thời gian)
     text = re.sub(r"```[\s\S]*?```", "", text)
     # Bỏ inline code (chỉ bỏ dấu backtick, giữ lại text bên trong)
     text = re.sub(r"`([^`]+)`", r"\1", text)
-    # Bỏ các dấu in đậm, in nghiêng (**text**, *text*, __text__, _text_)
-    text = re.sub(r"[*_]{1,2}([^*_]+)[*_]{1,2}", r"\1", text)
-    # Xử lý link: [Tên Link](URL) -> Chỉ giữ lại phần "Tên Link" để đọc
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-    # Bỏ các ký tự Header (#)
-    text = re.sub(r"#+\s*", "", text)
-    # Bỏ các dấu gạch đầu dòng, dấu sao hoặc số thứ tự ở đầu dòng
-    text = re.sub(r"^[\-\*\+]\s+", "", text, flags=re.MULTILINE)
-    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+    
+    # 2. Xử lý Image và Link (giữ lại text hiển thị)
+    text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r" \1 ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r" \1 ", text)
 
-    # Xóa khoảng trắng thừa và ký tự > của blockquote
-    text = re.sub(r"^>\s+", "", text, flags=re.MULTILINE)
+    # 3. Xử lý các Block elements (Headers, Quotes, Lists)
+    # Headers (# Header)
+    text = re.sub(r"^\s*#+\s+", "", text, flags=re.MULTILINE)
+    # Blockquotes (> Quote)
+    text = re.sub(r"^\s*>\s+", "", text, flags=re.MULTILINE)
+    # Lists (-, *, +, \d.) - Xử lý cả khi có thụt lề
+    text = re.sub(r"^\s*[\-\*\+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+    
+    # Horizontal Rules (---, ***, ___)
+    text = re.sub(r"^\s*(?:---|\*\*\*|___)\s*$", "", text, flags=re.MULTILINE)
+
+    # 4. Xử lý các Inline elements (Bold, Italic, Strikethrough)
+    # Xử lý các cụm dấu sao/gạch dưới lặp lại (ví dụ ***, **, *)
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"_{1,3}(.*?)_{1,3}", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"~~(.*?)~~", r"\1", text, flags=re.DOTALL)
+
+    # 5. Loại bỏ các ký tự Markdown còn sót lại mà TTS hay đọc
+    # Xóa các dấu sao, gạch dưới, thăng lẻ loi (không nằm trong từ)
+    text = re.sub(r"(^|\s)[\*\#\_\-\+\>]+(\s|$)", r"\1\2", text)
+    # Xóa các ký tự đặc biệt ở đầu/cuối câu thường thấy trong MD
+    text = re.sub(r"^\s*[\*\#\_\-\+\>]+", "", text)
+    text = re.sub(r"[\*\#\_\-\+\>]+\s*$", "", text)
+
+    # 6. Loại bỏ HTML tags
+    text = re.sub(r"<[^>]*>", "", text)
+
+    # 7. Dọn dẹp khoảng trắng thừa
+    text = re.sub(r"\s+", " ", text)
+    
     return text.strip()
 
 
@@ -149,8 +173,12 @@ async def run_bot(
     user_id: str = "web-user-123",
     thread_id: str | None = None,
     query_mode: str = "normal",
+    pc_id: str | None = None,
+    task_callback=None,
 ):
-    logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}")
+    logger.info(
+        f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}"
+    )
     pipecat_transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
         params=TransportParams(
@@ -162,7 +190,7 @@ async def run_bot(
     )
 
     async with aiohttp.ClientSession() as session:
-        stt = SherpaSTTService(model_dir="./zipformer_stt")
+        stt = SherpaSTTService(model_dir="./zipformer_stt", model="zipformer", language="vi")
         # tts = CartesiaTTSService(
         #     api_key=os.getenv("CARTESIA_API_KEY"),
         #     # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
@@ -227,9 +255,16 @@ async def run_bot(
             ),
         )
 
+        if task_callback and pc_id:
+            await task_callback(pc_id, task)
+
         messages.append({"role": "system", "content": "Hãy tự giới thiệu bản thân với người dùng."})
         await task.queue_frames([LLMRunFrame()])
 
         runner = PipelineRunner(handle_sigint=False)
 
-        await runner.run(task)
+        try:
+            await runner.run(task)
+        finally:
+            if task_callback and pc_id:
+                await task_callback(pc_id, None)

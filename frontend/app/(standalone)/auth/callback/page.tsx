@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 function AuthCallbackContent() {
+  usePageTitle();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState("");
@@ -52,7 +53,6 @@ function AuthCallbackContent() {
 }
 
 export default function AuthCallbackPage() {
-  usePageTitle();
   return (
     <div className="min-h-screen flex items-center justify-center bg-background-light">
       <Suspense fallback={

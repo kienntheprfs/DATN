@@ -314,20 +314,29 @@ def extract_and_chunk(self, document_id: int) -> Dict[str, Any]:
             storage = get_storage()
             ingestion = IngestionService()
 
-            # Extract text from file
-            try:
-                async with storage.download_stream(doc.file_path) as stream:
-                    text = await asyncio.to_thread(
-                        ingestion.extract_text,
-                        stream,
-                        doc.document_type,
-                        doc.file_path,
-                    )
-            except Exception as extract_error:
-                logger.error(
-                    f"Text extraction failed for document_id={document_id}: {extract_error}"
+            # Extract text from file (use pre-parsed text if available)
+            meta = doc.meta_data or {}
+            pre_parsed = meta.get("_parsed_text")
+            if pre_parsed:
+                text = pre_parsed
+                logger.info(
+                    f"Using pre-parsed text for document_id={document_id} "
+                    f"(len={len(text)} chars)"
                 )
-                raise ValueError(f"Failed to extract text: {extract_error}")
+            else:
+                try:
+                    async with storage.download_stream(doc.file_path) as stream:
+                        text = await asyncio.to_thread(
+                            ingestion.extract_text,
+                            stream,
+                            doc.document_type,
+                            doc.file_path,
+                        )
+                except Exception as extract_error:
+                    logger.error(
+                        f"Text extraction failed for document_id={document_id}: {extract_error}"
+                    )
+                    raise ValueError(f"Failed to extract text: {extract_error}")
 
             # Validate extracted text
             if not text or not text.strip():
@@ -546,8 +555,25 @@ def finalize_ingestion(
                     f"Failed to notify semantic cache invalidation: {cache_error}"
                 )
 
+            # Cleanup pre-parsed text from meta_data to keep JSONB lean
+            try:
+                doc_for_cleanup = await repo.get_by_id(document_id)
+                meta = doc_for_cleanup.meta_data if doc_for_cleanup else None
+                if meta and "_parsed_text" in meta:
+                    cleaned_meta = dict(meta)
+                    cleaned_meta.pop("_parsed_text")
+                    await repo.update(document_id, {"meta_data": cleaned_meta})
+                    await db.commit()
+                    logger.info(
+                        f"Cleaned up _parsed_text from meta_data for document_id={document_id}"
+                    )
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to cleanup _parsed_text for document_id={document_id}: {cleanup_error}"
+                )
+
             logger.info(
-                f"✅ Document ingestion COMPLETED: "
+                f"Document ingestion COMPLETED: "
                 f"document_id={document_id}, chunks={len(all_chunks)}"
             )
 
@@ -1009,6 +1035,8 @@ def sync_formal_document_task(self, formal_doc_id: int):
     Returns:
         Dict with sync status and lightrag_doc_id
     """
+    from datetime import datetime, timezone
+
     from src.repositories.formal_document_repository import FormalDocumentRepository
     from src.services.lightrag_service import LightRAGService
 
@@ -1047,8 +1075,53 @@ def sync_formal_document_task(self, formal_doc_id: int):
                 if isinstance(track_result, dict)
                 else []
             )
+            status_summary = (
+                track_result.get("status_summary", {})
+                if isinstance(track_result, dict)
+                else {}
+            )
 
-            if not documents:
+            update_data: dict[str, Any] = {
+                "last_synced_at": datetime.now(timezone.utc),
+            }
+
+            # Determine sync_status from status_summary or document-level status
+            if status_summary:
+                processing = status_summary.get("Processing", 0)
+                pending = status_summary.get("Pending", 0)
+                completed = status_summary.get("Completed", 0) or status_summary.get(
+                    "Success", 0
+                )
+                failed = status_summary.get("Failed", 0)
+
+                if processing > 0 or pending > 0:
+                    update_data["sync_status"] = ProcessingStatus.PROCESSING
+                elif completed > 0 and failed == 0:
+                    update_data["sync_status"] = ProcessingStatus.COMPLETED
+                    update_data["sync_error"] = None
+                elif failed > 0:
+                    update_data["sync_status"] = ProcessingStatus.FAILED
+                    errors = [d.get("error", "") for d in documents if d.get("error")]
+                    update_data["sync_error"] = (
+                        "; ".join(errors[:3])
+                        if errors
+                        else "LightRAG processing failed"
+                    )
+            elif documents:
+                doc_status = documents[0].get("status", "")
+                if doc_status == "processed":
+                    update_data["sync_status"] = ProcessingStatus.COMPLETED
+                    update_data["sync_error"] = None
+
+            # Extract lightrag_doc_id from first document
+            inferred_doc_id = None
+            if documents:
+                inferred_doc_id = documents[0].get("id")
+                if inferred_doc_id:
+                    update_data["lightrag_doc_id"] = str(inferred_doc_id)
+
+            # If still no doc_id and we have retries left, retry
+            if not inferred_doc_id:
                 remaining_retries = self.request.retries
                 if remaining_retries > 0:
                     delay = min(
@@ -1061,6 +1134,10 @@ def sync_formal_document_task(self, formal_doc_id: int):
                         countdown=int(delay),
                     )
                 else:
+                    update_data["sync_status"] = ProcessingStatus.FAILED
+                    update_data["sync_error"] = "No doc_id after max retries"
+                    await repo.update(formal_doc_id, update_data)
+                    await db.commit()
                     logger.warning(
                         f"Formal doc {formal_doc_id}: max retries reached, "
                         "doc_id still not available"
@@ -1071,35 +1148,17 @@ def sync_formal_document_task(self, formal_doc_id: int):
                         "track_id": doc.lightrag_track_id,
                     }
 
-            inferred_doc_id = documents[0].get("id")
-            if not inferred_doc_id:
-                remaining_retries = self.request.retries
-                if remaining_retries > 0:
-                    delay = min(
-                        FORMAL_DOC_SYNC_INITIAL_DELAY
-                        * (2 ** (FORMAL_DOC_SYNC_MAX_RETRIES - remaining_retries)),
-                        FORMAL_DOC_SYNC_MAX_DELAY,
-                    )
-                    raise self.retry(
-                        exc=Exception("LightRAG doc_id is null"),
-                        countdown=int(delay),
-                    )
-                else:
-                    return {
-                        "status": "pending",
-                        "reason": "null_doc_id_in_response",
-                        "track_id": doc.lightrag_track_id,
-                    }
-
-            await repo.update(formal_doc_id, {"lightrag_doc_id": str(inferred_doc_id)})
+            await repo.update(formal_doc_id, update_data)
             await db.commit()
 
             logger.info(
-                f"✅ Formal doc {formal_doc_id} synced with lightrag_doc_id={inferred_doc_id}"
+                f"Formal doc {formal_doc_id} synced: "
+                f"doc_id={inferred_doc_id} sync_status={update_data.get('sync_status')}"
             )
             return {
                 "status": "success",
                 "lightrag_doc_id": str(inferred_doc_id),
+                "sync_status": str(update_data.get("sync_status", "")),
             }
 
     return run_async(_logic())
@@ -1391,31 +1450,34 @@ def delete_formal_document_task(
     lightrag_doc_id: Optional[str],
     storage_id: int,
     storage_path: Optional[str] = None,
+    qdrant_document_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """
-    Delete a formal document from LightRAG, storage, and PostgreSQL.
+    """Delete a formal document from LightRAG, Qdrant, storage, and PostgreSQL.
 
-    This task performs coordinated deletion for formal documents:
-    1. Delete from LightRAG (if doc_id available)
-    2. Delete file from storage (if path provided)
-    3. Delete from PostgreSQL
-    4. Invalidate semantic cache
+    Deletion order (dual-index cleanup):
+    1. Delete vectors from Qdrant for the linked Document record.
+    2. Soft-delete (mark as DELETED) the linked Document row in PostgreSQL.
+    3. Delete from LightRAG (if doc_id available).
+    4. Delete file from object storage (non-critical).
+    5. Delete the FormalDocument row from PostgreSQL.
+    6. Commit transaction.
+    7. Invalidate semantic cache.
 
     Args:
-        self: Celery task binding
-        document_id: ID of the formal document to delete
-        lightrag_doc_id: LightRAG document ID (if available)
-        storage_id: Storage ID for cache invalidation
-        storage_path: Optional storage path to delete the file
-
-    Returns:
-        Dict with deletion summary
+        self: Celery task binding.
+        document_id: ID of the formal document to delete (FormalDocument PK).
+        lightrag_doc_id: LightRAG document ID (if available).
+        storage_id: Storage ID for cache invalidation.
+        storage_path: Optional storage path to delete the raw file.
+        qdrant_document_id: ID of the linked ``Document`` record used for Qdrant
+            indexing.  When provided, its vectors and DB row are removed first.
     """
 
     async def _logic() -> Dict[str, Any]:
         logger.info(
             f"Starting formal document deletion: document_id={document_id}, "
-            f"lightrag_doc_id={lightrag_doc_id}"
+            f"lightrag_doc_id={lightrag_doc_id}, "
+            f"qdrant_document_id={qdrant_document_id}"
         )
 
         async with AsyncSessionLocal() as db:
@@ -1424,11 +1486,62 @@ def delete_formal_document_task(
             )
             from src.services.lightrag_service import LightRAGService
 
-            repo = FormalDocumentRepository(db)
+            formal_repo = FormalDocumentRepository(db)
+            doc_repo = DocumentRepository(db)
             lightrag = LightRAGService()
             namespace = f"kb_{storage_id}"
+            collection_name = namespace
 
-            # Step 1: Delete from LightRAG
+            # -------------------------------------------------------------- #
+            # Step 1: Delete Qdrant vectors for the linked Document record    #
+            # -------------------------------------------------------------- #
+            qdrant_vectors_deleted = False
+            if qdrant_document_id is not None:
+                try:
+                    qdrant_client = QdrantManager.get_client()
+                    vector_svc = VectorDBService(qdrant_client, collection_name)
+
+                    if await vector_svc.collection_exists():
+                        async with QdrantTransaction(
+                            qdrant_client, collection_name
+                        ) as txn:
+                            await txn.backup_and_delete_by_doc_id(qdrant_document_id)
+                        qdrant_vectors_deleted = True
+                        logger.info(
+                            f"Deleted Qdrant vectors for qdrant_document_id={qdrant_document_id}"
+                        )
+                    else:
+                        logger.info(
+                            f"Collection '{collection_name}' does not exist, "
+                            "skipping Qdrant vector deletion"
+                        )
+                except Exception as qdrant_error:
+                    logger.warning(
+                        f"Failed to delete Qdrant vectors for qdrant_document_id="
+                        f"{qdrant_document_id}: {qdrant_error}. Will retry."
+                    )
+                    raise  # Trigger retry
+
+                # -------------------------------------------------------------- #
+                # Step 2: Soft-delete the linked Document row                    #
+                # -------------------------------------------------------------- #
+                try:
+                    await doc_repo.delete_chunks_for_document(qdrant_document_id)
+                    await doc_repo.soft_delete(qdrant_document_id)
+                    logger.info(
+                        f"Soft-deleted linked Document row: "
+                        f"qdrant_document_id={qdrant_document_id}"
+                    )
+                except Exception as pg_doc_error:
+                    logger.error(
+                        f"Failed to soft-delete linked Document "
+                        f"qdrant_document_id={qdrant_document_id}: {pg_doc_error}"
+                    )
+                    raise  # Trigger retry
+
+            # -------------------------------------------------------------- #
+            # Step 3: Delete from LightRAG                                   #
+            # -------------------------------------------------------------- #
             lightrag_deleted = False
             if lightrag_doc_id and lightrag.enabled:
                 try:
@@ -1449,7 +1562,9 @@ def delete_formal_document_task(
                     "skipping LightRAG deletion"
                 )
 
-            # Step 2: Delete file from storage
+            # -------------------------------------------------------------- #
+            # Step 4: Delete file from object storage (non-critical)         #
+            # -------------------------------------------------------------- #
             storage_deleted = False
             if storage_path:
                 try:
@@ -1466,9 +1581,11 @@ def delete_formal_document_task(
                     )
                     raise  # Trigger retry
 
-            # Step 3: Delete from PostgreSQL
+            # -------------------------------------------------------------- #
+            # Step 5: Delete FormalDocument row from PostgreSQL               #
+            # -------------------------------------------------------------- #
             try:
-                await repo.delete(document_id)
+                await formal_repo.delete(document_id)
                 logger.debug(
                     f"Deleted formal document from PostgreSQL: document_id={document_id}"
                 )
@@ -1478,7 +1595,9 @@ def delete_formal_document_task(
                 )
                 raise  # Trigger retry
 
-            # Step 4: Commit transaction
+            # -------------------------------------------------------------- #
+            # Step 6: Commit transaction                                      #
+            # -------------------------------------------------------------- #
             try:
                 await db.commit()
             except Exception as commit_error:
@@ -1486,7 +1605,9 @@ def delete_formal_document_task(
                 await db.rollback()
                 raise
 
-            # Step 5: Invalidate semantic cache
+            # -------------------------------------------------------------- #
+            # Step 7: Invalidate semantic cache (non-critical)                #
+            # -------------------------------------------------------------- #
             try:
                 from src.services.semantic_cache_notifier import semantic_cache_notifier
 
@@ -1497,12 +1618,16 @@ def delete_formal_document_task(
 
             logger.info(
                 f"✅ Formal document deletion COMPLETED: document_id={document_id}, "
-                f"lightrag_deleted={lightrag_deleted}, storage_deleted={storage_deleted}"
+                f"qdrant_vectors_deleted={qdrant_vectors_deleted}, "
+                f"lightrag_deleted={lightrag_deleted}, "
+                f"storage_deleted={storage_deleted}"
             )
 
             return {
                 "document_id": document_id,
                 "status": "deleted",
+                "qdrant_document_id": qdrant_document_id,
+                "qdrant_vectors_deleted": qdrant_vectors_deleted,
                 "lightrag_deleted": lightrag_deleted,
                 "storage_deleted": storage_deleted,
             }
@@ -1561,34 +1686,43 @@ def trigger_formal_document_deletion(
     lightrag_doc_id: Optional[str],
     storage_id: int,
     storage_path: Optional[str] = None,
+    qdrant_document_id: Optional[int] = None,
 ) -> Any:
-    """
-    Trigger asynchronous formal document deletion.
+    """Trigger asynchronous formal document deletion (dual-index cleanup).
 
     Args:
-        document_id: ID of the formal document to delete
-        lightrag_doc_id: LightRAG document ID (if available)
-        storage_id: Storage ID for cache invalidation
-        storage_path: Optional storage path to delete the file
+        document_id: ID of the FormalDocument record to delete.
+        lightrag_doc_id: LightRAG document ID (if available).
+        storage_id: Storage ID used for cache invalidation.
+        storage_path: Optional storage path to delete the raw file.
+        qdrant_document_id: ID of the linked ``Document`` record for Qdrant
+            indexing.  When provided, its vectors and DB row are cleaned up too.
 
     Returns:
-        Celery AsyncResult for tracking deletion progress
+        Celery AsyncResult for tracking deletion progress.
     """
     task = delete_formal_document_task.apply_async(
-        args=[document_id, lightrag_doc_id, storage_id, storage_path],
+        args=[
+            document_id,
+            lightrag_doc_id,
+            storage_id,
+            storage_path,
+            qdrant_document_id,
+        ],
         link_error=handle_delete_error.s(
             document_id,
             {
                 "lightrag_doc_id": lightrag_doc_id,
                 "storage_id": storage_id,
                 "is_formal": True,
+                "qdrant_document_id": qdrant_document_id,
             },
         ),
     )
 
     logger.info(
         f"Triggered formal document deletion task: document_id={document_id}, "
-        f"task_id={task.id}"
+        f"qdrant_document_id={qdrant_document_id}, task_id={task.id}"
     )
 
     return task

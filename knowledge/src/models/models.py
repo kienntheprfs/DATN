@@ -44,7 +44,7 @@ class DocumentType(StrEnum):
 class ProcessingStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
-    COMPLETED = "completed"
+    COMPLETED = "processed"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
@@ -189,17 +189,42 @@ class Document(Base, TimestampMixin):
         back_populates="document", cascade="all, delete-orphan"
     )
 
+    # Quan hệ 1-1 với bảng FormalDocument
+    formal_info: Mapped[Optional["FormalDocument"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+# --- FormalDocument (Extension của Document, dùng riêng cho formal docs) ---
+
 
 class FormalDocument(Base, TimestampMixin):
+    """
+    Bảng mở rộng dành riêng cho tài liệu Formal (1-1 với Document).
+    Lưu trữ ID tham chiếu LightRAG và trạng thái đồng bộ.
+    """
     __tablename__ = "formal_documents"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    storage_id: Mapped[int] = mapped_column(ForeignKey("document_storages.id"))
-    file_path: Mapped[str] = mapped_column(String(1024))
-    lightrag_track_id: Mapped[str] = mapped_column(String(255), index=True)
+    # Dùng document_id làm PK để enforce 1-1 ở DB level
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    lightrag_track_id: Mapped[Optional[str]] = mapped_column(String(255), index=True)
     lightrag_doc_id: Mapped[Optional[str]] = mapped_column(String(255), index=True)
 
-    meta_data: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
+    sync_status: Mapped[ProcessingStatus] = mapped_column(
+        SAEnum(ProcessingStatus, native_enum=False, length=20),
+        default=ProcessingStatus.PENDING,
+        index=True,
+    )
+    sync_error: Mapped[Optional[str]] = mapped_column(Text)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    document: Mapped["Document"] = relationship(back_populates="formal_info")
 
 # --- RAG Chunks ---
 

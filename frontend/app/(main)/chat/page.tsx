@@ -45,6 +45,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		clearVoiceTools,
 		stop,
 		isLoading,
+		isHistoryLoading,
 		isTyping,
 		currentTools,
 		error,
@@ -168,15 +169,15 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		return contents;
 	}, [messages]);
 
+	const prevCitationsCount = useRef(0);
+
 	useEffect(() => {
-		if (citations && citations.length > 0 && !isDocumentPanelOpen) {
+		const currentCount = citations?.length || 0;
+		if (currentCount > prevCitationsCount.current) {
 			setIsDocumentPanelOpen(true);
 		}
-		
-		if (isReadOnly && citations && citations.length > 0 && !isDocumentPanelOpen) {
-			setIsDocumentPanelOpen(true);
-		}
-	}, [citations, isReadOnly, isDocumentPanelOpen]);
+		prevCitationsCount.current = currentCount;
+	}, [citations?.length]);
 
 	const routeData = useMemo(() => {
 		const routeTool = currentTools.find((tool) => {
@@ -220,7 +221,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			sendMessageRef.current?.(urlMessage, urlQueryMode || undefined);
 
 			setTimeout(() => {
-				router.replace(`/chat?thread_id=${urlThreadId}`);
+				router.replace(`/chat?thread_id=${threadId}`);
 			}, 100);
 		}
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router, isReadOnly]);
@@ -272,7 +273,11 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	};
 
 	const handleSendMessage = (message: string, queryMode?: QueryMode) => {
-		sendMessage(message, queryMode);
+		if (voice.state === "connected") {
+			voice.sendTextMessage(message);
+		} else {
+			sendMessage(message, queryMode);
+		}
 	};
 
 	useEffect(() => {
@@ -320,6 +325,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 										messages={messages}
 										error={error}
 										isStreaming={isLoading}
+										isHistoryLoading={isHistoryLoading}
 										isTyping={isTyping}
 										isVoiceMode={voice.state === "connected"}
 										isListening={voice.isListening}
@@ -363,6 +369,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							isMuted={voice.isMuted}
 							onVoiceToggle={handleVoiceStateChange}
 							onVoiceMute={voice.toggleMute}
+							onSendVoiceTextMessage={voice.sendTextMessage}
 							showDocumentButton={true}
 							onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
 						/>
@@ -380,7 +387,7 @@ export default function ChatPage() {
 	const handleVoiceToggle = () => {
 		const threadId = crypto.randomUUID();
 		const params = new URLSearchParams({ thread_id: threadId, voice: "true" });
-		router.replace(`/chat?${params.toString()}`);
+		router.push(`/chat?${params.toString()}`);
 	};
 
 	const handleConversationStart = () => {

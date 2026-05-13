@@ -6,6 +6,7 @@ export const ROUTE_TOTAL = 24;
 
 export const INITIAL_LOCATIONS: LocationRow[] = [
   {
+    rowId: 1,
     id: "#LOC-2104",
     name: "Phòng Nghiên cứu AI",
     buildingName: "Building H6",
@@ -17,6 +18,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 2,
     id: "#LOC-2099",
     name: "Văn phòng Đoàn TN",
     buildingName: "Building A1",
@@ -28,6 +30,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
     status: "IN_PROGRESS",
   },
   {
+    rowId: 3,
     id: "#LOC-2088",
     name: "Khu vực Sạc xe điện",
     buildingName: "Nhà xe B4",
@@ -39,6 +42,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
     status: "REMOVED",
   },
   {
+    rowId: 4,
     id: "#LOC-2077",
     name: "Trung tâm Hỗ trợ Sinh viên",
     buildingName: "Building A4",
@@ -50,6 +54,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 5,
     id: "#LOC-2064",
     name: "Phòng Truyền thống",
     buildingName: "Building B1",
@@ -61,6 +66,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 6,
     id: "#LOC-2051",
     name: "Điểm đón xe buýt nội khu",
     buildingName: "Cổng chính",
@@ -75,6 +81,7 @@ export const INITIAL_LOCATIONS: LocationRow[] = [
 
 export const INITIAL_ROUTES: RouteRow[] = [
   {
+    rowId: 1,
     id: "#RT-0982",
     startPoint: "Cổng B1 - Lý Thường Kiệt",
     startMeta: "BLD-A1 / FL-G",
@@ -87,6 +94,7 @@ export const INITIAL_ROUTES: RouteRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 2,
     id: "#RT-0975",
     startPoint: "Phòng Lab 304 - B10",
     startMeta: "BLD-B10 / FL-03",
@@ -99,6 +107,7 @@ export const INITIAL_ROUTES: RouteRow[] = [
     status: "IN_PROGRESS",
   },
   {
+    rowId: 3,
     id: "#RT-0961",
     startPoint: "Cổng sau cư xá",
     startMeta: "CX-01 / FL-G",
@@ -111,6 +120,7 @@ export const INITIAL_ROUTES: RouteRow[] = [
     status: "RESOLVED",
   },
   {
+    rowId: 4,
     id: "#RT-0955",
     startPoint: "Tòa nhà H6 - Dĩ An",
     startMeta: "BLD-H6 / FL-04",
@@ -123,6 +133,7 @@ export const INITIAL_ROUTES: RouteRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 5,
     id: "#RT-0944",
     startPoint: "Nhà thi đấu",
     startMeta: "ZONE-S / FL-G",
@@ -135,6 +146,7 @@ export const INITIAL_ROUTES: RouteRow[] = [
     status: "PENDING",
   },
   {
+    rowId: 6,
     id: "#RT-0939",
     startPoint: "Phòng Y tế",
     startMeta: "BLD-A2 / FL-01",
