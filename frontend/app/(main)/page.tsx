@@ -51,7 +51,7 @@ export default function Home() {
 				<SuggestionSection />
 
 				<footer className="max-w-2xl text-sm text-center text-muted-foreground mb-3">
-					<p>Hệ thống sử dụng Al để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp dụng.</p>
+					<p className="whitespace-nowrap">Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp dụng.</p>
 					<p>@ 2026 Nhóm đồ án HTK.</p>
 				</footer>
 			</div>
