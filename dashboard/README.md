@@ -55,6 +55,18 @@ cd dashboard
 uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
+### 3.4 Cài đặt VnCoreNLP (Bắt buộc cho Topic Modeling)
+
+Để sử dụng tính năng phân tích chủ đề (Topic Modeling), bạn cần tải bộ thư viện VnCoreNLP vào đúng thư mục dữ liệu:
+
+```bash
+# Đảm bảo đang ở thư mục dashboard
+mkdir -p src/services/data/VnCoreNLP
+git clone https://github.com/vncorenlp/VnCoreNLP.git src/services/data/VnCoreNLP
+```
+
+*Lưu ý: VnCoreNLP yêu cầu Java Runtime Environment (JRE) >= 1.8 để hoạt động.*
+
 Health check:
 
 ```bash
