@@ -12,244 +12,342 @@ class RouteDialog extends StatefulWidget {
 
 class _RouteDialogState extends State<RouteDialog> {
   int _currentStep = 0;
+  int _activeFloorIdx = 0;
   static const double _mapWidth = 800;
 
   @override
   Widget build(BuildContext context) {
     final route = widget.route;
     final totalSteps = route.steps.length;
+    final estimatedMinutes = route.totalDistanceM > 0
+        ? (route.totalDistanceM / 80).ceil()
+        : null;
+    final hasMultiFloor = route.routeMaps != null && route.routeMaps!.length > 1;
+    final activeInstruction = route.instructions != null && _currentStep < route.instructions!.length
+        ? route.instructions![_currentStep]
+        : null;
+    final currentCoord = activeInstruction?.coordinate;
 
     return Dialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: SingleChildScrollView(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          route.title,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        Text(
-                          'Khoảng cách: ${route.summary}',
-                          style: TextStyle(
-                            color: AppConstants.secondaryColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.grey.shade100,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Map Area
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                height: 220, // Constrain height for mobile
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: InteractiveViewer(
-                    maxScale: 3.0,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final scale = constraints.maxWidth / _mapWidth;
-                        return Stack(
-                          children: [
-                            Image.network(
-                              AppConstants.getFullImageUrl(route.map.imageUrl),
-                              width: constraints.maxWidth,
-                              height: constraints.maxHeight,
-                              fit: BoxFit.fill,
-                            ),
-                            CustomPaint(
-                              size: Size(constraints.maxWidth, constraints.maxHeight),
-                              painter: _RoutePainter(
-                                path: route.path,
-                                scale: scale,
-                                color: AppConstants.primaryColor,
-                              ),
-                            ),
-                            _buildNode(route.path.first, scale, Colors.green),
-                            _buildNode(route.path.last, scale, Colors.red),
-                            // Current location marker
-                            if (_currentStep < route.path.length)
-                              _buildCurrentNode(route.path[_currentStep], scale),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Steps Timeline
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'CÁC BƯỚC DI CHUYỂN',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          color: AppConstants.secondaryColor.withOpacity(0.6),
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      Text(
-                        '${_currentStep + 1} / $totalSteps',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.primaryColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 140, // Fixed height for steps scroll
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      itemCount: totalSteps,
-                      itemBuilder: (context, index) {
-                        final isActive = index == _currentStep;
-                        return IntrinsicHeight(
-                          child: Row(
-                            children: [
-                              Column(
-                                children: [
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: isActive ? AppConstants.primaryColor : Colors.grey.shade300,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  if (index < totalSteps - 1)
-                                    Expanded(
-                                      child: Container(
-                                        width: 2,
-                                        color: Colors.grey.shade100,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _currentStep = index),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: isActive ? AppConstants.primaryColor.withOpacity(0.05) : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isActive ? AppConstants.primaryColor.withOpacity(0.1) : Colors.transparent,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      route.steps[index],
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                                        color: isActive ? Colors.black87 : Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Footer Controls
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _currentStep > 0 ? () => setState(() => _currentStep--) : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade50,
-                        foregroundColor: Colors.black87,
-                        elevation: 0,
-                        minimumSize: const Size(0, 44),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('TRƯỚC', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _currentStep < totalSteps - 1 ? () => setState(() => _currentStep++) : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        minimumSize: const Size(0, 44),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('TIẾP THEO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildHeader(route, estimatedMinutes, hasMultiFloor),
+            _buildMap(route, currentCoord),
+            _buildStepControl(route, totalSteps),
+            if (hasMultiFloor) _buildFloorTabs(route),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildHeader(RouteInfo route, int? estimatedMinutes, bool hasMultiFloor) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppConstants.primaryColor.withOpacity(0.05),
+            Colors.transparent,
+          ],
+        ),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppConstants.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'CHỈ ĐƯỜNG',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: AppConstants.primaryColor,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${route.totalDistanceM.round()}m',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppConstants.secondaryColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (estimatedMinutes != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '• $estimatedMinutes phút',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppConstants.secondaryColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (hasMultiFloor) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${route.routeMaps!.length} tầng',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (route.startName != null || route.endName != null)
+                  Text(
+                    '${route.startName ?? 'Bắt đầu'} → ${route.endName ?? 'Kết thúc'}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.3,
+                    ),
+                  )
+                else
+                  Text(
+                    route.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close_rounded, size: 20),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.grey.shade100,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMap(RouteInfo route, Offset? currentCoord) {
+    return SizedBox(
+      height: 280,
+      child: InteractiveViewer(
+        maxScale: 3.0,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = constraints.maxWidth / _mapWidth;
+            return Stack(
+              children: [
+                if (_activeMapImageUrl != null)
+                  Positioned.fill(
+                    child: Image.network(
+                      AppConstants.getFullImageUrl(_activeMapImageUrl!),
+                      fit: BoxFit.fill,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                CustomPaint(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  painter: _RoutePainter(
+                    path: route.path,
+                    scale: scale,
+                    color: AppConstants.primaryColor,
+                  ),
+                ),
+                if (route.path.isNotEmpty) ...[
+                  _buildNode(route.path.first, scale, Colors.green),
+                  _buildNode(route.path.last, scale, Colors.red),
+                ],
+                if (currentCoord != null)
+                  _buildCurrentNode(currentCoord, scale),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepControl(RouteInfo route, int totalSteps) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Bước ${_currentStep + 1} / $totalSteps',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: AppConstants.secondaryColor.withOpacity(0.6),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              Row(
+                children: [
+                  _NavButton(
+                    icon: Icons.chevron_left_rounded,
+                    onPressed: _currentStep > 0
+                        ? () => setState(() {
+                              _currentStep--;
+                              _updateActiveFloor(route);
+                            })
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  _NavButton(
+                    icon: Icons.chevron_right_rounded,
+                    onPressed: _currentStep < totalSteps - 1
+                        ? () => setState(() {
+                              _currentStep++;
+                              _updateActiveFloor(route);
+                            })
+                        : null,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _currentStep < route.steps.length ? route.steps[_currentStep] : '',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloorTabs(RouteInfo route) {
+    final routeMaps = route.routeMaps!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(top: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.layers_rounded, size: 14, color: AppConstants.secondaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: routeMaps.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final rm = entry.value;
+                  final isActive = idx == _activeFloorIdx;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _activeFloorIdx = idx),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isActive ? AppConstants.primaryColor : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isActive ? AppConstants.primaryColor : Colors.grey.shade200,
+                          ),
+                        ),
+                        child: Text(
+                          rm.map.floorLevel == null ? 'Campus' : 'Tầng ${rm.map.floorLevel}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: isActive ? Colors.white : AppConstants.secondaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? get _activeMapImageUrl {
+    final routeMaps = widget.route.routeMaps;
+    if (routeMaps != null && _activeFloorIdx < routeMaps.length) {
+      return routeMaps[_activeFloorIdx].map.imageUrl;
+    }
+    return widget.route.map.imageUrl;
+  }
+
+  void _updateActiveFloor(RouteInfo route) {
+    if (route.routeMaps == null || route.routeMaps!.isEmpty) return;
+    final instruction = route.instructions != null && _currentStep < route.instructions!.length
+        ? route.instructions![_currentStep]
+        : null;
+    if (instruction?.coordinate == null) return;
+    final coord = instruction!.coordinate!;
+    for (var i = 0; i < route.routeMaps!.length; i++) {
+      final nodes = route.routeMaps![i].nodes;
+      final match = nodes.any((n) =>
+          (n.x - coord.dx).abs() < 5 && (n.y - coord.dy).abs() < 5);
+      if (match) {
+        _activeFloorIdx = i;
+        break;
+      }
+    }
   }
 
   Widget _buildNode(Offset pos, double scale, Color color) {
@@ -263,6 +361,13 @@ class _RouteDialogState extends State<RouteDialog> {
           color: color,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
         ),
       ),
     );
@@ -278,11 +383,11 @@ class _RouteDialogState extends State<RouteDialog> {
         decoration: BoxDecoration(
           color: Colors.blue,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
+          border: Border.all(color: Colors.white, width: 2.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.blue.withOpacity(0.3),
-              blurRadius: 6,
+              color: Colors.blue.withOpacity(0.4),
+              blurRadius: 8,
               spreadRadius: 2,
             ),
           ],
@@ -293,8 +398,8 @@ class _RouteDialogState extends State<RouteDialog> {
   }
 }
 
-class _NavBtn extends StatelessWidget {
-  const _NavBtn({required this.icon, this.onPressed});
+class _NavButton extends StatelessWidget {
+  const _NavButton({required this.icon, this.onPressed});
   final IconData icon;
   final VoidCallback? onPressed;
 
@@ -302,12 +407,17 @@ class _NavBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      icon: Icon(icon, size: 24),
+      icon: Icon(icon),
+      iconSize: 20,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.grey.shade100,
+        backgroundColor: Colors.grey.shade50,
         disabledBackgroundColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: BorderSide(color: Colors.grey.shade200),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
     );
   }
@@ -335,13 +445,21 @@ class _RoutePainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
+    final glowPaint = Paint()
+      ..color = color.withOpacity(0.15)
+      ..strokeWidth = 10.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+
     final drawingPath = Path();
     drawingPath.moveTo(path[0].dx * scale, path[0].dy * scale);
-
     for (var i = 1; i < path.length; i++) {
       drawingPath.lineTo(path[i].dx * scale, path[i].dy * scale);
     }
 
+    canvas.drawPath(drawingPath, glowPaint);
     canvas.drawPath(drawingPath, paint);
   }
 

@@ -13,21 +13,99 @@ class Landmark {
     required this.name,
     required this.description,
     required this.imageUrl,
+    this.type = 'building',
   });
 
   final int id;
   final String name;
   final String description;
   final String imageUrl;
+  final String type;
+}
+
+class InstructionStep {
+  InstructionStep({
+    required this.text,
+    this.coordinate,
+    this.distanceM,
+    this.endNodeId,
+    this.mapId,
+  });
+
+  final String text;
+  final Offset? coordinate;
+  final double? distanceM;
+  final int? endNodeId;
+  final int? mapId;
+
+  factory InstructionStep.fromJson(Map<String, dynamic> json) {
+    final coord = json['coordinate'];
+    Offset? offset;
+    if (coord is List && coord.length >= 2) {
+      offset = Offset(
+        (coord[0] as num).toDouble(),
+        (coord[1] as num).toDouble(),
+      );
+    }
+    return InstructionStep(
+      text: json['instruction']?.toString() ?? json['text']?.toString() ?? '',
+      coordinate: offset,
+      distanceM: (json['distance_m'] as num?)?.toDouble(),
+      endNodeId: json['end_node_id'] as int?,
+      mapId: json['map_id'] as int?,
+    );
+  }
+}
+
+class RouteMapInfo {
+  RouteMapInfo({
+    required this.map,
+    required this.nodes,
+  });
+
+  final MapData map;
+  final List<MapNode> nodes;
+}
+
+class MapNode {
+  MapNode({
+    required this.id,
+    required this.mapId,
+    required this.x,
+    required this.y,
+    required this.name,
+  });
+
+  final int id;
+  final int mapId;
+  final double x;
+  final double y;
+  final String name;
+
+  factory MapNode.fromJson(Map<String, dynamic> json) {
+    return MapNode(
+      id: (json['id'] as num).toInt(),
+      mapId: (json['map_id'] as num?)?.toInt() ?? 0,
+      x: (json['x'] as num).toDouble(),
+      y: (json['y'] as num).toDouble(),
+      name: json['name']?.toString() ?? '',
+    );
+  }
 }
 
 class ChatMessage {
-  ChatMessage(this.role, this.text, {this.runId, this.route, this.landmarks});
+  ChatMessage(this.role, this.text, {
+    this.runId,
+    this.route,
+    this.landmarks,
+    this.confirmationJson,
+  });
   final Role role;
   final String text;
   final String? runId;
   final RouteInfo? route;
   final List<Landmark>? landmarks;
+  final String? confirmationJson;
 }
 
 class ThreadItem {
@@ -66,14 +144,30 @@ class RouteInfo {
     required this.steps,
     required this.map,
     this.floors,
+    this.instructions,
+    this.startName,
+    this.endName,
+    this.totalDistanceM = 0,
+    this.status,
+    this.startOptions,
+    this.endOptions,
+    this.routeMaps,
   });
 
   final String title;
   final String summary;
-  final List<Offset> path; // Changed from LatLng to Offset (pixels)
+  final List<Offset> path;
   final List<String> steps;
   final MapData map;
   final List<FloorSegment>? floors;
+  final List<InstructionStep>? instructions;
+  final String? startName;
+  final String? endName;
+  final double totalDistanceM;
+  final String? status;
+  final List<String>? startOptions;
+  final List<String>? endOptions;
+  final List<RouteMapInfo>? routeMaps;
 }
 
 class FloorSegment {

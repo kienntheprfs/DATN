@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { agentClient, ChatMessage } from "@/services/agent";
@@ -133,10 +133,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			setIsHistoryLoading(true);
 			try {
 				const history = await agentClient.getHistory(initialThreadId);
-				const thread = await agentClient.getThread(initialThreadId);
-				if (thread && thread.title) {
-					setThreadTitle(thread.title);
-				}
 				console.log("[useChat] History response:", history);
 				if (history.messages && history.messages.length > 0) {
 					const toolCallsMap: Record<string, string> = {};
