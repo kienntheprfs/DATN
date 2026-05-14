@@ -15,6 +15,145 @@ import type { TopicListItem, TrendView, TopicType } from "./TopicTypes";
 import topicService from "@/services/topic-api";
 
 // ---------------------------------------------------------------------------
+// Confirm Modal
+// ---------------------------------------------------------------------------
+
+type ConfirmModalProps = {
+  open: boolean;
+  type: "pin" | "knowledge" | null;
+  topic: TopicListItem | null;
+  isLoading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+
+function ConfirmModal({ open, type, topic, isLoading, onConfirm, onCancel }: ConfirmModalProps) {
+  if (!open || !topic || !type) return null;
+
+  const isPin = type === "pin";
+  const isPinned = topic.pinned;
+  const isKnowledgeUpdated = topic.knowledge_updated;
+
+  const config = isPin
+    ? {
+        icon: isPinned ? "bookmark_remove" : "push_pin",
+        iconBg: isPinned ? "bg-orange-100" : "bg-blue-100",
+        iconColor: isPinned ? "text-orange-600" : "text-primary",
+        title: isPinned ? "Bỏ ghim trang chủ" : "Ghim bài lên trang chủ",
+        badge: isPinned ? "Đang ghim" : null,
+        badgeColor: "bg-red-100 text-red-700 border border-red-200",
+        description: isPinned
+          ? "Hành động này sẽ gỡ chủ đề khỏi trang chủ. Người dùng sẽ không còn thấy bài viết được ghim từ chủ đề này."
+          : "Hành động này sẽ đưa chủ đề lên trang chủ dưới dạng bài viết ghim. Người dùng sẽ thấy nội dung này nổi bật.",
+        confirmLabel: isPinned ? "Bỏ ghim" : "Xác nhận ghim",
+        confirmStyle: isPinned
+          ? "bg-orange-500 hover:bg-orange-600 text-white"
+          : "bg-primary hover:bg-primary-dark text-white",
+      }
+    : {
+        icon: isKnowledgeUpdated ? "undo" : "history_edu",
+        iconBg: isKnowledgeUpdated ? "bg-slate-100" : "bg-pink-100",
+        iconColor: isKnowledgeUpdated ? "text-slate-600" : "text-pink-600",
+        title: isKnowledgeUpdated ? "Bỏ đánh dấu tri thức" : "Cập nhật tri thức",
+        badge: isKnowledgeUpdated ? "Đã cập nhật" : null,
+        badgeColor: "bg-pink-100 text-pink-700 border border-pink-200",
+        description: isKnowledgeUpdated
+          ? "Hành động này sẽ bỏ đánh dấu \"đã cập nhật tri thức\" của chủ đề. Trạng thái sẽ trở về chưa xử lý."
+          : "Xác nhận rằng bạn đã bổ sung tri thức liên quan đến chủ đề này vào hệ thống chatbot.",
+        confirmLabel: isKnowledgeUpdated ? "Bỏ đánh dấu" : "Xác nhận đã cập nhật",
+        confirmStyle: isKnowledgeUpdated
+          ? "bg-slate-600 hover:bg-slate-700 text-white"
+          : "bg-primary hover:bg-primary-dark text-white",
+      };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      aria-modal="true"
+      role="dialog"
+      onClick={onCancel}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Panel */}
+      <div
+        className="relative z-10 mx-4 w-full max-w-md rounded-lg border border-border-color bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-border-color px-6 py-4">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${config.iconBg}`}>
+            <span className={`material-symbols-outlined text-[22px] ${config.iconColor}`}>{config.icon}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900">{config.title}</h2>
+              {config.badge && (
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${config.badgeColor}`}>
+                  {config.badge}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        {/* Topic Info */}
+        <div className="px-6 pt-4">
+          <div className="rounded-md border border-border-color bg-slate-50 p-3">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Chủ đề được chọn</p>
+            <p className="text-sm font-bold text-slate-900 leading-snug">{topic.title.replace(/_/g, " ")}</p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="text-[12px] text-slate-500">
+                <span className="font-bold text-slate-700">{topic.queries}</span> câu hỏi
+              </span>
+              <span className="text-[12px] text-slate-500">
+                Từ khóa: <span className="font-bold text-slate-700">{topic.featured_entity.replace(/_/g, " ")}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="px-6 py-4">
+          <p className="text-[13px] leading-relaxed text-slate-600">{config.description}</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2 border-t border-border-color px-6 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isLoading}
+            className="rounded-sm border border-border-color bg-white px-4 py-2 text-[13px] font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={`inline-flex items-center gap-2 rounded-sm px-4 py-2 text-[13px] font-bold uppercase tracking-widest shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${config.confirmStyle}`}
+          >
+            {isLoading && (
+              <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+            )}
+            {config.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -406,6 +545,25 @@ export function TopicDetailPanel({
   onPinTopic,
   onUpdateKnowledge,
 }: TopicDetailPanelProps) {
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    type: "pin" | "knowledge" | null;
+  }>({ open: false, type: null });
+
+  const openPinConfirm = () => setConfirmModal({ open: true, type: "pin" });
+  const openKnowledgeConfirm = () => setConfirmModal({ open: true, type: "knowledge" });
+  const closeConfirm = () => setConfirmModal({ open: false, type: null });
+
+  const handleConfirm = () => {
+    if (confirmModal.type === "pin") {
+      onPinTopic();
+    } else if (confirmModal.type === "knowledge") {
+      onUpdateKnowledge();
+    }
+    closeConfirm();
+  };
+
   // Download CSV for the latest result's job
   const handleDownload = async () => {
     if (!selectedTopic) return;
@@ -466,7 +624,7 @@ export function TopicDetailPanel({
                       </span>
                     )}
                   </div>
-                  <h1 className="text-3xl font-bold text-slate-900">{selectedTopic.title}</h1>
+                  <h1 className="text-3xl font-bold text-slate-900">{selectedTopic.title.replace(/_/g, " ")}</h1>
                 </div>
                 <div className="flex gap-2">
                   {/* <button
@@ -503,9 +661,9 @@ export function TopicDetailPanel({
                   </div>
                   <div 
                     className="break-words line-clamp-2 text-3xl font-bold leading-tight text-white"
-                    title={selectedTopic.featured_entity}
+                    title={selectedTopic.featured_entity.replace(/_/g, " ")}
                   >
-                    {selectedTopic.featured_entity}
+                    {selectedTopic.featured_entity.replace(/_/g, " ")}
                   </div>
                   {/* <div className="mt-2 font-mono text-[11px] text-white/60">
                     Tỉ lệ xuất hiện:{" "}
@@ -593,9 +751,9 @@ export function TopicDetailPanel({
                           <span
                             key={tag}
                             className="break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[13px] font-medium text-slate-600"
-                            title={`Từ khóa: ${tag}`}
+                            title={`Từ khóa: ${tag.replace(/_/g, " ")}`}
                           >
-                            {tag}
+                            {tag.replace(/_/g, " ")}
                           </span>
                         ))}
                       </div>
@@ -678,35 +836,78 @@ export function TopicDetailPanel({
 
       {/* Bottom action bar */}
       <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-center gap-3 border-t border-border-color bg-white/80 p-2 pb-1.5 backdrop-blur-md">
-        <button
-          type="button"
-          onClick={onPinTopic}
-          disabled={isPinning || isLoading || !selectedTopic}
-          className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-          title={selectedTopic?.pinned ? "Bỏ ghim bài" : "Ghim bài viết lên trang chủ"}
-        >
-          {isPinning && (
-            <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-          )}
-          {selectedTopic?.pinned ? "Bỏ ghim trang chủ" : "Thêm bài ghim trang chủ"}
-        </button>
-        <button
-          type="button"
-          onClick={onUpdateKnowledge}
-          disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
-          className="inline-flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-          title={
-            selectedTopic?.knowledge_updated
-              ? "Bỏ đánh dấu cập nhật tri thức"
-              : "Đánh dấu đã cập nhật tri thức"
-          }
-        >
-          {isUpdatingKnowledge && (
-            <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
-          )}
-          {selectedTopic?.knowledge_updated ? "Bỏ cập nhật tri thức" : "Cập nhật tri thức"}
-        </button>
+        {/* Pin button */}
+        {selectedTopic?.pinned ? (
+          <button
+            type="button"
+            onClick={openPinConfirm}
+            disabled={isPinning || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm border-2 border-slate-300 bg-slate-100 px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-slate-500 shadow-sm transition-colors cursor-not-allowed"
+            title="Đã ghim trang chủ — bấm để bỏ ghim"
+          >
+            {isPinning ? (
+              <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+            )}
+            Đã ghim trang chủ
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={openPinConfirm}
+            disabled={isPinning || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Ghim bài viết lên trang chủ"
+          >
+            {isPinning && (
+              <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+            )}
+            Thêm bài ghim trang chủ
+          </button>
+        )}
+
+        {/* Knowledge update button */}
+        {selectedTopic?.knowledge_updated ? (
+          <button
+            type="button"
+            onClick={openKnowledgeConfirm}
+            disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm bg-slate-200 px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-slate-500 shadow-sm transition-colors cursor-not-allowed"
+            title="Đã cập nhật tri thức — bấm để bỏ đánh dấu"
+          >
+            {isUpdatingKnowledge ? (
+              <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+            )}
+            Đã cập nhật tri thức
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={openKnowledgeConfirm}
+            disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+            title="Đánh dấu đã cập nhật tri thức"
+          >
+            {isUpdatingKnowledge && (
+              <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+            )}
+            Cập nhật tri thức
+          </button>
+        )}
       </div>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        open={confirmModal.open}
+        type={confirmModal.type}
+        topic={selectedTopic}
+        isLoading={isPinning || isUpdatingKnowledge}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+      />
     </section>
   );
 }

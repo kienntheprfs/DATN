@@ -1,0 +1,18 @@
+BERTopic Vietnamese - SUMMARY
+==================================================
+
+Total topics (excluding outlier): 11
+Total documents: 61
+Outliers: 0
+
+Topic 0: 10 docs | Thông tin tuyển sinh và điểm chuẩn Đại học Bách Khoa TP.HCM | tuyển_sinh, điểm_chuẩn, ngành, hồ_sơ, thạc_sĩ
+Topic 1: 11 docs | Quy định và thủ tục học tập tại Đại học Bách Khoa TP.HCM | buộc, bắt_buộc, chỉ_tiêu, học_lực, hoạt_động
+Topic 2: 7 docs | Thông tin về cơ cấu và thành lập Đại học Bách Khoa TP.HCM | thành_lập, đhqg, khoa, số_lượng, trung_tâm
+Topic 3: 6 docs | Quy định và tiêu chuẩn khen thưởng tại Đại học Bách Khoa TP.HCM | cúp, toàn_năng, tiêu_chuẩn, khen_thưởng, tốt_nghiệp
+Topic 4: 4 docs | Thông tin về địa điểm và khuôn viên Đại học Bách Khoa TP.HCM | cửa, hội, đường_cơ_sở, khu_vực, địa_điểm
+Topic 5: 5 docs | Thông tin về hệ thống học tập và chứng chỉ tại Đại học Bách Khoa TP.HCM | lms, quyền_lợi, chứng_chỉ, jlpt, văn_bằng
+Topic 6: 4 docs | Thông tin về sĩ số và mở lớp tại Đại học Bách Khoa TP.HCM | lớp, sĩ_số, mạng, đại_cương, hoá
+Topic 7: 4 docs | Thông tin về khuôn viên và chỉ đường tại Đại học Bách Khoa TP.HCM | a3, khuôn_viên, thư_viện, khu, đường
+Topic 8: 4 docs | Thông tin về hiệu trưởng và chương trình thạc sĩ tại Đại học Bách Khoa TP.HCM | hiệu_trưởng, 2015, thạc_sỹ, 2010
+Topic 9: 3 docs | Quy định và thủ tục bảo vệ luận văn tại Đại học Bách Khoa TP.HCM | hướng_dẫn, bảo_vệ, thành_viên, khoá_luận, hội_đồng
+Topic 10: 3 docs | Thông tin về lịch học và học phí tại Đại học Bách Khoa TP.HCM | học_kỳ, thu, lịch, học_phí, hạn

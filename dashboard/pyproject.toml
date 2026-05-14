@@ -26,6 +26,13 @@ dependencies = [
 	"langgraph-checkpoint-postgres>=2.0.13",
 	"langchain-core>=1.0.0",
 	"psycopg[binary,pool]>=3.2.4",
+	"bertopic>=0.17.4",
+	"hdbscan>=0.8.43",
+	"py-vncorenlp>=0.1.4",
+	"umap-learn>=0.5.12",
+	"gensim>=4.4.0",
+	"tqdm>=4.67.3",
+	"requests>=2.33.1",
 ]
 
 [dependency-groups]
