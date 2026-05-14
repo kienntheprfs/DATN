@@ -178,7 +178,12 @@ class _RouteDialogState extends State<RouteDialog> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final scale = constraints.maxWidth / _mapWidth;
-            return Stack(
+            return AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeIn,
+              switchOutCurve: Curves.easeOut,
+              child: Stack(
+                key: ValueKey('map-${_activeFloorIdx}'),
               children: [
                 if (_activeMapImageUrl != null)
                   Positioned.fill(
@@ -203,8 +208,9 @@ class _RouteDialogState extends State<RouteDialog> {
                 if (currentCoord != null)
                   _buildCurrentNode(currentCoord, scale),
               ],
-            );
-          },
+            ),
+          );
+        },
         ),
       ),
     );

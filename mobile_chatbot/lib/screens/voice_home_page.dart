@@ -22,7 +22,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   final api = ApiClient();
   late final voice = VoiceController(api: api, onError: _toast);
   String? token;
-  String userId = 'guest';
+  String userId = '';
   String selectedAgent = 'knowledge-base-agent';
   bool _isLoading = false;
   List<String> agents = ['knowledge-base-agent', 'map-assistant'];
@@ -37,6 +37,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    userId = voice.guestUserId;
     WidgetsBinding.instance.addObserver(this);
     voice.addListener(_onVoiceUpdated);
     voice.addListener(_autoScrollTranscript);
@@ -253,6 +254,14 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
     });
   }
 
+  void _logout() {
+    setState(() {
+      token = null;
+      userId = voice.guestUserId;
+    });
+    _toast('Đã đăng xuất');
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -331,10 +340,20 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
                     },
                   ),
                   const SizedBox(width: 4),
+                  if (token != null)
+                    _HeaderAction(
+                      icon: Icons.logout_rounded,
+                      onPressed: () async {
+                        await voice.disconnect();
+                        _logout();
+                      },
+                    ),
+                  const SizedBox(width: 4),
                   _HeaderAction(
                     icon: Icons.close_rounded,
                     onPressed: () async {
                       await voice.disconnect();
+                      _logout();
                       if (Navigator.canPop(context)) {
                         Navigator.pop(context);
                       }
@@ -386,7 +405,9 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
                         child: SingleChildScrollView(
                           controller: _transcriptScrollController,
                           child: MarkdownBody(
-                            data: [...voice.transcriptHistory, if (voice.currentTranscript.isNotEmpty) voice.currentTranscript].join('\n'),
+                            data: voice.currentTranscript.isNotEmpty
+                                ? voice.currentTranscript
+                                : voice.transcriptHistory.join('\n'),
                             styleSheet: MarkdownStyleSheet(
                               p: const TextStyle(
                                 fontSize: 15,

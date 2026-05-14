@@ -35,6 +35,9 @@ class VoiceController extends ChangeNotifier {
   final List<ChatMessage> messages = [];
   final Set<String> seen = {};
   VoiceStatus status = VoiceStatus.idle;
+  final String _guestUserId = 'guest-${_uuid().substring(0, 8)}';
+
+  String get guestUserId => _guestUserId;
   bool isSpeaking = false;
   bool isMuted = false;
   String? threadId;
@@ -252,7 +255,7 @@ class VoiceController extends ChangeNotifier {
           if (currentSpeaker != Role.bot) {
             currentSpeaker = Role.bot;
             currentTranscript = '';
-            transcriptHistory.clear(); // Clear history when switching to bot
+            transcriptHistory.clear();
           }
 
           // Check for custom_data (landmarks, route) in the message
@@ -267,10 +270,10 @@ class VoiceController extends ChangeNotifier {
           }
 
           String? output;
-          if (data?['text'] is String) {
-            output = data!['text'] as String;
-          } else if (data?['spoken'] is String) {
+          if (data?['spoken'] is String) {
             output = data!['spoken'] as String;
+          } else if (data?['text'] is String) {
+            output = data!['text'] as String;
           }
           
           if (output != null && output.trim().isNotEmpty) {
@@ -534,6 +537,7 @@ class VoiceController extends ChangeNotifier {
     } catch (_) {}
     
     pcId = null;
+    threadId = null;
     canSendIce = false;
     pendingIce.clear();
     isSpeaking = false;

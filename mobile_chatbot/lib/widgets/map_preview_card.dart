@@ -184,7 +184,12 @@ class _MapPreviewCardState extends State<MapPreviewCard> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final scale = constraints.maxWidth / _mapWidth;
-          return Stack(
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            child: Stack(
+              key: ValueKey('map-${_activeFloorIdx}'),
             children: [
               if (route.map.imageUrl.isNotEmpty)
                 Positioned.fill(
@@ -209,8 +214,9 @@ class _MapPreviewCardState extends State<MapPreviewCard> {
               if (currentCoord != null)
                 _buildCurrentNode(currentCoord, scale),
             ],
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }
