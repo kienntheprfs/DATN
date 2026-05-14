@@ -11,18 +11,22 @@ import '../utils/constants.dart';
 import 'api_client.dart';
 
 String _parseMarkdown(String text) {
-  return text
-      .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')
-      .replaceAll(RegExp(r'\*(.+?)\*'), r'$1')
-      .replaceAll(RegExp(r'__(.+?)__'), r'$1')
-      .replaceAll(RegExp(r'_(.+?)_'), r'$1')
-      .replaceAll(RegExp(r'~~(.+?)~~'), r'$1')
-      .replaceAll(RegExp(r'`(.+?)`'), r'$1')
-      .replaceAll(RegExp(r'\[(.+?)\]\(.+?\)'), r'$1')
-      .replaceAll(RegExp(r'#+\s*'), '')
-      .replaceAll(RegExp(r'^\s*[-*]\s+', multiLine: true), '')
-      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-      .trim();
+  return text.replaceAll(RegExp(r'\*\*|__|\*|_|`|#'), '').trim();
+}
+
+// Chuyển đổi chuỗi sang dạng không dấu, viết thường để so sánh mờ (fuzzy match)
+String _normalizeForComparison(String text) {
+  var str = text.toLowerCase();
+  str = str.replaceAll(RegExp(r'[àáạảãâầấậẩẫăằắặẳẵ]'), 'a');
+  str = str.replaceAll(RegExp(r'[èéẹẻẽêềếệểễ]'), 'e');
+  str = str.replaceAll(RegExp(r'[ìíịỉĩ]'), 'i');
+  str = str.replaceAll(RegExp(r'[òóọỏõôồốộổỗơờớợởỡ]'), 'o');
+  str = str.replaceAll(RegExp(r'[ùúụủũưừứựửữ]'), 'u');
+  str = str.replaceAll(RegExp(r'[ỳýỵỷỹ]'), 'y');
+  str = str.replaceAll(RegExp(r'[đ]'), 'd');
+  // Loại bỏ dấu câu và khoảng trắng thừa
+  str = str.replaceAll(RegExp(r'[^\w\s]'), '');
+  return str.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 class VoiceController extends ChangeNotifier {
@@ -239,19 +243,31 @@ class VoiceController extends ChangeNotifier {
               if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
                 _lastMessageTime = now;
                 
-                if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
+                final normalizedNew = _normalizeForComparison(text);
+                if (transcriptHistory.isNotEmpty) {
+                  final normalizedOld = _normalizeForComparison(transcriptHistory.last);
+                  if (normalizedNew.startsWith(normalizedOld)) {
+                    transcriptHistory[transcriptHistory.length - 1] = text;
+                  } else if (transcriptHistory.last != text) {
+                    transcriptHistory.add(text);
+                  }
+                } else {
                   transcriptHistory.add(text);
                 }
                 _append(Role.user, text);
                 _startNoResponseTimer();
               }
             }
-            currentTranscript = '';
           }
           notifyListeners();
         }
 
-        if (type == 'bot-output' || type == 'bot-partial-output') {
+        // Ignore noisy metrics and intermediate events in the console
+        if (type != 'metrics' && type != 'bot-llm-text' && type != 'bot-tts-text' && type != 'bot-partial-output') {
+          debugPrint('[Voice] Event: $type, Data: $data');
+        }
+
+        if (type == 'bot-output') {
           if (currentSpeaker != Role.bot) {
             currentSpeaker = Role.bot;
             currentTranscript = '';
@@ -278,16 +294,31 @@ class VoiceController extends ChangeNotifier {
           
           if (output != null && output.trim().isNotEmpty) {
             final text = output.trim();
-            currentTranscript = text;
             _cancelNoResponseTimer();
             
-            if (type == 'bot-output') {
-              if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
+            final normalizedNew = _normalizeForComparison(text);
+            final key = 'bot:$normalizedNew';
+            
+            // Replicate Web's recentMessagesRef logic: ignore if we've seen this exact chunk recently
+            if (seen.contains(key)) {
+              return;
+            }
+            
+            // Cập nhật history với bot-output
+            if (transcriptHistory.isNotEmpty) {
+              final normalizedOld = _normalizeForComparison(transcriptHistory.last);
+              // Nếu text mới bao trùm text cũ (cumulative), cập nhật thay vì thêm mới
+              if (normalizedNew.startsWith(normalizedOld)) {
+                transcriptHistory[transcriptHistory.length - 1] = text;
+              } else if (normalizedNew != normalizedOld) {
                 transcriptHistory.add(text);
               }
-              _append(Role.bot, text, runId: runId);
-              currentTranscript = '';
+            } else {
+              transcriptHistory.add(text);
             }
+            
+            _append(Role.bot, text, runId: runId);
+            currentTranscript = '';
             
             if (!isSpeaking) {
               isSpeaking = true;
@@ -349,16 +380,28 @@ class VoiceController extends ChangeNotifier {
     final parsedText = _parseMarkdown(text).trim();
     if (parsedText.isEmpty) return;
     
+    // 1. Deduplication key based on role and text only
     final key = '${role.name}:$parsedText';
-    
-    // Strict deduplication: if we've seen this EXACT text from this role recently, skip.
     if (seen.contains(key)) return;
     seen.add(key);
 
-    // Merge consecutive messages from the same role if they are different content
+    // 2. Logic for appending or overwriting
     if (messages.isNotEmpty && messages.last.role == role) {
       final lastMsg = messages.last;
-      if (lastMsg.text != parsedText) {
+      
+      final normalizedNew = _normalizeForComparison(parsedText);
+      final normalizedOld = _normalizeForComparison(lastMsg.text);
+
+      // Nếu tin nhắn mới bắt đầu bằng tin nhắn cũ (so sánh không dấu), 
+      // thì đây là bản cập nhật đầy đủ (overwrite)
+      if (normalizedNew.startsWith(normalizedOld) && normalizedOld.isNotEmpty) {
+        messages[messages.length - 1] = ChatMessage(
+          role, 
+          parsedText, 
+          runId: runId ?? lastMsg.runId
+        );
+      } else if (lastMsg.text != parsedText && !normalizedOld.contains(normalizedNew)) {
+        // Nếu là đoạn text mới hoàn toàn, append với dấu xuống dòng
         messages[messages.length - 1] = ChatMessage(
           role, 
           '${lastMsg.text}\n$parsedText', 
@@ -366,6 +409,7 @@ class VoiceController extends ChangeNotifier {
         );
       }
     } else {
+      // Tin nhắn đầu tiên cho role này
       messages.add(ChatMessage(role, parsedText, runId: runId));
     }
     notifyListeners();

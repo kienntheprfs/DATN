@@ -177,9 +177,7 @@ async def run_bot(
     pc_id: str | None = None,
     task_callback=None,
 ):
-    logger.info(
-        f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}"
-    )
+    logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}")
 
     try:
         pipecat_transport = SmallWebRTCTransport(
@@ -203,27 +201,27 @@ async def run_bot(
             stt = SherpaSTTService(model_dir="./zipformer_stt", model="zipformer", language="vi")
 
             logger.debug("Initializing TTS service...")
-            tts = CartesiaTTSService(
-                api_key=os.getenv("CARTESIA_API_KEY"),
-                # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
-                text_transforms=[("*", tts_preprocessing)],
-                settings=CartesiaTTSService.Settings(
-                    voice="0e58d60a-2f1a-4252-81bd-3db6af45fb41",  # Thay ID giọng tiếng Việt của bạn vào đây
-                    model="sonic-3",  # Bắt buộc dùng sonic-3 để config hoạt động tốt nhất
-                    language="vi",
-                    generation_config=GenerationConfig(
-                        volume=1.8, speed=1.0
-                    ),  # Khuếch đại âm lượng (Giới hạn cho phép từ 0.5 đến 2.0)  # Tốc độ đọc (Giới hạn từ 0.6 đến 1.5)
-                ),
-            )
-
-            # tts = PiperTTSService(
-            #     base_url="http://127.0.0.1:5000",
-            #     aiohttp_session=session,
-            #     sample_rate=24000,
-            #     voice_id="vi_VN-vais1000-medium",
+            # tts = CartesiaTTSService(
+            #     api_key=os.getenv("CARTESIA_API_KEY"),
+            #     # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
             #     text_transforms=[("*", tts_preprocessing)],
+            #     settings=CartesiaTTSService.Settings(
+            #         voice="0e58d60a-2f1a-4252-81bd-3db6af45fb41",  # Thay ID giọng tiếng Việt của bạn vào đây
+            #         model="sonic-3",  # Bắt buộc dùng sonic-3 để config hoạt động tốt nhất
+            #         language="vi",
+            #         generation_config=GenerationConfig(
+            #             volume=1.8, speed=1.0
+            #         ),  # Khuếch đại âm lượng (Giới hạn cho phép từ 0.5 đến 2.0)  # Tốc độ đọc (Giới hạn từ 0.6 đến 1.5)
+            #     ),
             # )
+
+            tts = PiperTTSService(
+                base_url="http://127.0.0.1:5000",
+                aiohttp_session=session,
+                sample_rate=24000,
+                voice_id="vi_VN-vais1000-medium",
+                text_transforms=[("*", tts_preprocessing)],
+            )
 
             logger.debug("Initializing LLM service...")
             llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id, query_mode)
@@ -265,13 +263,7 @@ async def run_bot(
             user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
                 context,
                 user_params=LLMUserAggregatorParams(
-                    user_turn_strategies=UserTurnStrategies(
-                        stop=[
-                            TurnAnalyzerUserTurnStopStrategy(
-                                turn_analyzer=LocalSmartTurnAnalyzerV3()
-                            )
-                        ]
-                    ),
+                    user_turn_strategies=UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]),
                 ),
             )
 
@@ -300,9 +292,7 @@ async def run_bot(
                 await task_callback(pc_id, task)
 
             logger.info("Bot pipeline ready, sending intro message...")
-            messages.append(
-                {"role": "system", "content": "Hãy tự giới thiệu bản thân với người dùng."}
-            )
+            messages.append({"role": "system", "content": "Hãy tự giới thiệu bản thân với người dùng."})
             await task.queue_frames([LLMRunFrame()])
 
             runner = PipelineRunner(handle_sigint=False)
