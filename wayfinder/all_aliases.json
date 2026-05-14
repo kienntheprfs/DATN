@@ -1,0 +1,22 @@
+[
+  {
+    "alias_name": "Cổng Lý Thường Kiệt",
+    "node_id": 22,
+    "node_name": "Cổng 1"
+  },
+  {
+    "alias_name": "Tòa Kỹ thuật Xây dựng",
+    "node_id": 10,
+    "node_name": "Tòa B6"
+  },
+  {
+    "alias_name": "Tòa Khoa học và Kỹ thuật máy tính",
+    "node_id": 14,
+    "node_name": "Tòa A3"
+  },
+  {
+    "alias_name": "Tòa Khoa học ứng dụng",
+    "node_id": 2,
+    "node_name": "Tòa B4"
+  }
+]

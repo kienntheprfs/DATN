@@ -28,6 +28,8 @@ String _parseMarkdown(String text) {
 class VoiceController extends ChangeNotifier {
   VoiceController({required this.api, required this.onError});
 
+  static final _random = Random();
+
   final ApiClient api;
   final void Function(String) onError;
   final List<ChatMessage> messages = [];
@@ -234,11 +236,7 @@ class VoiceController extends ChangeNotifier {
               if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
                 _lastMessageTime = now;
                 
-                // Deduplicate for transcript display
                 if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
-                  if (transcriptHistory.length >= 3) {
-                    transcriptHistory.clear();
-                  }
                   transcriptHistory.add(text);
                 }
                 _append(Role.user, text);
@@ -269,10 +267,10 @@ class VoiceController extends ChangeNotifier {
           }
 
           String? output;
-          if (data?['spoken'] is String) {
-            output = data!['spoken'] as String;
-          } else if (data?['text'] is String) {
+          if (data?['text'] is String) {
             output = data!['text'] as String;
+          } else if (data?['spoken'] is String) {
+            output = data!['spoken'] as String;
           }
           
           if (output != null && output.trim().isNotEmpty) {
@@ -281,18 +279,10 @@ class VoiceController extends ChangeNotifier {
             _cancelNoResponseTimer();
             
             if (type == 'bot-output') {
-              final now = DateTime.now();
-              if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
-                _lastMessageTime = now;
-                
-                if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
-                  if (transcriptHistory.length >= 3) {
-                    transcriptHistory.clear();
-                  }
-                  transcriptHistory.add(text);
-                }
-                _append(Role.bot, text, runId: runId);
+              if (transcriptHistory.isEmpty || transcriptHistory.last != text) {
+                transcriptHistory.add(text);
               }
+              _append(Role.bot, text, runId: runId);
               currentTranscript = '';
             }
             
@@ -383,6 +373,38 @@ class VoiceController extends ChangeNotifier {
     try {
       final parsed = jsonDecode(content) as Map<String, dynamic>;
       if (parsed['type']?.toString() != 'route') return;
+
+      final status = parsed['status']?.toString();
+
+      // Handle needs_confirmation
+      if (status == 'needs_confirmation') {
+        _cancelNoResponseTimer();
+        final startName = parsed['start_name']?.toString() ?? '';
+        final endName = parsed['end_name']?.toString() ?? '';
+        final startOptions = (parsed['start_options'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList();
+        final endOptions = (parsed['end_options'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList();
+
+        messages.add(
+          ChatMessage(
+            Role.bot,
+            'Vui lòng xác nhận địa điểm để tôi tìm đường cho bạn.',
+            runId: runId,
+            confirmationJson: jsonEncode({
+              'start_name': startName,
+              'end_name': endName,
+              'start_options': startOptions ?? [],
+              'end_options': endOptions ?? [],
+            }),
+          ),
+        );
+        notifyListeners();
+        return;
+      }
+
       final path = (parsed['path_coords'] as List<dynamic>? ?? [])
           .map((e) => e as List<dynamic>)
           .where((e) => e.length >= 2)
@@ -392,13 +414,36 @@ class VoiceController extends ChangeNotifier {
           .toList();
       if (path.isEmpty) return;
       _cancelNoResponseTimer();
-      final steps = (parsed['instructions'] as List<dynamic>? ?? [])
+
+      final rawInstructions = parsed['instructions'] as List<dynamic>? ?? [];
+      final steps = rawInstructions
           .map(
             (e) =>
                 (e as Map<String, dynamic>)['instruction']?.toString() ??
                 e.toString(),
           )
           .toList();
+      final instructions = rawInstructions
+          .map((e) => InstructionStep.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      // Parse multi-floor data
+      final routeMaps = (parsed['route_maps'] as List<dynamic>?)
+          ?.map((e) {
+            final m = e as Map<String, dynamic>;
+            final mapData = MapData(
+              id: int.tryParse(m['map']?['id']?.toString() ?? '0') ?? 0,
+              name: m['map']?['name']?.toString() ?? '',
+              imageUrl: m['map']?['image_url']?.toString() ?? '',
+              floorLevel: m['map']?['floor_level'] as int?,
+            );
+            final nodes = (m['nodes'] as List<dynamic>?)
+                ?.map((n) => MapNode.fromJson(n as Map<String, dynamic>))
+                .toList() ?? [];
+            return RouteMapInfo(map: mapData, nodes: nodes);
+          })
+          .toList();
+
       messages.add(
         ChatMessage(
           Role.bot,
@@ -411,6 +456,18 @@ class VoiceController extends ChangeNotifier {
                 '${((parsed['total_distance_m'] as num?)?.round() ?? 0)}m',
             path: path,
             steps: steps,
+            instructions: instructions,
+            startName: parsed['start_name']?.toString(),
+            endName: parsed['end_name']?.toString(),
+            totalDistanceM: (parsed['total_distance_m'] as num?)?.toDouble() ?? 0,
+            status: status,
+            startOptions: (parsed['start_options'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList(),
+            endOptions: (parsed['end_options'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList(),
+            routeMaps: routeMaps,
             map: MapData(
               id: int.tryParse(parsed['map']?['id']?.toString() ?? '0') ?? 0,
               name: parsed['map']?['name']?.toString() ?? '',
@@ -444,6 +501,7 @@ class VoiceController extends ChangeNotifier {
           name: m['name']?.toString() ?? '',
           description: m['description']?.toString() ?? '',
           imageUrl: m['real_image_url']?.toString() ?? '',
+          type: m['type']?.toString() ?? 'building',
         );
       }).toList();
 
@@ -502,18 +560,53 @@ class VoiceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  static String _uuid() {
+    // Simple UUID v4
+    final r = _random;
+    final bytes = List<int>.generate(16, (_) => r.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    return [
+      bytes.sublist(0, 4).map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+      bytes.sublist(4, 6).map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+      bytes.sublist(6, 8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+      bytes.sublist(8, 10).map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+      bytes.sublist(10, 16).map((b) => b.toRadixString(16).padLeft(2, '0')).join(),
+    ].join('-');
+  }
+
   void sendTextMessage(String text) {
-    if (status != VoiceStatus.connected) return;
+    if (status != VoiceStatus.connected || dataChannel == null) return;
     
     final msg = jsonEncode({
+      'id': _uuid(),
       'label': 'rtvi-ai',
-      'type': 'user-chat-message',
+      'type': 'chat-text',
       'data': {'text': text},
     });
     
-    dataChannel?.send(RTCDataChannelMessage(msg));
+    dataChannel!.send(RTCDataChannelMessage(msg));
     _append(Role.user, text);
     _startNoResponseTimer();
+    notifyListeners();
+  }
+
+  void updateAgent(String newAgentId) {
+    if (status != VoiceStatus.connected || dataChannel == null) {
+      debugPrint('[Voice] Cannot update agent: not connected');
+      return;
+    }
+    debugPrint('[Voice] Updating agent to: $newAgentId');
+    final msg = jsonEncode({
+      'id': _uuid(),
+      'label': 'rtvi-ai',
+      'type': 'update-agent',
+      'data': {
+        'agent_id': newAgentId,
+        'thread_id': threadId,
+      },
+    });
+    dataChannel!.send(RTCDataChannelMessage(msg));
     notifyListeners();
   }
 }

@@ -467,72 +467,7 @@ def generate_human_instructions(
 
 
 
-def find_best_alias_node(
-    session: Session,
-    query: str,
-    map_id: Optional[int] = None,
-    cx: Optional[float] = None,
-    cy: Optional[float] = None,
-) -> List[Tuple[Node, float]]:
-    """
-    Tìm danh sách các node_id dựa trên text search, có so khớp với cả tên tòa nhà.
-    Trả về List[(Node, score)] sắp xếp theo score giảm dần.
-    """
-    norm_q = normalize_name(query)
-
-    # Lấy tất cả Alias + Node + Map + Building
-    from backend.models.entities import Building, Map
-
-    stmt = (
-        select(Alias, Node, Building)
-        .join(Node, Alias.node_id == Node.id)
-        .join(Map, Node.map_id == Map.id)
-        .outerjoin(Building, Map.building_id == Building.id)
-    )
-
-    if map_id:
-        # Nếu có map_id, ưu tiên các kết quả trong map này hoặc lân cận
-        # Nhưng vẫn cho phép tìm ở map khác nếu được yêu cầu cụ thể qua tên
-        pass
-
-    results = session.exec(stmt).all()
-
-    if not results:
-        return []
-
-    candidates = []
-    for alias, node, building in results:
-        if node.name and node.name.lower() == "new node":
-            continue
-            
-        alias_name = normalize_name(alias.name)
-        building_name = normalize_name(building.name) if building else ""
-
-        # So khớp cả tên alias và kết hợp alias + tòa nhà
-        combined_name = f"{alias_name} {building_name}".strip()
-
-        # Tính score cao nhất giữa các cách gọi
-        score_alias = fuzz.token_set_ratio(norm_q, alias_name)
-        score_combined = fuzz.token_set_ratio(norm_q, combined_name)
-
-        score = max(score_alias, score_combined)
-
-        # Ưu tiên kết quả khớp hoàn toàn
-        if norm_q in alias_name or norm_q in combined_name:
-            score += 10
-        
-        # Bonus if building name matches query directly (e.g. "Tòa B" matches "Tòa B4")
-        if building_name and (norm_q in building_name or building_name in norm_q):
-            score = max(score, 85.0)
-            score += 10
-
-        if score > 50:
-            candidates.append((node, float(score)))
-
-    # Sắp xếp theo score
-    candidates.sort(key=lambda x: x[1], reverse=True)
-
-    return candidates
+from backend.services.search import find_best_nodes
 
 
 # --- API ENDPOINT ---
@@ -674,16 +609,19 @@ def route_by_query(
 
     # 2. Tìm Start Node candidates
     if start_txt:
-        start_candidates = find_best_alias_node(session, start_txt, map_id, cx, cy)
+        start_candidates = find_best_nodes(session, start_txt, limit=10)
     elif cx is not None and cy is not None and map_id is not None:
         all_nodes = session.exec(select(Node).where(Node.map_id == map_id)).all()
         if all_nodes:
             all_nodes.sort(key=lambda n: math.hypot(n.x - cx, n.y - cy))
-            start_candidates = [(all_nodes[0], 100.0)]
+            # Mock SearchResult-like object for the ambiguity checker
+            from collections import namedtuple
+            SearchResultMock = namedtuple('SearchResultMock', ['node', 'score', 'name'])
+            start_candidates = [SearchResultMock(node=all_nodes[0], score=100.0, name=all_nodes[0].name)]
 
     # 3. Tìm End Node candidates
     if end_txt:
-        end_candidates = find_best_alias_node(session, end_txt, map_id, cx, cy)
+        end_candidates = find_best_nodes(session, end_txt, limit=10)
 
     # Kiểm tra tính rõ ràng (ambiguity check)
     def check_ambiguity(candidates, name):
@@ -692,18 +630,18 @@ def route_by_query(
 
         # Nếu có nhiều hơn 1 kết quả và các kết quả hàng đầu có score quá sát nhau
         if len(candidates) > 1:
-            score1 = candidates[0][1]
-            score2 = candidates[1][1]
-            # Nếu chênh lệch score < 10, coi là không rõ ràng
-            if score1 - score2 < 10:
+            score1 = candidates[0].score
+            score2 = candidates[1].score
+            # Nếu chênh lệch score < 15, coi là không rõ ràng (tăng lên 15 cho an toàn)
+            if score1 - score2 < 15:
                 # Liệt kê tất cả các địa điểm có điểm trên 80%
-                relevant_candidates = [c for c in candidates if c[1] >= 80]
-                # Nếu không có cái nào trên 80 (trường hợp hiếm vì score1 >= score2), lấy top 3
+                relevant_candidates = [c for c in candidates if c.score >= 80]
+                # Nếu không có cái nào trên 80, lấy top 3
                 if not relevant_candidates:
                     relevant_candidates = candidates[:3]
                 
                 options = [
-                    f"{c[0].name} (Tầng {session.get(Map, c[0].map_id).floor_level})"
+                    f"{c.name} (Tầng {session.get(Map, c.node.map_id).floor_level})"
                     for c in relevant_candidates
                 ]
                 return (
@@ -711,7 +649,7 @@ def route_by_query(
                     f"Tìm thấy nhiều địa điểm '{name}': {', '.join(options)}. Vui lòng xác nhận chính xác hơn.",
                 )
 
-        return candidates[0][0].id, None
+        return candidates[0].node.id, None
 
     start_id, start_err = check_ambiguity(
         start_candidates, start_txt or "vị trí của bạn"
@@ -743,7 +681,7 @@ def route_by_query(
     instrs, total_dist_m = generate_human_instructions(G, path_nodes, node_pos, map_scales)
 
     return RouteResponse(
-        map_id=start_candidates[0][0].map_id,
+        map_id=start_candidates[0].node.map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
         path_node_ids=path_nodes,
         total_distance_m=round(total_dist_m, 2),

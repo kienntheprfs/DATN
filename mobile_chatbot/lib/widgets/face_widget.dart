@@ -68,7 +68,7 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
         physics: const NeverScrollableScrollPhysics(),
         child: Column(
           children: [
-            SizedBox(height: topPadding + 80),
+            SizedBox(height: topPadding + 60),
 
             // Hàng Mắt và Má hồng
             Row(
@@ -76,16 +76,17 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _buildEyeWithBlush(context, false),
-                const SizedBox(width: 180),
+                const SizedBox(width: 220), // tăng khoảng cách vì mắt to hơn
                 _buildEyeWithBlush(context, true),
               ],
             ),
-            // Miệng bự
+
+            // Miệng
             Transform.translate(
-              offset: const Offset(0, -70),
+              offset: const Offset(0, -160),
               child: lottie.Lottie.asset(
                 'mouth_animation.json',
-                width: 300,
+                width: 420, // TO HƠN
                 controller: _mouthController,
                 onLoaded: (composition) {
                   _mouthController.duration = composition.duration;
@@ -106,12 +107,12 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
       alignment: Alignment.center,
       clipBehavior: Clip.none,
       children: [
-        // Glow effect when connected
         if (widget.isConnected)
           AnimatedBuilder(
             animation: _pulseController,
-            builder: (context, _) => SizedBox(width: 200, height: 200),
+            builder: (context, _) => const SizedBox(width: 240, height: 240),
           ),
+
         AnimatedScale(
           scale: widget.isSpeaking ? 1.08 : 1.0,
           duration: const Duration(milliseconds: 200),
@@ -122,7 +123,7 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
                 : Matrix4.identity(),
             child: lottie.Lottie.asset(
               'eye_animation.json',
-              width: 180,
+              width: 240, // TO HƠN
               controller: _eyeController,
               onLoaded: (composition) {
                 _eyeController.duration = composition.duration;
@@ -133,10 +134,12 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
             ),
           ),
         ),
+
+        // Má hồng
         Positioned(
-          bottom: -20,
-          left: mirrored ? null : -40,
-          right: mirrored ? -40 : null,
+          bottom: -10, // dính sát dưới mắt
+          left: mirrored ? null : 10,
+          right: mirrored ? 10 : null,
           child: const BlushDot(),
         ),
       ],

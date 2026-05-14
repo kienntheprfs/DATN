@@ -8,6 +8,7 @@ import '../widgets/face_widget.dart';
 import '../widgets/route_dialog.dart';
 import '../widgets/auth_dialog.dart';
 import '../widgets/landmark_carousel.dart';
+import '../widgets/confirmation_options.dart';
 import 'history_list_screen.dart';
 
 class VoiceHomePage extends StatefulWidget {
@@ -29,12 +30,16 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   String? lastAutoShownRouteKey;
   List<Landmark>? latestLandmarks;
   String? lastAutoShownLandmarksKey;
+  String? latestConfirmationJson;
+  String? lastAutoShownConfirmationKey;
+  final _transcriptScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     voice.addListener(_onVoiceUpdated);
+    voice.addListener(_autoScrollTranscript);
     _loadAgents();
   }
 
@@ -42,6 +47,8 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     voice.removeListener(_onVoiceUpdated);
+    voice.removeListener(_autoScrollTranscript);
+    _transcriptScrollController.dispose();
     voice.dispose();
     super.dispose();
   }
@@ -76,9 +83,10 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   void _onVoiceUpdated() {
     if (!mounted) return;
 
-    // Find latest route and landmarks in messages
+    // Find latest route, landmarks, and confirmation in messages
     RouteInfo? foundRoute;
     List<Landmark>? foundLandmarks;
+    String? foundConfirmation;
     
     for (final msg in voice.messages.reversed) {
       if (foundRoute == null && msg.route != null) {
@@ -87,13 +95,28 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
       if (foundLandmarks == null && msg.landmarks != null) {
         foundLandmarks = msg.landmarks;
       }
-      if (foundRoute != null && foundLandmarks != null) break;
+      if (foundConfirmation == null && msg.confirmationJson != null) {
+        foundConfirmation = msg.confirmationJson;
+      }
+      if (foundRoute != null && foundLandmarks != null && foundConfirmation != null) break;
     }
 
     setState(() {
       latestRoute = foundRoute;
       latestLandmarks = foundLandmarks;
+      latestConfirmationJson = foundConfirmation;
     });
+
+    // Auto show confirmation dialog (priority: higher than route)
+    if (latestConfirmationJson != null) {
+      if (latestConfirmationJson != lastAutoShownConfirmationKey) {
+        lastAutoShownConfirmationKey = latestConfirmationJson;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _openConfirmationDialog(latestConfirmationJson!);
+        });
+      }
+    }
 
     // Auto show route
     if (latestRoute != null) {
@@ -120,6 +143,16 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
     }
   }
 
+  void _autoScrollTranscript() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_transcriptScrollController.hasClients) {
+        _transcriptScrollController.jumpTo(
+          _transcriptScrollController.position.maxScrollExtent,
+        );
+      }
+    });
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     
@@ -140,27 +173,26 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   Future<void> _switchAgent(String agentId) async {
     if (selectedAgent == agentId) return;
     
-    setState(() {
-      selectedAgent = agentId;
-      _isLoading = true;
-    });
+    setState(() => selectedAgent = agentId);
 
-    try {
-      // 1. Disconnect current session if it exists
-      if (voice.status != VoiceStatus.disconnected) {
-        await voice.disconnect();
-        // Give it a small buffer for cleanup
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      
-      // 2. Re-establish connection with NEW agentId
-      await voice.connect(agentId: agentId, userId: userId, token: token);
+    if (voice.status == VoiceStatus.connected) {
+      voice.updateAgent(agentId);
       _toast("Đã chuyển sang agent mới");
-    } catch (e) {
-      _toast("Lỗi khi chuyển agent: $e");
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    } else if (voice.status == VoiceStatus.idle || voice.status == VoiceStatus.disconnected) {
+      // Not connected, nothing to do — next connect will use selectedAgent
+      _toast("Đã chọn agent: $agentId");
+    } else {
+      // connecting, error — disconnect and reconnect fresh
+      setState(() => _isLoading = true);
+      try {
+        await voice.disconnect();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await voice.connect(agentId: agentId, userId: userId, token: token);
+        _toast("Đã chuyển sang agent mới");
+      } catch (e) {
+        _toast("Lỗi khi chuyển agent: $e");
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -191,6 +223,19 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
           final text = 'Tôi đang ở ${landmark.name}';
           voice.sendTextMessage(text);
           _toast('Đã xác nhận vị trí: ${landmark.name}');
+        },
+      ),
+    );
+  }
+
+  void _openConfirmationDialog(String confirmationJson) {
+    showDialog(
+      context: context,
+      builder: (_) => ConfirmationOptionsDialog(
+        confirmationJson: confirmationJson,
+        onConfirm: (text) {
+          voice.sendTextMessage(text);
+          _toast('Đã gửi xác nhận: $text');
         },
       ),
     );
@@ -310,76 +355,75 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
               children: [
                 // Transcript Card
                 if (voice.transcriptHistory.isNotEmpty || voice.currentTranscript.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              voice.currentSpeaker == Role.user
-                                  ? Icons.person_rounded
-                                  : Icons.smart_toy_rounded,
-                              size: 14,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            voice.currentSpeaker == Role.user
+                                ? Icons.person_rounded
+                                : Icons.smart_toy_rounded,
+                            size: 14,
+                            color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            voice.currentSpeaker == Role.user ? 'BẠN' : 'BOT',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
                               color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              voice.currentSpeaker == Role.user ? 'BẠN' : 'BOT',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1,
-                                color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        MarkdownBody(
-                          data: [...voice.transcriptHistory, if (voice.currentTranscript.isNotEmpty) voice.currentTranscript].join('\n'),
-                          styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(
-                              fontSize: 15,
-                              height: 1.4,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                            img: const TextStyle(
-                              fontSize: 10,
-                            ),
                           ),
-                          imageBuilder: (uri, title, alt) {
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              constraints: const BoxConstraints(maxHeight: 180), // Keep images small
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                  ),
-                                ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 90),
+                        child: SingleChildScrollView(
+                          controller: _transcriptScrollController,
+                          child: MarkdownBody(
+                            data: [...voice.transcriptHistory, if (voice.currentTranscript.isNotEmpty) voice.currentTranscript].join('\n'),
+                            styleSheet: MarkdownStyleSheet(
+                              p: const TextStyle(
+                                fontSize: 15,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  AppConstants.getFullImageUrl(uri.toString()),
-                                  fit: BoxFit.contain,
+                              img: const TextStyle(
+                                fontSize: 10,
+                              ),
+                            ),
+                            imageBuilder: (uri, title, alt) {
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                constraints: const BoxConstraints(maxHeight: 180),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            );
-                          },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    AppConstants.getFullImageUrl(uri.toString()),
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 Row(
                   children: [
@@ -403,16 +447,24 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
                         onPressed: _toggleVoice,
                       ),
                     ),
-                    if (latestRoute != null || latestLandmarks != null) ...[
+                    if (latestRoute != null || latestLandmarks != null || latestConfirmationJson != null) ...[
                       const SizedBox(width: 16),
-                      if (latestLandmarks != null)
+                      if (latestConfirmationJson != null)
+                        _CircularAction(
+                          icon: Icons.navigation_rounded,
+                          onPressed: () => _openConfirmationDialog(latestConfirmationJson!),
+                          color: Colors.purple.shade600,
+                        ),
+                      if (latestLandmarks != null) ...[
+                        if (latestConfirmationJson != null) const SizedBox(width: 8),
                         _CircularAction(
                           icon: Icons.image_search_rounded,
                           onPressed: () => _openLandmarkModal(latestLandmarks!),
                           color: Colors.blue.shade600,
                         ),
+                      ],
                       if (latestRoute != null) ...[
-                        if (latestLandmarks != null) const SizedBox(width: 8),
+                        if (latestConfirmationJson != null || latestLandmarks != null) const SizedBox(width: 8),
                         _CircularAction(
                           icon: Icons.map_outlined,
                           onPressed: () => _openRouteModal(latestRoute!),

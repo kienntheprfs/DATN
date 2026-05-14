@@ -140,13 +140,34 @@ class ApiClient {
         try {
           final parsed = jsonDecode(content);
           if (parsed is Map && parsed['type'] == 'route') {
-            final route = _parseRouteInfo(Map<String, dynamic>.from(parsed));
-            if (route != null) {
+            if (parsed['status']?.toString() == 'needs_confirmation') {
+              final startName = parsed['start_name']?.toString() ?? '';
+              final endName = parsed['end_name']?.toString() ?? '';
+              final startOptions = (parsed['start_options'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList();
+              final endOptions = (parsed['end_options'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList();
               chatMessages.add(ChatMessage(
-                Role.bot, 
-                'Đã tìm thấy lộ trình. Nhấn xem chỉ đường để mở bản đồ.', 
-                route: route
+                Role.bot,
+                'Vui lòng xác nhận địa điểm.',
+                confirmationJson: jsonEncode({
+                  'start_name': startName,
+                  'end_name': endName,
+                  'start_options': startOptions ?? [],
+                  'end_options': endOptions ?? [],
+                }),
               ));
+            } else {
+              final route = _parseRouteInfo(Map<String, dynamic>.from(parsed));
+              if (route != null) {
+                chatMessages.add(ChatMessage(
+                  Role.bot, 
+                  'Đã tìm thấy lộ trình. Nhấn xem chỉ đường để mở bản đồ.', 
+                  route: route
+                ));
+              }
             }
           } else {
             // Check if it's a list of landmarks or a map containing landmarks
@@ -186,6 +207,7 @@ class ApiClient {
           name: m['name']?.toString() ?? '',
           description: m['description']?.toString() ?? '',
           imageUrl: m['real_image_url']?.toString() ?? '',
+          type: m['type']?.toString() ?? 'building',
         );
       }).toList();
     } catch (_) {
@@ -202,9 +224,13 @@ class ApiClient {
           .toList();
           
       if (path.isEmpty) return null;
-      
-      final steps = (parsed['instructions'] as List<dynamic>? ?? [])
+
+      final rawInstructions = parsed['instructions'] as List<dynamic>? ?? [];
+      final steps = rawInstructions
           .map((e) => (e as Map<String, dynamic>)['instruction']?.toString() ?? e.toString())
+          .toList();
+      final instructions = rawInstructions
+          .map((e) => InstructionStep.fromJson(e as Map<String, dynamic>))
           .toList();
 
       final mapRaw = parsed['map'] as Map<String, dynamic>?;
@@ -217,11 +243,42 @@ class ApiClient {
         floorLevel: mapRaw['floor_level'] as int?,
       );
 
+      final routeMaps = (parsed['route_maps'] as List<dynamic>?)
+          ?.map((e) {
+            final m = e as Map<String, dynamic>;
+            final rm = m['map'] as Map<String, dynamic>?;
+            final nodes = (m['nodes'] as List<dynamic>?)
+                ?.map((n) => MapNode.fromJson(n as Map<String, dynamic>))
+                .toList() ?? [];
+            return RouteMapInfo(
+              map: MapData(
+                id: int.tryParse(rm?['id']?.toString() ?? '0') ?? 0,
+                name: rm?['name']?.toString() ?? '',
+                imageUrl: rm?['image_url']?.toString() ?? '',
+                floorLevel: rm?['floor_level'] as int?,
+              ),
+              nodes: nodes,
+            );
+          })
+          .toList();
+
       return RouteInfo(
         title: '${parsed['start_name'] ?? 'Bắt đầu'} -> ${parsed['end_name'] ?? 'Kết thúc'}',
         summary: '${((parsed['total_distance_m'] as num?)?.round() ?? 0)}m',
         path: path,
         steps: steps,
+        instructions: instructions,
+        startName: parsed['start_name']?.toString(),
+        endName: parsed['end_name']?.toString(),
+        totalDistanceM: (parsed['total_distance_m'] as num?)?.toDouble() ?? 0,
+        status: parsed['status']?.toString(),
+        startOptions: (parsed['start_options'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList(),
+        endOptions: (parsed['end_options'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList(),
+        routeMaps: routeMaps,
         map: mapData,
       );
     } catch (_) {

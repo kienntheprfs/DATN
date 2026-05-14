@@ -106,7 +106,7 @@ def clean_markdown_for_tts(text: str) -> str:
     text = re.sub(r"```[\s\S]*?```", "", text)
     # Bỏ inline code (chỉ bỏ dấu backtick, giữ lại text bên trong)
     text = re.sub(r"`([^`]+)`", r"\1", text)
-    
+
     # 2. Xử lý Image và Link (giữ lại text hiển thị)
     text = re.sub(r"!\[([^\]]*)\]\([^\)]+\)", r" \1 ", text)
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r" \1 ", text)
@@ -119,7 +119,7 @@ def clean_markdown_for_tts(text: str) -> str:
     # Lists (-, *, +, \d.) - Xử lý cả khi có thụt lề
     text = re.sub(r"^\s*[\-\*\+]\s+", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
-    
+
     # Horizontal Rules (---, ***, ___)
     text = re.sub(r"^\s*(?:---|\*\*\*|___)\s*$", "", text, flags=re.MULTILINE)
 
@@ -141,7 +141,7 @@ def clean_markdown_for_tts(text: str) -> str:
 
     # 7. Dọn dẹp khoảng trắng thừa
     text = re.sub(r"\s+", " ", text)
-    
+
     return text.strip()
 
 
@@ -177,10 +177,8 @@ async def run_bot(
     pc_id: str | None = None,
     task_callback=None,
 ):
-    logger.info(
-        f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}"
-    )
-    
+    logger.info(f"Starting bot with agent_id={agent_id}, user_id={user_id}, thread_id={thread_id}, pc_id={pc_id}")
+
     try:
         pipecat_transport = SmallWebRTCTransport(
             webrtc_connection=webrtc_connection,
@@ -195,16 +193,28 @@ async def run_bot(
         async with aiohttp.ClientSession() as session:
             logger.debug("Initializing STT service...")
             stt = SherpaSTTService(model_dir="./zipformer_stt", model="zipformer", language="vi")
-            
+
             logger.debug("Initializing TTS service...")
-            tts = PiperTTSService(
-                base_url="http://127.0.0.1:5000",
-                aiohttp_session=session,
-                sample_rate=24000,
-                voice_id="vi_VN-vais1000-medium",
+            tts = CartesiaTTSService(
+                api_key=os.getenv("CARTESIA_API_KEY"),
+                # Áp dụng hàm tiền xử lý cho tất cả text (*) đi qua
                 text_transforms=[("*", tts_preprocessing)],
+                settings=CartesiaTTSService.Settings(
+                    voice="0e58d60a-2f1a-4252-81bd-3db6af45fb41",  # Thay ID giọng tiếng Việt của bạn vào đây
+                    model="sonic-3",  # Bắt buộc dùng sonic-3 để config hoạt động tốt nhất
+                    language="vi",
+                    generation_config=GenerationConfig(volume=1.8, speed=1.0),  # Khuếch đại âm lượng (Giới hạn cho phép từ 0.5 đến 2.0)  # Tốc độ đọc (Giới hạn từ 0.6 đến 1.5)
+                ),
             )
-            
+
+            # tts = PiperTTSService(
+            #     base_url="http://127.0.0.1:5000",
+            #     aiohttp_session=session,
+            #     sample_rate=24000,
+            #     voice_id="vi_VN-vais1000-medium",
+            #     text_transforms=[("*", tts_preprocessing)],
+            # )
+
             logger.debug("Initializing LLM service...")
             llm = create_llm(session, pipecat_transport, agent_id, user_id, thread_id, query_mode)
 
@@ -220,7 +230,7 @@ async def run_bot(
                 logger.info(f"Received app message from client: {message}")
                 msg_type = message.get("type")
                 msg_data = message.get("data", {})
-                
+
                 if msg_type == "chat-text":
                     text = msg_data.get("text")
                     if text:
@@ -228,16 +238,16 @@ async def run_bot(
                         # Directly append to history and trigger LLM
                         context.messages.append({"role": "user", "content": text})
                         await task.queue_frames([LLMRunFrame()])
-                
+
                 elif msg_type == "update-agent":
                     new_agent_id = msg_data.get("agent_id")
                     new_thread_id = msg_data.get("thread_id")
-                    
+
                     if new_agent_id:
                         llm.agent_name = new_agent_id
                     if new_thread_id:
                         llm.thread_id = new_thread_id
-                    
+
                     await task.queue_frames([LLMRunFrame()])
 
             pipecat_transport.add_event_handler("on_app_message", on_app_message)
@@ -245,11 +255,7 @@ async def run_bot(
             user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
                 context,
                 user_params=LLMUserAggregatorParams(
-                    user_turn_strategies=UserTurnStrategies(
-                        stop=[
-                            TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())
-                        ]
-                    ),
+                    user_turn_strategies=UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())]),
                 ),
             )
 
@@ -285,10 +291,11 @@ async def run_bot(
             logger.info("Starting pipeline runner...")
             await runner.run(task)
             logger.info("Pipeline runner finished normally.")
-            
+
     except Exception as e:
         logger.error(f"!!! CRITICAL ERROR in run_bot: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
     finally:
         if task_callback and pc_id:
