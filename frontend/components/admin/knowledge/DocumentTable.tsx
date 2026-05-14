@@ -38,6 +38,24 @@ const typeStyles: Record<string, string> = {
   "Hướng dẫn": "bg-emerald-50 text-emerald-800 border-emerald-100",
 };
 
+const statusStyles: Record<string, string> = {
+  active: "bg-green-50 text-green-700 border-green-100",
+  pending: "bg-amber-50 text-amber-700 border-amber-100",
+  processing: "bg-blue-50 text-blue-700 border-blue-100",
+  completed: "bg-green-50 text-green-700 border-green-100",
+  failed: "bg-red-50 text-red-700 border-red-100",
+  delete_pending: "bg-slate-50 text-slate-700 border-slate-100",
+};
+
+const statusLabels: Record<string, string> = {
+  active: "Hoạt động",
+  pending: "Chờ xử lý",
+  processing: "Đang xử lý",
+  completed: "Hoàn tất",
+  failed: "Lỗi xử lý",
+  delete_pending: "Đang xóa",
+};
+
 export function DocumentTable({ documents, isLoading, onDeleteDocument, deletingDocumentId }: DocumentTableProps) {
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
 
@@ -63,6 +81,7 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
             <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-45">Đơn vị</th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-30">Loại</th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-45">Thẻ / Tags</th>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-25">Trạng thái</th>
             <th scope="col" className="px-6 py-3 text-right text-xs font-bold text-text-secondary uppercase tracking-wider font-heading w-22">
               Hành động
             </th>
@@ -93,6 +112,9 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
                   <div className="h-5 bg-slate-200 rounded w-16"></div>
                 </div>
               </td>
+              <td className="px-6 whitespace-nowrap align-top">
+                <div className="h-5 bg-slate-200 rounded w-16"></div>
+              </td>
               <td className="px-6 whitespace-nowrap text-right align-top">
                 <div className="inline-flex items-center justify-end gap-2">
                   <div className="h-5 w-5 rounded bg-slate-200"></div>
@@ -103,7 +125,7 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
             </tr>
           ) : documents.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-6 py-8 text-center text-text-secondary">
+              <td colSpan={8} className="px-6 py-8 text-center text-text-secondary">
                 Không có dữ liệu
               </td>
             </tr>
@@ -162,6 +184,20 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
                       </span>
                     ))}
                   </div>
+                </td>
+                <td className="px-6 whitespace-nowrap align-top">
+                  {(() => {
+                    // Ưu tiên hiển thị trạng thái xử lý AI nếu chưa hoàn tất
+                    const status = (doc.processingStatus && doc.processingStatus !== "completed") 
+                      ? doc.processingStatus 
+                      : (doc.status || "active");
+                    
+                    return (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${statusStyles[status] || statusStyles.active}`}>
+                        {statusLabels[status] || status}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-6 whitespace-nowrap text-right text-sm font-medium align-top">
                   {(() => {
