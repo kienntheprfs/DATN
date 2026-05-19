@@ -28,7 +28,7 @@ interface AgentContextType {
 const AgentContext = createContext<AgentContextType>({
 	model: "gpt-5-nano",
 	setModel: () => {},
-	agent: "knowledge-base-agent",
+	agent: "router-agent",
 	setAgent: () => {},
 	models: [],
 	agents: [],
@@ -42,7 +42,7 @@ export function useAgent() {
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
 	const [model, setModelState] = useState("gpt-5-nano");
-	const [agent, setAgentState] = useState("knowledge-base-agent");
+	const [agent, setAgentState] = useState("router-agent");
 	const [models, setModels] = useState<Model[]>([]);
 	const [agents, setAgents] = useState<Agent[]>([]);
 	const [isOnline, setIsOnline] = useState(false);

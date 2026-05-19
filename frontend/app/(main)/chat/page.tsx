@@ -385,6 +385,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							onSendVoiceTextMessage={voice.sendTextMessage}
 							showDocumentButton={true}
 							onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
+							defaultQueryMode={urlQueryMode || undefined}
 						/>
 					</div>
 				</div>

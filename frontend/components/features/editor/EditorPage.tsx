@@ -93,6 +93,26 @@ export default function EditorPage() {
     }
   }, [currentMap?.id]);
 
+  // Reset edge drawing state when switching tools
+  useEffect(() => {
+    setEdgeStartNodeId(null);
+    setDrawingPath([]);
+  }, [activeTool]);
+
+  // Cancel edge drawing with Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (activeTool === 'add-edge' && edgeStartNodeId !== null) {
+          setEdgeStartNodeId(null);
+          setDrawingPath([]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTool, edgeStartNodeId]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -340,13 +360,27 @@ export default function EditorPage() {
     }
   };
 
+  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: number) => {
+    if (e.button !== 0 || activeTool !== 'select') return;
+    e.stopPropagation();
+
+    if (isEditing) {
+      if (selectedId === nodeId && selectedType === 'node') {
+        setDraggingNodeId(nodeId);
+      } else {
+        if (!hasUnsavedEdits) {
+          selectItem('node', nodeId);
+          setDraggingNodeId(nodeId);
+        }
+      }
+    }
+  };
+
   const handleNodeClick = async (e: React.MouseEvent, nodeId: number) => {
     e.stopPropagation();
 
     if (activeTool === 'select') {
-      if (isEditing && selectedId === nodeId) {
-        setDraggingNodeId(nodeId);
-      } else {
+      if (selectedId !== nodeId || selectedType !== 'node') {
         if (hasUnsavedEdits) {
           const confirmed = await confirm({
             title: "Thay đổi chưa lưu",
@@ -686,8 +720,15 @@ export default function EditorPage() {
                 }}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={() => setDraggingNodeId(null)}
+                onMouseLeave={handleMouseUp}
                 onClick={handleBgClick}
+                onContextMenu={(e) => {
+                  if (activeTool === 'add-edge' && edgeStartNodeId !== null) {
+                    e.preventDefault();
+                    setEdgeStartNodeId(null);
+                    setDrawingPath([]);
+                  }
+                }}
               >
                 {currentMap && (
                   <g
@@ -744,6 +785,7 @@ export default function EditorPage() {
                       return (
                         <g
                           key={node.id}
+                          onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                           onClick={(e) => handleNodeClick(e, node.id)}
                           className="cursor-pointer"
                         >
@@ -824,7 +866,9 @@ export default function EditorPage() {
                     ? 'Chuột trái để di chuyển • Ctrl + Cuộn để Zoom • Cuộn/2-ngón để Pan'
                     : activeTool === 'add-node'
                       ? 'Click để đặt Node'
-                      : 'Click Node bắt đầu -> Click nền thêm điểm -> Click Node kết thúc'}
+                      : edgeStartNodeId !== null
+                        ? 'Đang nối đường: Click nền thêm điểm -> Click Node kết thúc (ESC/Phải chuột để Hủy)'
+                        : 'Click Node bắt đầu -> Click nền thêm điểm -> Click Node kết thúc'}
                 </span>
               </div>
             )}

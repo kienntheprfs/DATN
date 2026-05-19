@@ -24,6 +24,16 @@ def find_best_nodes(
         return []
 
     norm_q = normalize_name(query)
+    
+    # Block highly generic keywords to prevent fuzzy subset matches from scoring artificially high
+    GENERIC_KEYWORDS = {
+        "trường", "khoa", "tòa", "tòa nhà", "nhà", "phòng", "khu", "sân", "cổng", 
+        "trường nè", "trường mình", "ở trường", "tại trường", "đang ở trường",
+        "đây", "đó", "vị trí hiện tại", "chỗ này", "chỗ đó"
+    }
+    if norm_q in GENERIC_KEYWORDS:
+        return []
+
     query_words = [w for w in norm_q.split() if w]
     
     if not query_words:
@@ -81,23 +91,22 @@ def find_best_nodes(
             name_norm = normalize_name(name)
             combined_name = f"{name_norm} {building_lower}".strip()
 
-            # Base score using token_set_ratio (0-100)
-            base_score = fuzz.token_set_ratio(norm_q, name_norm)
-            combined_base_score = fuzz.token_set_ratio(norm_q, combined_name)
-            
-            # Start with the best base score, but capped at 90 for non-exact matches
+            # Start with the best base score
             if norm_q == name_norm or norm_q == combined_name:
-                current_score = 100.0
+                current_score = 95.0
             else:
-                current_score = max(base_score, combined_base_score) * 0.85 # Max 85.0
+                # WRatio naturally handles length penalties, token sorts, and subsets
+                w_score = fuzz.WRatio(norm_q, name_norm)
+                combined_w_score = fuzz.WRatio(norm_q, combined_name)
                 
-                # Bonus for substring match (up to +10)
-                if norm_q in name_norm or norm_q in combined_name:
-                    current_score += 10 # Max 95.0
-            
+                # Scale the WRatio (max 100) down to max 95.0 to leave room for the 5-point tie-breaker
+                current_score = max(w_score, combined_w_score) * 0.95
+                
+                # Small bonus for exact word match (surrounded by spaces)
+                if f" {norm_q} " in f" {name_norm} " or f" {norm_q} " in f" {combined_name} ":
+                    current_score = min(95.0, current_score + 5.0)
+
             # Tie-breaker: prefer shorter names and better character-level match
-            # This can push the score slightly above 100 or 95, which is fine for sorting
-            # but we'll ensure the gap is maintained.
             tie_breaker = fuzz.ratio(norm_q, name_norm) * 0.05 # Max 5.0
             current_score += tie_breaker
 

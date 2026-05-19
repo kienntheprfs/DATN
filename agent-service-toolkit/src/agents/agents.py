@@ -15,9 +15,10 @@ from agents.lazy_agent import LazyLoadingAgent
 from agents.rag_assistant import rag_assistant
 from agents.research_assistant import research_assistant
 from agents.agent_map import map_assistant
+from agents.multi_agent_router import router_agent
 from schema import AgentInfo
 
-DEFAULT_AGENT = "knowledge-base-agent"
+DEFAULT_AGENT = "router-agent"
 
 # Type alias to handle LangGraph's different agent patterns
 # - @entrypoint functions return Pregel
@@ -65,6 +66,10 @@ agents: dict[str, Agent] = {
     "github-mcp-agent": Agent(
         description="A GitHub agent with MCP tools for repository management and development workflows.",
         graph_like=github_mcp_agent,
+    ),
+    "router-agent": Agent(
+        description="A multi-agent router combining knowledge-base-agent and map-assistant for university queries.",
+        graph_like=router_agent,
     ),
 }
 

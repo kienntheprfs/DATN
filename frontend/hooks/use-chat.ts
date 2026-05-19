@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { agentClient, ChatMessage } from "@/services/agent";
@@ -272,13 +272,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 						if (msgType === "ai" && toolCalls && toolCalls.length > 0) {
 							setIsTyping(false);
-							const newTools: ToolCall[] = toolCalls.map((tool) => ({
-								id: tool.id,
-								name: tool.name,
-								status: "executing" as const,
-								content: null,
-							}));
-							setCurrentTools((prev) => [...prev, ...newTools]);
+							setCurrentTools((prev) => {
+								const nextTools = [...prev];
+								for (const tool of toolCalls) {
+									if (!nextTools.some((t) => t.id === tool.id)) {
+										nextTools.push({
+											id: tool.id,
+											name: tool.name,
+											status: "executing",
+											content: null,
+										});
+									}
+								}
+								return nextTools;
+							});
 						}
 
 						if (content) {

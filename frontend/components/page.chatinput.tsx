@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation, Settings } from "lucide-react";
 import { useAgent } from "@/contexts/agent-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,14 @@ import { InputGroupTextarea } from "@/components/ui/input-group";
 import { VoiceButton } from "@/components/voice-button";
 import { VoiceConnectionState } from "@/hooks/use-voice";
 import { authService } from "@/services/auth-api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export type QueryMode = "normal" | "deep";
 
@@ -32,6 +40,7 @@ interface ChatInputProps {
   onSendVoiceTextMessage?: (message: string) => void;
   showDocumentButton?: boolean;
   onDocumentToggle?: () => void;
+  defaultQueryMode?: QueryMode;
 }
 
 export function ChatInput({
@@ -52,23 +61,46 @@ export function ChatInput({
   onSendVoiceTextMessage,
   showDocumentButton = false,
   onDocumentToggle,
+  defaultQueryMode,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const { agent, setAgent, isOnline } = useAgent();
+  const { agent, setAgent, agents, isOnline } = useAgent();
 
   useEffect(() => {
-    setIsLoggedIn(authService.isAuthenticated());
-  }, []);
+    const authenticated = authService.isAuthenticated();
+    setIsLoggedIn(authenticated);
+    if (authenticated) {
+      if (defaultQueryMode) {
+        setQueryMode(defaultQueryMode);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("selectedQueryMode", defaultQueryMode);
+        }
+      } else if (typeof window !== "undefined") {
+        const savedMode = localStorage.getItem("selectedQueryMode") as QueryMode;
+        if (savedMode === "normal" || savedMode === "deep") {
+          setQueryMode(savedMode);
+        }
+      }
+    } else {
+      setQueryMode("normal");
+    }
+  }, [defaultQueryMode]);
 
   const toggleQueryMode = () => {
     if (!authService.isAuthenticated()) {
       toast.error("Yêu cầu đăng nhập để sử dụng tính năng");
       return;
     }
-    setQueryMode((prev) => (prev === "normal" ? "deep" : "normal"));
+    setQueryMode((prev) => {
+      const newMode = prev === "normal" ? "deep" : "normal";
+      if (typeof window !== "undefined") {
+        localStorage.setItem("selectedQueryMode", newMode);
+      }
+      return newMode;
+    });
   };
 
   const handleVoiceToggle = () => {
@@ -95,6 +127,9 @@ export function ChatInput({
     } else {
       const threadId = crypto.randomUUID();
       const params = new URLSearchParams({ thread_id: threadId, message: trimmedMessage });
+      if (queryMode === "deep") {
+        params.set("query_mode", "deep");
+      }
       router.push(`/chat?${params.toString()}`);
     }
   };
@@ -127,30 +162,50 @@ export function ChatInput({
             {/* Agent Switcher Integrated */}
             {isOnline && (
               <div className="flex items-center bg-muted/40 rounded-sm p-0.5 mr-1 border border-border/50 h-9">
-                <Button
-                  variant={agent === 'knowledge-base-agent' ? "default" : "ghost"}
-                  size="sm"
-                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
-                    agent === 'knowledge-base-agent' 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                  onClick={() => setAgent('knowledge-base-agent')}
-                >
-                  Hỏi đáp
-                </Button>
-                <Button
-                  variant={agent === 'map-assistant' ? "default" : "ghost"}
-                  size="sm"
-                  className={`h-full px-3 rounded-none text-[10px] font-bold uppercase transition-all ${
-                    agent === 'map-assistant' 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                  onClick={() => setAgent('map-assistant')}
-                >
-                  Chỉ đường
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label="Cấu hình agent"
+                      data-testid="agent-settings-trigger"
+                      className="h-full px-3 rounded-none text-[11px] font-semibold bg-background hover:bg-muted text-foreground transition-all gap-1.5 border-none shadow-none"
+                    >
+                      <Settings className="size-3.5 text-muted-foreground animate-hover-spin" />
+                      <span className="text-muted-foreground font-normal">Agent:</span>
+                      <span className="max-w-[120px] truncate font-bold text-primary">
+                        {agent === "router-agent" ? "Trợ lý thông minh" : (agent === "knowledge-base-agent" ? "Hỏi đáp quy chế" : (agent === "map-assistant" ? "Bản đồ & Chỉ đường" : agent))}
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-60 bg-popover border border-border p-1 shadow-md rounded-md z-50">
+                    <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-foreground">Chọn Agent hoạt động</DropdownMenuLabel>
+                    <DropdownMenuSeparator className="-mx-1 my-1 h-px bg-border" />
+                    {agents && agents.map((a) => (
+                      <DropdownMenuItem
+                        key={a.key}
+                        onClick={() => setAgent(a.key)}
+                        className={`flex flex-col items-start gap-0.5 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground select-none outline-none ${
+                          agent === a.key ? "bg-accent text-accent-foreground font-semibold" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 w-full justify-between">
+                          <span className="font-bold text-xs">
+                            {a.key === "router-agent" ? "Trợ lý thông minh (Mặc định)" : (a.key === "knowledge-base-agent" ? "Hỏi đáp quy chế" : (a.key === "map-assistant" ? "Bản đồ & Chỉ đường" : a.key))}
+                          </span>
+                          {agent === a.key && (
+                            <span className="size-1.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        {a.description && (
+                          <div className="text-[10px] text-muted-foreground line-clamp-2">
+                            {a.description}
+                          </div>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
 
@@ -160,7 +215,11 @@ export function ChatInput({
                   variant="ghost"
                   size="icon"
                   aria-label={isDeepMode ? "Tắt chế độ tìm kiếm sâu" : "Bật chế độ tìm kiếm sâu"}
-                  className={`size-11 rounded-none min-w-11 ${isDeepMode ? "text-purple-600 bg-purple-50 hover:bg-purple-100" : "text-muted-foreground hover:bg-muted"} ${!isLoggedIn ? "opacity-50" : ""}`}
+                  className={`size-11 rounded-none min-w-11 ${
+                    isDeepMode 
+                      ? "text-purple-600 bg-purple-50 hover:bg-purple-100" 
+                      : "text-muted-foreground hover:bg-muted"
+                  } ${!isLoggedIn ? "opacity-50" : ""}`}
                   onClick={toggleQueryMode}
                   data-testid="deep-mode-toggle"
                   disabled={isVoiceConnected}

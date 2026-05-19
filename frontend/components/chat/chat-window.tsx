@@ -244,7 +244,7 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 							</div>
 						</div>
 						<span className="text-sm font-medium text-blue-700">
-							{name}
+							{name === "QueryClassifier" ? "Phân tích & Định tuyến truy vấn" : name}
 						</span>
 						<span className="text-xs text-blue-600/70">Hoàn tất</span>
 					</div>
@@ -256,6 +256,30 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 						<div className="bg-blue-100/50 rounded p-2 max-h-64 overflow-y-auto">
 							{isJson ? (
 								<>
+									{parsedContent?.classifications && Array.isArray(parsedContent.classifications) && (
+										<div className="space-y-2 py-1">
+											<div className="font-semibold text-blue-800 mb-1">Định tuyến cuộc hội thoại:</div>
+											{(parsedContent.classifications as any[]).map((c, i) => (
+												<div key={i} className="pl-3 border-l-2 border-blue-400 space-y-1">
+													<div className="flex items-center gap-1.5">
+														<span className="font-medium text-blue-700">Agent:</span>
+														<span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-800 rounded font-semibold uppercase">
+															{c.source === "map_assistant" ? "Bản đồ & Chỉ đường" : "Hỏi đáp & Quy chế"}
+														</span>
+													</div>
+													{c.query && (
+														<div>
+															<span className="font-medium text-blue-700">Truy vấn:</span>{" "}
+															<span className="text-gray-700 italic">"{c.query}"</span>
+														</div>
+													)}
+												</div>
+											))}
+											{parsedContent.classifications.length === 0 && (
+												<div className="text-gray-500 italic">Không chuyển tiếp chuyên biệt (Trò chuyện tự do)</div>
+											)}
+										</div>
+									)}
 									{parsedContent?.query && (
 										<div className="mb-2">
 											<span className="font-semibold">Query: </span>
@@ -282,7 +306,7 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 											<div><span className="font-semibold">Đến:</span> {String(parsedContent.end_name)}</div>
 										</div>
 									)}
-									{!parsedContent?.query && !parsedContent?.results && !parsedContent?.start_name && (
+									{!parsedContent?.query && !parsedContent?.results && !parsedContent?.start_name && !parsedContent?.classifications && (
 										<pre className="whitespace-pre-wrap font-mono text-xs max-h-48 overflow-auto">
 											{content}
 										</pre>
@@ -355,7 +379,7 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 							)}
 						</div>
 						<span className="text-sm font-medium text-blue-700">
-							{tool.name}
+							{tool.name === "QueryClassifier" ? "Phân tích & Định tuyến truy vấn" : tool.name}
 						</span>
 						{isDone && (
 							<span className="text-xs text-blue-600/70">Hoàn tất</span>
@@ -369,6 +393,30 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 						<div className="bg-blue-100/50 rounded p-2 max-h-64 overflow-y-auto">
 							{isJson ? (
 								<>
+									{parsedContent?.classifications && Array.isArray(parsedContent.classifications) && (
+										<div className="space-y-2 py-1">
+											<div className="font-semibold text-blue-800 mb-1">Định tuyến cuộc hội thoại:</div>
+											{(parsedContent.classifications as any[]).map((c, i) => (
+												<div key={i} className="pl-3 border-l-2 border-blue-400 space-y-1">
+													<div className="flex items-center gap-1.5">
+														<span className="font-medium text-blue-700">Agent:</span>
+														<span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-800 rounded font-semibold uppercase">
+															{c.source === "map_assistant" ? "Bản đồ & Chỉ đường" : "Hỏi đáp & Quy chế"}
+														</span>
+													</div>
+													{c.query && (
+														<div>
+															<span className="font-medium text-blue-700">Truy vấn:</span>{" "}
+															<span className="text-gray-700 italic">"{c.query}"</span>
+														</div>
+													)}
+												</div>
+											))}
+											{parsedContent.classifications.length === 0 && (
+												<div className="text-gray-500 italic">Không chuyển tiếp chuyên biệt (Trò chuyện tự do)</div>
+											)}
+										</div>
+									)}
 									{parsedContent?.query && (
 										<div className="mb-2">
 											<span className="font-semibold">Query: </span>
@@ -741,11 +789,11 @@ export function ChatWindow({
 										}
 									})() : {};
 									return (
-										<HistoryToolCollapsible key={toolMsg.id} name={toolMsg.toolName || "tool"} content={toolMsg.content} />
+										<HistoryToolCollapsible key={`history-tool-${toolMsg.id}`} name={toolMsg.toolName || "tool"} content={toolMsg.content} />
 									);
 								})}
 								{showToolsForThisGroup && currentTools.map((tool) => (
-									<ToolCollapsible key={tool.id} tool={tool} />
+									<ToolCollapsible key={`active-tool-${tool.id}`} tool={tool} />
 								))}
 								{displayRouteData && (
 									<div className="animate-in fade-in slide-in-from-top-2 duration-300">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { wayfindingApi } from '@/services/wayfinding-api';
 import { wayfindingMapApi } from '@/services/wayfinding-map-api';
@@ -88,10 +88,12 @@ export default function NavigationPage() {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isWheeling, setIsWheeling] = useState(false);
+  const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [floorChangeNotice, setFloorChangeNotice] = useState<{ show: boolean; text: string }>({ show: false, text: '' });
   const [highlightedCoord, setHighlightedCoord] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const lastMousePos = useRef({ x: 0, y: 0 });
+  const startPanRef = useRef({ x: 0, y: 0 });
 
   // Group floorMaps by building for the smart selector
   const groupedFloors = useMemo(() => {
@@ -277,6 +279,73 @@ export default function NavigationPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const zoomWithAnchor = useCallback(
+    (nextScale: number, anchor?: { clientX: number; clientY: number }) => {
+      const clampedScale = Math.min(Math.max(nextScale, 0.5), 5);
+      if (clampedScale === scale) return;
+
+      const svg = svgRef.current;
+      if (!svg) {
+        setScale(clampedScale);
+        return;
+      }
+
+      const rect = svg.getBoundingClientRect();
+      // If no anchor provided, use center of SVG
+      const clientX = anchor ? anchor.clientX : rect.left + rect.width / 2;
+      const clientY = anchor ? anchor.clientY : rect.top + rect.height / 2;
+
+      const currentPosition = position || { x: 0, y: 0 };
+      const ratio = clampedScale / scale;
+      
+      const newX = clientX - (clientX - currentPosition.x) * ratio;
+      const newY = clientY - (clientY - currentPosition.y) * ratio;
+
+      setScale(clampedScale);
+      setPosition({ x: newX, y: newY });
+    },
+    [scale, position]
+  );
+
+  useEffect(() => {
+    const handleNativeWheel = (e: WheelEvent) => {
+      const svg = svgRef.current;
+      if (!svg) return;
+
+      // Check if mouse is over the SVG or its children/container
+      const isOverSvg = svg.contains(e.target as Node);
+      const mapContainer = svg.closest('#map-container');
+      const isOverMap = isOverSvg || (mapContainer && mapContainer.contains(e.target as Node));
+      if (!isOverMap) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        // Use a slightly smaller factor for smoother zoom
+        const delta = Math.max(-120, Math.min(120, e.deltaY));
+        const zoomFactor = Math.exp(-delta * 0.0015);
+        zoomWithAnchor(scale * zoomFactor, { clientX: e.clientX, clientY: e.clientY });
+      } else {
+        // Panning with touchpad (2 fingers) or mouse wheel
+        e.preventDefault();
+        
+        setIsWheeling(true);
+        if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+        wheelTimeoutRef.current = setTimeout(() => setIsWheeling(false), 100);
+
+        setPosition(pos => {
+          if (!pos) return null;
+          return {
+            x: pos.x - e.deltaX,
+            y: pos.y - e.deltaY
+          };
+        });
+      }
+    };
+
+    window.addEventListener('wheel', handleNativeWheel, { passive: false, capture: true });
+    return () => window.removeEventListener('wheel', handleNativeWheel, true);
+  }, [scale, zoomWithAnchor]);
 
   // Keyboard navigation for steps
   useEffect(() => {
@@ -595,43 +664,19 @@ export default function NavigationPage() {
   };
 
   // Map pan/zoom handlers
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    if (!svgRef.current || !position) return;
-
-    // Use the viewport coordinates for zooming
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.min(Math.max(scale * delta, 0.5), 10);
-
-    if (newScale !== scale) {
-      // Calculate how far the mouse is from the current map position in screen space
-      // then adjust the position so that same map point stays under the mouse
-      const dx = (mouseX - position.x) / scale;
-      const dy = (mouseY - position.y) / scale;
-
-      setPosition({
-        x: mouseX - dx * newScale,
-        y: mouseY - dy * newScale,
-      });
-      setScale(newScale);
-    }
-  };
-
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
     setIsDragging(true);
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    const currentPosition = position || { x: 0, y: 0 };
+    startPanRef.current = { x: e.clientX - currentPosition.x, y: e.clientY - currentPosition.y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return;
-    const dx = e.clientX - lastMousePos.current.x;
-    const dy = e.clientY - lastMousePos.current.y;
-    setPosition((p) => p ? { x: p.x + dx, y: p.y + dy } : null);
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    setPosition({
+      x: e.clientX - startPanRef.current.x,
+      y: e.clientY - startPanRef.current.y,
+    });
   };
 
   const handleMouseUp = () => {
@@ -639,22 +684,7 @@ export default function NavigationPage() {
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!svgRef.current || !position) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    const delta = 1.5;
-    const newScale = Math.min(scale * delta, 10);
-    
-    const dx = (mouseX - position.x) / scale;
-    const dy = (mouseY - position.y) / scale;
-    
-    setPosition({
-      x: mouseX - dx * newScale,
-      y: mouseY - dy * newScale,
-    });
-    setScale(newScale);
+    zoomWithAnchor(scale * 1.5, { clientX: e.clientX, clientY: e.clientY });
   };
 
   // Get path d string for edge (matching editor style)
@@ -939,7 +969,6 @@ export default function NavigationPage() {
           {/* Map Container */}
           <div
             className="flex-1 relative overflow-hidden"
-            onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -1018,7 +1047,7 @@ export default function NavigationPage() {
                 variant="outline"
                 size="icon"
                 className={isMobile ? 'size-9' : 'size-10'}
-                onClick={() => setScale((s) => Math.min(s * 1.2, 3))}
+                onClick={() => zoomWithAnchor(scale * 1.2)}
               >
                 <span className="material-symbols-outlined text-lg">add</span>
               </Button>
@@ -1026,7 +1055,7 @@ export default function NavigationPage() {
                 variant="outline"
                 size="icon"
                 className={isMobile ? 'size-9' : 'size-10'}
-                onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
+                onClick={() => zoomWithAnchor(scale * 0.8)}
               >
                 <span className="material-symbols-outlined text-lg">remove</span>
               </Button>
@@ -1095,6 +1124,7 @@ export default function NavigationPage() {
                 scale={scale}
                 position={position}
                 isDragging={isDragging}
+                isWheeling={isWheeling}
                 svgRef={svgRef}
                 getFullImageUrl={getFullImageUrl}
                 renderFloorContent={(floorIndex, is3D) => {

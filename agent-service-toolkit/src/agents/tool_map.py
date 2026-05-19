@@ -152,6 +152,12 @@ def find_route_func(
         "destination",
         "here",
         "there",
+        "trường",
+        "trường nè",
+        "trường mình",
+        "ở trường",
+        "tại trường",
+        "đang ở trường",
     ]
 
     from_lower = from_location.lower().strip() if from_location else ""

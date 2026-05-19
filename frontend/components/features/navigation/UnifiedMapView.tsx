@@ -12,6 +12,7 @@ interface UnifiedMapViewProps {
   scale: number;
   position: { x: number; y: number } | null;
   isDragging: boolean;
+  isWheeling?: boolean;
   svgRef: React.RefObject<SVGSVGElement | null>;
   renderFloorContent?: (floorIndex: number, is3D: boolean) => React.ReactNode;
   getFullImageUrl: (url: string) => string;
@@ -28,6 +29,7 @@ export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
   scale,
   position,
   isDragging,
+  isWheeling = false,
   svgRef,
   renderFloorContent,
   getFullImageUrl
@@ -88,6 +90,13 @@ export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
     ? `scale(${scale * 0.75}) rotateX(65deg) rotateZ(-45deg)`
     : `translate(${position?.x || 0}px, ${position?.y || 0}px) scale(${scale})`;
 
+  // Optimize transition duration for smooth pan/zoom in 2D
+  const transitionStyle = is3D
+    ? 'transform 0.7s cubic-bezier(0.2, 0, 0, 1)'
+    : (isDragging || isWheeling)
+      ? 'transform 0.05s linear'
+      : 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+
   return (
     <div 
       className="w-full h-full relative overflow-hidden" 
@@ -95,11 +104,12 @@ export const UnifiedMapView: React.FC<UnifiedMapViewProps> = ({
       id="map-container"
     >
       <div 
-        className="w-full h-full absolute inset-0 transition-transform duration-700 ease-in-out"
+        className="w-full h-full absolute inset-0"
         style={{
           transformStyle: is3D ? 'preserve-3d' : 'flat',
           transform: containerTransform,
           transformOrigin: is3D ? 'center center' : '0 0',
+          transition: transitionStyle,
         }}
       >
         {sortedFloors.map((fm, idx) => {
