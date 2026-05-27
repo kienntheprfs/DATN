@@ -1,0 +1,189 @@
+STT,Tình huống hỏi đáp,Câu hỏi,Căn cứ (Ground Truth),Câu trả lời của chatbot,Faith.,Recall,Rel.
+AG-021,Xử lý xung đột/Cập nhật quy định mới,"Từ năm 2026, điểm trung bình tích lũy được làm tròn đến mấy chữ số thập phân?","Theo khoản 15.1 Điều 15 QĐ 1259 và Thông báo 280 (HK251_bổ sung), từ HK1/2026-2027 điểm TB học kỳ và tích lũy được làm tròn đến hai chữ số thập phân (0.01). (Cập nhật và phủ định quy định làm tròn 0.1 tại Thông báo 260 HK242).","Từ năm học 2026-2027 trở đi, điểm trung bình tích lũy sẽ được làm tròn đến hai chữ số thập phân (0,01). Quy định này áp dụng từ học kỳ 1 năm học 2026-2027 và từ đợt xét tốt nghiệp tháng 04/2027.",3/3,3/3,3/3
+AG-022,Xử lý quy định học vụ (Buộc thôi học),Em là sinh viên đại học hệ chính quy. Nếu trong một học kỳ chính em quên không đăng ký bất kỳ môn học nào thì có bị xử lý học vụ gì không?,"Theo khoản 14.3 Điều 14 QĐ 1260, sinh viên sẽ bị buộc thôi học trong trường hợp không đăng ký môn học trong học kỳ chính.","Theo các quy định của trường Đại học Bách Khoa TP.HCM, sinh viên chính quy sẽ bị buộc thôi học nếu không đăng ký bất kỳ môn học nào trong một học kỳ chính. Đây là một trong những lý do dẫn đến việc xử lý học vụ mức buộc thôi học. 
+
+Nếu bạn có lý do chính đáng hoặc gặp phải trường hợp đặc biệt, nên làm đơn trình bày và liên hệ với nhà trường để được xem xét xử lý phù hợp.",3/3,3/3,3/3
+AG-023,Trích xuất thông tin cơ bản,"Trong tuyển sinh Đại học năm 2026, chứng chỉ IELTS 6.0 được quy đổi thành bao nhiêu điểm tiếng Anh?","Theo Thông báo 548 (HK251), mức quy đổi điểm tiếng Anh của chứng chỉ IELTS 6.0 trong tuyển sinh trình độ Đại học năm 2026 là 9.5 điểm.","Theo kết luận của Hội đồng học vụ Đại học & Sau Đại học tại trường Đại học Bách Khoa TP.HCM, trong tuyển sinh trình độ Đại học năm 2026, chứng chỉ IELTS 6.0 được quy đổi thành 9.5 điểm cho môn tiếng Anh.",3/3,3/3,3/3
+AG-024,Tổng hợp nhiều tài liệu,Điều kiện để sinh viên tham gia chương trình trao đổi sinh viên ở nước ngoài là gì?,"Tổng hợp Thông báo 474 (HK241) và Thông báo 280 (HK251_bổ sung): Là SV chính quy bằng thứ nhất, còn trong thời gian đào tạo chuẩn, học lực từ khá trở lên (>=2.5/4), tiến độ học tập đúng hạn, và ưu tiên người chưa từng tham gia trao đổi.","Sinh viên muốn tham gia chương trình trao đổi sinh viên quốc tế tại Đại học Bách Khoa TP.HCM cần đáp ứng các điều kiện sau:
+
+- Là sinh viên chính quy (bằng thứ nhất).
+- Đang trong thời gian đào tạo chuẩn.
+- Có học lực từ khá trở lên.
+- Học các học phần đúng tiến độ, chuyển đổi kiến thức chưa học để đảm bảo tốt nghiệp đúng hạn.",3/3,3/3,3/3
+AG-025,Tổng hợp nhiều tài liệu,"Để đạt danh hiệu Huy chương Vàng lúc tốt nghiệp, sinh viên cần đáp ứng những tiêu chuẩn nào? Có xét vào đợt tháng 4 không?","Tổng hợp QĐ 2931 (Phụ lục 3) và Thông báo 548 (HK251): Điểm bảo vệ TN >=8.0, không rớt môn nào, tốt nghiệp loại Giỏi trở lên, rèn luyện Xuất sắc. Đặc biệt, chỉ xét huy chương ở đợt tháng 11, phải tốt nghiệp đúng tiến độ (hoàn thành sau HK2, không tính HK hè), không xét đợt tháng 4.","Để đạt danh hiệu Huy chương Vàng lúc tốt nghiệp tại trường Đại học Bách Khoa TP.HCM, sinh viên cần đáp ứng các tiêu chuẩn sau:
+
+- Tốt nghiệp đúng thời gian đào tạo kế hoạch.
+- Xếp loại học lực tốt nghiệp (xếp loại tốt nghiệp) từ Giỏi trở lên.
+- Không học lại bất kỳ học phần nào trong chương trình đào tạo.
+- Điểm bảo vệ tốt nghiệp đạt từ 8,0 (thang 10) trở lên.
+- Điểm rèn luyện toàn khóa đạt loại Xuất sắc.
+- Không bị kỷ luật trong toàn khóa học.
+- Sinh viên thuộc Chương trình Chất lượng cao, Tiên tiến phải có chứng chỉ Tiếng Anh quốc tế tương đương IELTS từ 6.5 trở lên.
+
+Danh hiệu này chỉ được xét ở đợt tốt nghiệp tháng 11 và không xét ở đợt tốt nghiệp tháng 4.",3/3,3/3,3/3
+AG-026,Biết từ chối (Bảo mật cá nhân),Cho tôi xin số điện thoại di động và địa chỉ nhà riêng của thầy Trần Thiên Phúc để tôi hỏi thủ tục xin hoãn thi.,Hệ thống từ chối trả lời (Biết từ chối do không có thông tin trong cơ sở tri thức/Bảo mật thông tin cá nhân). Hướng dẫn sinh viên xem thủ tục hoãn thi thay vì liên hệ cá nhân.,"Tôi không thể cung cấp số điện thoại di động hoặc địa chỉ nhà riêng của thầy Trần Thiên Phúc vì đây là thông tin cá nhân cần được bảo mật. Nếu bạn cần liên hệ để hỏi về thủ tục xin hoãn thi, vui lòng liên hệ trực tiếp với phòng Đào tạo hoặc Phòng Công tác Sinh viên của trường Đại học Bách Khoa TP.HCM để được hướng dẫn chi tiết.",3/3,3/3,3/3
+AG-027,Biết từ chối (Ngoài phạm vi),Quy định về mức thu học phí đối với ngành Răng Hàm Mặt của trường Đại học Y Dược TP.HCM năm nay là bao nhiêu?,"Hệ thống từ chối trả lời (Biết từ chối/Ngoài phạm vi) vì câu hỏi thuộc về cơ sở giáo dục khác, không nằm trong quy chế của Trường Đại học Bách khoa ĐHQG-HCM.",Tôi không tìm thấy thông tin nội bộ hoặc trên internet về mức học phí ngành Răng Hàm Mặt năm nay tại Đại học Y Dược TP.HCM. Bạn có thể liên hệ trực tiếp với trường để biết chi tiết. ⚠️ Thông tin tham khảo từ internet.,3/3,3/3,3/3
+AG-028,Đọc hiểu và xử lý bảng biểu,"Đối với lớp học phần có sĩ số dưới 5 sinh viên, hình thức dạy và khối lượng giảng dạy của giảng viên được quy định như thế nào?","Theo Bảng 1 QĐ 5326: Áp dụng cấu hình tự học, tự nghiên cứu với sự hướng dẫn của giảng viên. Khối lượng giảng dạy được tính như hướng dẫn Đồ án môn học cho 4 người học.","Đối với lớp học phần có sĩ số dưới 5 sinh viên tại trường Đại học Bách Khoa TP.HCM, quy định về hình thức dạy và khối lượng giảng dạy như sau:
+
+- Hình thức tổ chức: Áp dụng hình thức học tự nghiên cứu có sự hướng dẫn của giảng viên.
+- Cách tính khối lượng giảng dạy: Được tính tương đương như hướng dẫn một đồ án môn học dành cho 4 người học.",3/3,3/3,3/3
+AG-029,Quy đổi chứng chỉ ngoại ngữ,"Em vừa thi IELTS đạt 6.0. Xin hỏi với kết quả này, em có được xét miễn điểm cho các môn Anh văn từ 1 đến 4 không?","Có. Theo bảng quy đổi tại Phụ lục 1 QĐ 1260, chứng chỉ IELTS 6.0 tương đương TOEIC 600. Với mức điểm này, sinh viên được xét miễn và nhận điểm ""Đạt"" cho các học phần Anh văn Cơ bản, 1, 2, 3 và 4.","Theo quy định của Đại học Bách Khoa TP.HCM, sinh viên có điểm IELTS đạt từ 6.0 sẽ được xét miễn các học phần Anh văn 1, 2, 3, 4 tương ứng. Điều này được áp dụng dựa trên chuẩn đầu ra học phần và các quy định của nhà trường.",3/3,3/3,3/3
+AG-030,Đọc hiểu và xử lý bảng biểu,"Học phần ""Đại số tuyến tính"" (Mã MT1007) nếu học qua MOOC của ĐHQG thì yêu cầu điều kiện gì để được công nhận tại ĐHBK?",Theo Phụ lục 1 Thông báo 280 (HK251_bổ sung - Bảng danh mục MOOC): Điều kiện để được xem xét công nhận là hoàn thành 100% khóa học và dự kiểm tra đạt từ 70% trở lên.,"Để học phần ""Đại số tuyến tính"" (MT1007) học qua MOOC của Đại học Quốc gia TP.HCM được công nhận tại Đại học Bách Khoa TP.HCM, sinh viên cần:
+
+- Hoàn thành 100% nội dung học qua MOOC.
+- Đạt kết quả kiểm tra từ 70% trở lên theo hình thức đánh giá của chương trình.",3/3,3/3,3/3
+AG-031,Trích xuất thông tin cơ bản,Sinh viên đại học chính quy trong một học kỳ chính bắt buộc đăng ký tối thiểu và tối đa bao nhiêu tín chỉ?,Theo QĐ 1260 (Khoản 5.3): Tối thiểu là 11 tín chỉ và tối đa là 25 tín chỉ. Nếu có đăng ký thêm lớp dự thính thì tổng số tối đa không quá 28 tín chỉ.,"Sinh viên đại học chính quy tại trường Đại học Bách Khoa TP.HCM bắt buộc đăng ký:
+
+- **Tối thiểu**: 11 tín chỉ trong một học kỳ chính.
+- **Tối đa**: 25 tín chỉ. 
+
+Tuy nhiên, nếu sinh viên đăng ký thêm các lớp dự thính, tổng số tín chỉ tối đa trong một học kỳ chính (bao gồm các lớp dự thính) có thể đạt tới 28 tín chỉ.",3/3,3/3,3/3
+AG-032,Xử lý ngoại lệ,Điểm đạt đối với các môn thuộc khối kiến thức tốt nghiệp đại học được quy định là mức điểm chữ nào?,"Theo Khoản 14.2 QĐ 1259: Đối với các học phần thuộc khối kiến thức tốt nghiệp đại học, điểm đạt là từ điểm C trở lên (tương đương 5.5 đến 6.4 điểm).","Đối với các môn thuộc khối kiến thức tốt nghiệp đại học tại trường Đại học Bách Khoa TP.HCM, mức điểm đạt được quy định là từ điểm chữ **C** trở lên.",3/3,3/3,3/3
+AG-033,Xử lý thủ tục (Hoãn thi),Em bị ốm đột xuất (có giấy viện phí) nên không thể đi thi cuối kỳ hôm qua. Xin hỏi em có tối đa bao nhiêu ngày để nộp hồ sơ xin hoãn thi tính từ ngày thi?,"Theo khoản 16.2 Điều 16 QĐ 1259, sinh viên phải thực hiện thủ tục đăng ký hoãn thi chậm nhất là 05 ngày làm việc sau khi thi. Trường hợp nộp trễ hơn thời hạn này phải do Hiệu trưởng nhà trường xem xét quyết định.","Theo quy định tại trường Đại học Bách Khoa TP.HCM, nếu sinh viên vắng thi cuối kỳ có lý do chính đáng, sinh viên cần thực hiện thủ tục đăng ký hoãn thi trước khi thi hoặc sau thời điểm thi chậm nhất **05 ngày làm việc** với phòng đào tạo. Nếu trường hợp đặc biệt xảy ra trễ hơn thời hạn này, Hiệu trưởng nhà trường sẽ xem xét quyết định.",3/3,3/3,3/3
+AG-034,Đọc hiểu và xử lý bảng biểu,Thời gian đào tạo tối đa của chương trình Kỹ sư chất lượng cao Việt-Pháp (PFIEV) là bao nhiêu học kỳ chính?,"Theo QĐ 1260 (Khoản 3.1): Thời gian đào tạo chuẩn là 10 học kỳ, thời gian đào tạo tối đa là 14 học kỳ chính.",Thời gian đào tạo tối đa của chương trình Kỹ sư chất lượng cao Việt-Pháp (PFIEV) tại Đại học Bách Khoa TP.HCM là **14 học kỳ chính**.,3/3,3/3,3/3
+AG-035,Tổng hợp nhiều tài liệu,Điều kiện về điểm GPA để sinh viên được phép đăng ký học phần Đồ án tốt nghiệp là gì?,Theo QĐ 1260 (Khoản 5.5) và Thông báo 260 (HK242): Sinh viên phải có điểm trung bình tích lũy (GPA) từ 2.0 trở lên mới được phép đăng ký các học phần tốt nghiệp.,Sinh viên cần đạt điểm trung bình tích lũy (GPA) từ **2.0 trở lên** (theo thang điểm 4) để được phép đăng ký học phần Đồ án tốt nghiệp tại trường Đại học Bách Khoa TP.HCM.,3/3,3/3,3/3
+AG-036,Nghiệp vụ Sau Đại học,Giảng viên hướng dẫn luận án Tiến sĩ có được tham gia hội đồng bảo vệ và chấm điểm cho nghiên cứu sinh của mình không?,Theo Thông báo 280 (HK251_bổ sung): Không. Người hướng dẫn luận văn thạc sĩ/luận án tiến sĩ không được tham gia hội đồng và không được cho điểm đánh giá.,"Theo quy định, người hướng dẫn luận án Tiến sĩ **không được tham gia hội đồng bảo vệ** và **không được chấm điểm đánh giá** nghiên cứu sinh của mình tại trường Đại học Bách Khoa TP.HCM.",3/3,3/3,3/3
+AG-037,Nghiệp vụ Sau Đại học,Học viên Cao học sẽ bị Hội đồng học vụ trường xem xét xử lý buộc thôi học (xóa tên) trong những trường hợp nào?,"Theo Thông báo 280 (HK251_bổ sung): Học viên bị buộc thôi học/xóa tên nếu Không đăng ký môn học trong học kỳ chính, hoặc Hết thời gian đào tạo tối đa (kể cả thời gian kéo dài).","Học viên Cao học sẽ bị Hội đồng học vụ trường Đại học Bách Khoa TP.HCM xem xét xử lý buộc thôi học (xóa tên) trong các trường hợp sau:
+
+- **Không đăng ký môn học trong học kỳ chính.**
+- **Hết thời gian đào tạo tối đa**, kể cả thời gian kéo dài.",3/3,3/3,3/3
+AG-038,Xử lý mâu thuẫn/Thời gian áp dụng,Em là sinh viên khóa 2024 muốn làm tròn điểm GPA tích lũy của mình ở đợt xét tốt nghiệp tháng 4/2026 xuống 2 chữ số thập phân (0.01) để lấy lợi thế xét học bổng. Quy định này có được áp dụng cho bạn ấy không?,"Không. Theo Thông báo 280 (HK251_bổ sung) và khoản 15.1 Điều 15 QĐ 1259, quy định làm tròn điểm trung bình học kỳ và tích lũy đến 0.01 chỉ bắt đầu áp dụng từ học kỳ 1 năm học 2026-2027 và từ đợt xét tốt nghiệp tháng 04/2027. Đợt tháng 4/2026 chưa được áp dụng quy định này.","Theo quy định hiện hành, điểm trung bình tích lũy (GPA) được làm tròn đến hai chữ số thập phân (0.01). Tuy nhiên, quy định này chỉ bắt đầu áp dụng từ học kỳ 1 năm học 2026-2027 và từ đợt xét tốt nghiệp tháng 04/2027.
+
+Do vậy, đối với đợt xét tốt nghiệp tháng 04/2026, sinh viên khóa 2024 sẽ không được áp dụng làm tròn điểm GPA xuống 0.01 mà tuân theo quy định hiện hành (có thể là làm tròn đến 0.1).",3/3,3/3,3/3
+AG-039,Tổng hợp/Suy luận logic,"Em là sinh viên khóa 2025, em đọc thấy từ năm 2026 sẽ có môn ""Học kỳ thực tập doanh nghiệp"" 11 tín chỉ thay thế cho Thực tập ngoài trường. Vậy học kỳ tới em có thể đăng ký môn 11 tín chỉ này không?","Không được. Theo Thông báo 723 (HK252), môn ""Học kỳ thực tập doanh nghiệp"" (11 tín chỉ) là cấu trúc chương trình đào tạo áp dụng từ khóa 2026. Đối với sinh viên khóa 2025 về trước, nhà trường áp dụng mô hình sinh viên đăng ký Thực tập ngoài trường hoặc Đồ án chuyên ngành kết hợp với các môn khác để học tại doanh nghiệp.","Theo quy định, học phần ""Học kỳ thực tập doanh nghiệp"" (11 tín chỉ) sẽ được triển khai và thay thế cho học phần ""Thực tập ngoài trường"" (2 tín chỉ) cùng 9 tín chỉ tự chọn tự do từ khóa 2026 trở đi. Đây là học phần duy nhất của học kỳ 7 trong chương trình đào tạo.
+
+Đối với sinh viên khóa 2025, chương trình áp dụng mô hình Học kỳ doanh nghiệp hiện hành, bao gồm việc đăng ký học phần Thực tập ngoài trường hoặc Đồ án chuyên ngành. Sinh viên khóa 2025 chưa được phép đăng ký ""Học kỳ thực tập doanh nghiệp"" 11 tín chỉ trong học kỳ tới vì đây là học phần dành riêng cho khóa 2026 trở đi.",3/3,3/3,3/3
+AG-040,Xử lý ngoại lệ/Tổng hợp chéo,Một sinh viên có chứng chỉ TOEFL iBT Home Edition 85 điểm và chứng chỉ JLPT N2 (cấp cách đây 6 tháng). Sinh viên này muốn dùng chứng chỉ TOEFL để xét miễn Anh văn 1-4 và JLPT N2 để xét miễn Tiếng Nhật 1-4. Yêu cầu này có hoàn toàn hợp lệ không?,"Không hoàn toàn hợp lệ. Theo QĐ 1260 và Thông báo 260, chứng chỉ TOEFL iBT Home Edition KHÔNG được sử dụng để xét miễn học phần Anh văn và xét tốt nghiệp. Tuy nhiên, chứng chỉ JLPT N2 trong vòng 12 tháng được xét miễn Tiếng Nhật 1, 2, 3 và 4 (đối với khóa 2024 về sau). Sinh viên chỉ được miễn Tiếng Nhật, không được miễn Anh văn.","1. **Về chứng chỉ TOEFL iBT Home Edition:**
+   - Quy định của trường không chấp nhận chứng chỉ TOEFL iBT Home Edition để xét miễn các học phần Anh văn hoặc đạt chuẩn ngoại ngữ tốt nghiệp. Vì vậy, sinh viên không thể sử dụng chứng chỉ này để miễn các học phần Anh văn 1-4.
+
+2. **Về chứng chỉ JLPT N2:**
+   - Theo bảng quy đổi, chứng chỉ JLPT N2 có thể xét miễn các học phần Tiếng Nhật 1, 2, 3, 4. Điều kiện là chứng chỉ phải còn thời hạn trong vòng 12 tháng. Vì chứng chỉ cấp cách đây 6 tháng, yêu cầu này hợp lệ, và sinh viên có thể sử dụng chứng chỉ JLPT N2 để miễn các học phần Tiếng Nhật 1-4.
+
+Tóm lại:
+- Yêu cầu miễn các học phần Tiếng Nhật 1-4 bằng chứng chỉ JLPT N2 là hợp lệ.
+- Chứng chỉ TOEFL iBT Home Edition không đáp ứng điều kiện xét miễn các học phần Anh văn 1-4.",3/3,3/3,3/3
+AG-041,Xử lý mâu thuẫn/Cập nhật quy định,"Để được đăng ký học chương trình Thạc sĩ theo hướng nghiên cứu, học viên có bắt buộc phải tốt nghiệp đại học từ loại Khá trở lên không? Nếu quy định cũ yêu cầu thì hiện tại đã thay đổi ra sao?","Không bắt buộc. Theo Thông báo 280 (HK251_bổ sung), điều kiện ""Tốt nghiệp đại học loại khá trở lên hoặc có công bố khoa học..."" khi xét đăng ký học Thạc sĩ hướng nghiên cứu đã chính thức bị bãi bỏ. Quy định này đã phủ định điểm d khoản 3 Điều 16 của QĐ 1216 cũ.","Theo quy định mới nhất tại trường Đại học Bách Khoa TP.HCM, điều kiện ""Tốt nghiệp đại học loại Khá trở lên hoặc có công bố khoa học liên quan đến lĩnh vực sẽ học tập, nghiên cứu"" khi xét đăng ký học chương trình Thạc sĩ theo hướng nghiên cứu đã được bãi bỏ. Đây là sự điều chỉnh từ Quyết định số 1216/QĐ-ĐHBK ngày 18/04/2022.
+
+Hiện tại, học viên không bắt buộc phải tốt nghiệp đại học loại Khá trở lên để được đăng ký học chương trình này.",3/3,3/3,3/3
+AG-042,Suy luận/Ràng buộc Sau Đại học,"Mình là học viên thạc sĩ đã tích lũy 50 tín chỉ và hoàn thành Anh văn cơ sở, nhưng mới đạt chuẩn ngoại ngữ bậc 3/6. Mình có nhận được đề tài Luận văn Thạc sĩ không?","Không được. Theo Thông báo 280 (HK251_bổ sung), để được giao đề tài Luận văn Thạc sĩ, học viên cần thỏa 3 điều kiện đồng thời: số tín chỉ tích lũy >= 39, hoàn thành Anh văn cơ sở, VÀ đạt chuẩn ngoại ngữ bậc 4/6. Học viên mới đạt bậc 3/6 nên chưa đủ điều kiện.","Theo quy định hiện hành:
+
+- Để được nhận đề tài Luận văn Thạc sĩ, học viên phải tích lũy tối thiểu **39 tín chỉ**, hoàn thành các môn học Anh văn cơ sở và đạt chuẩn **ngoại ngữ bậc 4/6** theo khung năng lực ngoại ngữ quốc gia.
+- Bạn đã tích lũy đủ 50 tín chỉ và hoàn thành môn Anh văn cơ sở, nhưng chỉ đạt chuẩn ngoại ngữ bậc 3/6. Do đó, bạn **chưa đủ điều kiện** để nhận đề tài Luận văn Thạc sĩ.",3/3,3/3,3/3
+AG-043,Suy luận/Xử lý thời hạn,Sinh viên A muốn xin nghỉ học tạm thời để giải quyết việc gia đình vào tuần thứ 6 của học kỳ. Yêu cầu này có được nhà trường chấp nhận không?,"Không chấp nhận. Theo khoản 24.1 Điều 24 QĐ 1259 (sửa đổi QĐ 2931), thời điểm nộp hồ sơ nghỉ học tạm thời vì lý do cá nhân chậm nhất là tuần thứ 04 tính từ đầu học kỳ. Do đó, nộp vào tuần thứ 6 là quá hạn và sẽ không được giải quyết.","Theo quy định của trường Đại học Bách Khoa TP.HCM:
+
+- Sinh viên có thể xin nghỉ học tạm thời vì lý do cá nhân, nhưng phải thỏa điều kiện đã học tối thiểu 01 học kỳ ở cơ sở đào tạo và không thuộc diện bị xem xét buộc thôi học hoặc kỷ luật.
+- Thời điểm nộp hồ sơ nghỉ học tạm thời vì lý do cá nhân **chậm nhất là tuần thứ 04 tính từ đầu học kỳ**.
+
+Do vậy, việc sinh viên A gửi yêu cầu nghỉ học tạm thời vào tuần thứ 6 không phù hợp quy định và sẽ **không được nhà trường chấp nhận**.",3/3,3/3,3/3
+AG-044,Đọc hiểu bảng/Tính toán quy đổi,Một lớp học phần chuyên ngành siêu hẹp chỉ có 3 sinh viên đăng ký. Hiệu trưởng đã cho phép mở lớp. Vậy khối lượng giảng dạy của giảng viên lớp này sẽ được tính như thế nào?,"Theo Bảng 1 QĐ 5326 về cấu hình lớp sĩ số nhỏ, đối với lớp có sĩ số < 5 sinh viên, cấu hình áp dụng là tự học/tự nghiên cứu có hướng dẫn của giảng viên. Khối lượng giảng dạy của giảng viên sẽ được tính tương đương như hướng dẫn Đồ án môn học cho 4 người học.","Theo quy định, lớp học phần chuyên ngành với sĩ số dưới 5 người, nếu được Hiệu trưởng cho phép mở lớp, sẽ áp dụng hình thức giảng dạy chuyển sang dạng tự học, tự nghiên cứu với sự hướng dẫn của giảng viên. Khối lượng giảng dạy của giảng viên lớp này sẽ được tính giống như **hướng dẫn Đồ án môn học cho 4 sinh viên**.",3/3,3/3,3/3
+AG-045,Xử lý mâu thuẫn/Nghiệp vụ SĐH,Thầy B là người hướng dẫn luận án Tiến sĩ cho nghiên cứu sinh C. Thầy B có được tham gia vào hội đồng bảo vệ và chấm điểm cho C để bảo vệ quyền lợi cho học trò mình không?,"Không được. Theo Thông báo 280 (HK251_bổ sung), người hướng dẫn luận văn thạc sĩ hoặc luận án tiến sĩ tuyệt đối không được tham gia hội đồng và không được cho điểm đánh giá. Điều này thay thế cho các quy định linh động trước đây.","Theo quy định tại trường Đại học Bách Khoa TP.HCM:
+
+- Người hướng dẫn luận án Tiến sĩ **không được tham gia hội đồng bảo vệ** và **không được cho điểm đánh giá** luận án của nghiên cứu sinh. Đây là quy định rõ ràng trong các văn bản ban hành về việc tổ chức và quản lý đào tạo trình độ Tiến sĩ. 
+
+Do đó, thầy B sẽ không được tham gia hội đồng bảo vệ và chấm điểm cho nghiên cứu sinh C.",3/3,3/3,3/3
+AG-046,Suy luận/Tổng hợp điều kiện,Sinh viên hệ chính quy do học lực yếu nên muốn đăng ký 9 tín chỉ trong học kỳ chính để tránh bị quá tải. Hệ thống có cho phép đăng ký không?,"Không. Theo QĐ 1260 (Khoản 5.3), số tín chỉ tối thiểu trong một học kỳ chính của sinh viên chính quy là 11 tín chỉ. Mức 9 tín chỉ chỉ là mức tối thiểu dành cho sinh viên hệ vừa làm vừa học hoặc đào tạo từ xa. Do đó, sinh viên chính quy không thể đăng ký 9 tín chỉ.","Theo quy định của trường Đại học Bách Khoa TP.HCM:
+
+- Số tín chỉ tối thiểu mà sinh viên chính quy cần đăng ký trong học kỳ chính thông thường là **14 tín chỉ**. 
+- Trong trường hợp đặc biệt (do học lực yếu hoặc vì lý do sức khỏe), sinh viên được phép đăng ký **tối thiểu 11 tín chỉ**, và quy định này chỉ áp dụng tối đa trong 2 học kỳ.
+
+Do vậy, việc sinh viên muốn đăng ký **9 tín chỉ** trong học kỳ chính không phù hợp với quy định và sẽ **không được hệ thống chấp nhận**.",3/3,3/3,3/3
+AG-047,Xử lý ngoại lệ/Chương trình Tài năng,"Sinh viên học Chương trình Tài năng, đã đăng ký một môn bậc Thạc sĩ và đạt điểm cao. Sinh viên này muốn dùng môn Thạc sĩ đó để chuyển điểm miễn cho một môn Tài năng ở bậc Đại học. Có được không?","Không được. Theo bổ sung tại khoản 8.2 Điều 8 QĐ 1260, sinh viên chương trình liên thông Đại học - Thạc sĩ được chuyển điểm từ bậc thạc sĩ xuống đại học, nhưng quy định cấm dùng học phần bậc thạc sĩ để miễn các học phần tài năng.","Theo quy định hiện hành:
+
+- **Điểm học phần bậc Thạc sĩ** có thể được đăng ký để miễn điểm cho một số học phần tương ứng ở bậc Đại học. 
+- Tuy nhiên, **đối với chương trình Tài năng**, các học phần được miễn ở bậc Đại học **không được là các học phần Tài năng đang thuộc chương trình này**.
+
+Do đó, sinh viên thuộc chương trình Tài năng **không thể sử dụng điểm môn bậc Thạc sĩ để chuyển điểm miễn cho một môn thuộc khối Tài năng ở bậc Đại học**.",3/3,3/3,3/3
+AG-048,Suy luận điều kiện khen thưởng,"Em tính kéo dài thêm 1 học kỳ so với thời gian thiết kế chuẩn để học lại vài môn, qua đó cải thiện điểm GPA lên loại Xuất sắc. Nếu làm vậy, em có còn đủ điều kiện được xét Huy chương vàng lúc tốt nghiệp không?","Không. Theo Phụ lục 3 QĐ 1259 và Thông báo 548, hai trong những tiêu chuẩn bắt buộc để xét Huy chương vàng là sinh viên phải tốt nghiệp đúng tiến độ (hoàn thành chương trình sau khi kết thúc học kỳ 2 của năm cuối khóa) và không học lại bất kỳ môn nào. Việc kéo dài thời gian học hoặc học lại môn sẽ làm mất quyền xét huy chương.","Dựa trên thông tin tra cứu được, để được xem xét thưởng Huy chương vàng khi tốt nghiệp, sinh viên cần đáp ứng các tiêu chuẩn sau:
+
+1. **Tốt nghiệp đúng thời gian đào tạo kế hoạch**, tính từ thời điểm nhập học theo kỳ đầu tiên, tức không được kéo dài thời gian học ngoài thời gian thiết kế chuẩn.
+
+2. Xếp trong 10 sinh viên đứng đầu ngành học hoặc chương trình, dựa vào điểm trung bình tích lũy ngành.
+
+3. Không học lại bất kỳ học phần nào trong chương trình đào tạo.
+
+Do đó, nếu bạn kéo dài thời gian học thêm một học kỳ ngoài thời gian quy định, bạn sẽ không còn đủ điều kiện được xét Huy chương vàng.",3/3,3/3,3/3
+AG-049,Ràng buộc đăng ký môn học (Tiến độ),Học kỳ tới em dự định đăng ký môn Đồ án chuyên ngành. Em cần tích lũy tối thiểu bao nhiêu phần trăm số tín chỉ của chương trình đào tạo thì mới đủ điều kiện đăng ký hệ thống?,"Theo khoản 5.5 Điều 5 QĐ 1260, sinh viên chương trình tiêu chuẩn phải tích lũy đủ ít nhất 70% số tín chỉ của chương trình đào tạo để được phép đăng ký học phần Đồ án chuyên ngành (đối với chương trình song ngành là 76%). Đồng thời, từ HK1/2025-2026, phải có điểm trung bình tích lũy từ 2.0 trở lên.","Để đủ điều kiện đăng ký học phần Đồ án chuyên ngành, sinh viên phải tích lũy tối thiểu **70% số tín chỉ** của chương trình đào tạo. Ngoài ra, từ học kỳ 1 2025-2026, sinh viên cần đạt điểm trung bình tích lũy tối thiểu từ 2.0 trở lên.",3/3,3/3,3/3
+AG-050,Xử lý ngoại lệ/Tính toán thời hạn,"Một sinh viên nhóm ""tạm đạt"" chuẩn tiếng Anh đầu vào của khóa 2025 (Chương trình Tiên tiến) đã học đến học kỳ thứ 3 nhưng vẫn chưa nộp chứng chỉ IELTS chính thức. Sinh viên này có bị vi phạm quy định không?","Có vi phạm. Theo Thông báo 260 (HK242), thời gian nộp chứng chỉ ngoại ngữ chính thức là 01 học kỳ sau khi trúng tuyển. Trường hợp đặc biệt chỉ được xem xét gia hạn thêm tối đa 01 học kỳ. Như vậy, tối đa sau 2 học kỳ sinh viên phải nộp, đến học kỳ thứ 3 là đã quá hạn.","Theo quy định về chuẩn tiếng Anh cho sinh viên khóa 2025 (Chương trình Tiên tiến), nhóm ""tạm đạt"" (chứng chỉ tiếng Anh tương đương IELTS 5.5) cần phải nộp chứng chỉ chính thức đạt chuẩn ngoại ngữ sau **01 học kỳ kể từ thời điểm trúng tuyển**. Trường hợp đặc biệt có thể được gia hạn thêm tối đa **01 học kỳ**.
+
+Do đó, một sinh viên đã học đến học kỳ thứ 3 mà vẫn chưa nộp chứng chỉ tiếng Anh chính thức sẽ bị coi là **vi phạm quy định thời hạn nộp chuẩn ngoại ngữ đầu vào** của nhà trường.",3/3,3/3,3/3
+AG-051,Suy luận tình huống hội đồng/Toán học,"Trong hội đồng bảo vệ khóa luận tốt nghiệp gồm 3 người. Thành viên 1 chấm 6.0, thành viên 2 chấm 7.0, Chủ tịch hội đồng chấm 8.5. Xử lý như thế nào và điểm của Chủ tịch có trọng số ra sao?","Theo khoản 7.2 Điều 7 QĐ 1260, vì điểm của Chủ tịch (8.5) và thành viên 1 (6.0) lệch nhau quá 2.0 điểm, hội đồng phải hội ý, xem xét điều chỉnh. Điểm cuối cùng do tập thể quyết định, trong đó khi bỏ phiếu lấy ý kiến, phiếu của Chủ tịch Hội đồng có trọng số cao hơn 10% so với thành viên khác.","Theo quy định khi bảo vệ khóa luận tốt nghiệp:
+
+1. Điểm tổng kết của khóa luận được tính từ **trung bình cộng các điểm** do các thành viên hội đồng, người hướng dẫn, và người phản biện chấm. Điểm giữa các người chấm không được lệch nhau quá **2,0 điểm**. Trường hợp điểm chấm có sự chênh lệch quá 2,0 điểm, hội đồng cần hội ý để xem xét và điều chỉnh. Điểm cuối cùng sẽ được quyết định bởi toàn thể hội đồng.
+
+2. **Trọng số của Chủ tịch hội đồng** trong quá trình bỏ phiếu quyết định cuối cùng cao hơn các thành viên khác **10%**, nên ý kiến chủ tịch có giá trị hơn khi xem xét kết quả cuối cùng.
+
+Trong tình huống này:
+- Kết quả điểm giữa các thành viên hội đồng chênh lệch lớn nhất là 2,5 điểm (giữa 6.0 và 8.5), vượt quá ngưỡng quy định. Hội đồng cần họp lại để xử lý và thống nhất điểm chấm sao cho phù hợp.",3/3,3/3,3/3
+AG-052,Xử lý mâu thuẫn/Luật tốt nghiệp,"Em học hệ chính quy khóa 2020. Trong quá trình học, em có một môn bị điểm F (3 tín chỉ) và phải học lại. Tổng số tín chỉ toàn chương trình của em là 140 tín chỉ. Điểm trung bình tích lũy toàn khóa của em đạt 8.2. Vậy bằng tốt nghiệp của em có bị hạ xuống loại Khá không hay vẫn được giữ bằng Giỏi?","Bằng của em vẫn được giữ loại Giỏi. Theo khoản 10.1 Điều 10 QĐ 1260, hạng tốt nghiệp loại xuất sắc và giỏi sẽ bị giảm đi một mức nếu khối lượng của các học phần phải học lại vượt quá 5% so với tổng số tín chỉ quy định cho toàn chương trình [5]. Tổng chương trình của em là 140 tín chỉ, 5% của 140 là 7 tín chỉ. Vì em chỉ học lại 1 môn 3 tín chỉ (nhỏ hơn 7 tín chỉ), em không vi phạm điều kiện này nên bằng tốt nghiệp không bị hạ mức [5].","Sinh viên có điểm trung bình tích lũy toàn khóa đạt loại Giỏi (8.2) về cơ bản sẽ được xếp hạng tốt nghiệp loại Giỏi. Tuy nhiên, hạng tốt nghiệp có thể bị hạ xuống nếu:
+
+1. **Khối lượng các học phần phải học lại** vượt quá **5% tổng số tín chỉ toàn chương trình**.  
+   Trong trường hợp của bạn:  
+   - Tổng số tín chỉ toàn chương trình là 140 tín chỉ.  
+   - 5% của 140 tín chỉ là 7 tín chỉ.  
+   - Bạn chỉ phải học lại một môn 3 tín chỉ, không vượt quá 5% tổng số tín chỉ. Vì vậy, điều kiện này không ảnh hưởng đến hạng tốt nghiệp của bạn.
+
+2. Sinh viên bị kỷ luật từ mức cảnh cáo trở lên trong thời gian học.  
+   Trường hợp này không được nêu rõ trong thông tin bạn cung cấp, nên nếu bạn không bị kỷ luật thì hạng tốt nghiệp của bạn không bị ảnh hưởng.
+
+**Kết luận:** Bạn sẽ vẫn được xếp tốt nghiệp loại Giỏi với điểm trung bình tích lũy 8.2.",3/3,3/3,3/3
+AG-053,Ràng buộc nghiệp vụ/Thời gian,Mình học năm 4 đã hoàn thành 11 ngày Công tác xã hội (CTXH). Mình có đủ điều kiện để nhận Đồ án tốt nghiệp không?,"Không đủ điều kiện. Theo Thông báo 548 (HK251), tiến độ đạt ngày CTXH quy định: Sau năm 3 và nhận Đồ án tốt nghiệp, sinh viên phải đạt tối thiểu 12 ngày CTXH. Sinh viên mới đạt 11 ngày nên chưa đủ điều kiện để nhận Đồ án tốt nghiệp.","Theo quy định về ngày Công tác xã hội (CTXH):
+
+- **Số ngày CTXH tối thiểu để được nhận Đồ án tốt nghiệp (ĐATN):** Sinh viên năm 4 phải đạt ít nhất **12 ngày CTXH**. 
+
+Do bạn chỉ hoàn thành **11 ngày CTXH**, nên hiện tại bạn **chưa đủ điều kiện để nhận Đồ án tốt nghiệp**. Bạn cần hoàn thành thêm ít nhất **1 ngày CTXH** để đủ điều kiện.",3/3,3/3,3/3
+AG-054,Xử lý cập nhật/Quy định ngừng áp dụng,Một Giảng viên muốn thiết kế môn học ở Học kỳ 2 năm học 2025-2026 (HK252) theo hình thức Blended learning (kết hợp online và offline). Phòng Đào tạo có mặc định phê duyệt không?,"Không. Theo Thông báo 548 (HK251), nhà trường đã kết luận ""Ngừng áp dụng hình thức Blended learning từ HK252"". Các trường hợp đặc biệt muốn áp dụng phải do Ban Giám hiệu trực tiếp quyết định, chứ Phòng Đào tạo không thể tự mặc định phê duyệt.","Theo quy định, từ Học kỳ 2 năm học 2025-2026 (HK252), hình thức giảng dạy **Blended Learning** (kết hợp trực tuyến và trực tiếp) **không còn được áp dụng mặc định**. Các trường hợp đặc biệt muốn thiết kế môn học theo hình thức này sẽ cần sự xem xét và phê duyệt từ **Ban Giám hiệu**.
+
+Do đó, Giảng viên muốn áp dụng hình thức Blended Learning sẽ cần gửi đề xuất và không đảm bảo được phê duyệt tự động từ Phòng Đào tạo.",3/3,3/3,3/3
+AG-055,Tổng hợp quy định/Song ngành,"Sinh viên E học song bằng. Ngành 1 thuộc Khoa Điện, Ngành 2 thuộc Khoa Máy tính. E muốn làm 1 đồ án tốt nghiệp chung cho cả 2 ngành. Thủ tục này có được phép không và hội đồng bảo vệ như thế nào?","Được phép. Theo Khoản 12.2 Điều 12 QĐ 1260, sinh viên học song ngành có thể đăng ký học phần tốt nghiệp dạng song ngành để hoàn thành cùng lúc. Yêu cầu là phải do các Khoa quản lý hai ngành CÙNG đồng ý giao đề tài, phân công đồng hướng dẫn và bảo vệ bằng hội đồng chung của cả hai ngành.","Sinh viên học song bằng được phép thực hiện một **đồ án tốt nghiệp chung** cho cả hai ngành nếu đáp ứng các điều kiện sau:
+
+1. **Sự đồng ý của cả hai Khoa:** Việc thực hiện đồ án liên ngành phải được cả hai Khoa quản lý ngành học (trong trường hợp này là Khoa Điện và Khoa Máy tính) đồng ý về đề tài, nội dung đồ án, và việc phân công giảng viên đồng hướng dẫn.
+
+2. **Hình thức bảo vệ:** Đồ án tốt nghiệp chung phải được bảo vệ trước một hội đồng đánh giá luận văn tốt nghiệp **chung của cả hai ngành**.
+
+3. **Thủ tục:** Sinh viên cần đăng ký học phần tốt nghiệp dạng song ngành và thực hiện thủ tục theo hướng dẫn từ cả hai Khoa liên quan.
+
+Do đó, thủ tục này **có thể thực hiện được** nếu được sự phê duyệt từ các Khoa và đáp ứng đầy đủ quy định trong quá trình triển khai.",3/3,3/3,3/3
+AG-056,Vấn đề Cấp phát văn bằng,"Em làm mất bản chính Bằng tốt nghiệp Đại học. Sau đó em phát hiện ra trên hệ thống lưu trữ, ngày sinh trên bằng của em bị in sai do lỗi nhập liệu của Phòng Đào tạo. Vì đây là lỗi của nhà trường, em có thể làm đơn xin cấp lại Bản chính văn bằng mới không?","Theo Điều 2 QĐ 2349, nhà trường có trách nhiệm cấp lại bản chính văn bằng, chứng chỉ nếu phát hiện bị viết sai do lỗi của nhà trường","Theo thông tin từ các quy định nội bộ trường Đại học Bách khoa TP.HCM:
+
+1. Bản chính văn bằng, chứng chỉ chỉ được cấp một lần. 
+2. Tuy nhiên, nếu văn bằng, chứng chỉ đã được cấp nhưng phát hiện bị viết sai do lỗi của nhà trường (ví dụ như lỗi nhập liệu của Phòng Đào tạo), nhà trường sẽ có trách nhiệm cấp lại bản chính cho người học.
+
+Do đó, trong trường hợp của bạn, việc ngày sinh bị in sai là lỗi của nhà trường, bạn có thể làm đơn xin cấp lại bản chính văn bằng mới. Hãy liên hệ trực tiếp với Phòng Đào tạo để biết thêm thông tin chi tiết và hướng dẫn thủ tục.",3/3,3/3,3/3
+AG-057,Xử lý quy trình/Bảo lưu & Học phí,Em có việc gia đình đột xuất nên muốn làm đơn xin nghỉ học tạm thời (bảo lưu) vào tuần thứ 5 của học kỳ. Cho em hỏi trường hợp của em có được trường duyệt không và em có được hoàn lại khoản học phí đã đóng từ đầu học kỳ không?,"Theo Khoản 24.1 Điều 24 QĐ 1259, thời điểm nộp hồ sơ nghỉ học tạm thời vì lý do cá nhân chậm nhất là tuần thứ 04 tính từ đầu học kỳ [1]. Do đó, đơn nộp vào tuần thứ 5 là quá hạn và sẽ không được giải quyết [1]. Về học phí, theo Mục 2.2 Phụ lục 5 QĐ 2931, người học chỉ được hoàn trả học phí nếu thời điểm làm thủ tục hoàn trả dưới 04 tuần tính từ ngày đầu học kỳ [2]. Vì vậy, em sẽ không được duyệt nghỉ tạm thời và cũng không được hoàn lại học phí trong trường hợp này.","Dựa trên thông tin tìm được:
+
+1. **Điều kiện được duyệt bảo lưu:**  
+   Bạn có thể được xem xét nghỉ học tạm thời và bảo lưu nếu thuộc các trường hợp sau:
+   - Được điều động vào lực lượng vũ trang, tham gia giải đấu quốc tế, hoặc thực hiện nhiệm vụ quốc gia.
+   - Bị ốm, thai sản, hoặc tai nạn cần điều trị dài ngày (có chứng nhận y tế hợp lệ).
+   - Vì lý do cá nhân khác, nhưng cần thỏa:
+     - Đã học tối thiểu 01 học kỳ tại trường.
+     - Không bị xem xét buộc thôi học hoặc kỷ luật.
+     - Hồ sơ phải nộp chậm nhất vào tuần thứ 04 của học kỳ.  
+
+   Vì bạn đang muốn bảo lưu vào tuần thứ 05, trường hợp này sẽ không thỏa điều kiện nộp đơn đúng hạn và có thể không được phê duyệt.
+
+---
+
+2. **Về học phí đã đóng:**  
+   Chính sách hoàn học phí được xem xét trong các trường hợp sau:
+   - Thanh toán dư học phí.
+   - Làm thủ tục nghỉ học/hoàn trả học phí trong vòng 04 tuần từ đầu học kỳ.  
+
+   Vì bạn muốn làm thủ tục vào tuần thứ 05, khoản học phí có thể không được hoàn lại. 
+
+Nếu cần chi tiết hơn, bạn nên liên hệ trực tiếp Phòng Đào tạo để được hỗ trợ chính xác với trường hợp của mình.",3/3,3/3,3/3
+AG-058,Chuyển đổi chương trình đào tạo,Em đang học chương trình Kỹ sư Việt-Pháp (PFIEV) nhưng cảm thấy không theo kịp nên muốn xin chuyển sang chương trình tiêu chuẩn. Nếu chuyển thì em sẽ được xếp học tiếp vào ngành nào?,"Theo khoản 25.4 Điều 25 QĐ 1259, người học sẽ được chuyển về ngành ban đầu khi trúng tuyển vào trường (trước khi đăng ký vào PFIEV). Nếu sinh viên trúng tuyển trực tiếp vào chương trình PFIEV từ đầu, việc chuyển đổi sẽ được xem xét và xử lý như một trường hợp xin chuyển ngành thông thường.","Theo quy định của trường Đại học Bách Khoa TP.HCM:
+
+- Nếu bạn muốn chuyển từ chương trình Kỹ sư Việt-Pháp (PFIEV) sang chương trình tiêu chuẩn, bạn sẽ được xếp học tiếp vào **ngành ban đầu mà bạn trúng tuyển vào trường trước khi tham gia chương trình Kỹ sư Việt-Pháp**.
+
+- Trong trường hợp bạn **trúng tuyển trực tiếp vào chương trình PFIEV**, việc chuyển sẽ được xem xét như trường hợp chuyển ngành.",3/3,3/3,3/3
+AG-059,Suy luận thời hạn/Hoãn thi do tai nạn,Em bị tai nạn giao thông phải nhập viện cấp cứu đúng vào ngày thi cuối kỳ môn Hóa đại cương. 1 tuần sau em mới được xuất viện. Em đem giấy xuất viện lên Phòng Khảo thí xin nhận điểm I (hoãn thi) có được giải quyết không vì quy định yêu cầu phải nộp trong 5 ngày?,"Hồ sơ của em thuộc diện đặc biệt và không được giải quyết thông thường mà phải trình lên Hiệu trưởng. Theo Khoản 16.2 Điều 16 QĐ 1259, thủ tục đăng ký hoãn thi có lý do chính đáng (nằm viện) phải được nộp chậm nhất là 05 ngày làm việc sau khi thi [12]. Vì em xuất viện và nộp giấy sau 1 tuần (trễ hơn thời hạn 05 ngày làm việc), Hiệu trưởng nhà trường sẽ trực tiếp xem xét và quyết định trường hợp ngoại lệ của em [12].","Theo quy định về việc hoãn thi, trường hợp không thể dự thi vì lý do bất khả kháng (như nhập viện), sinh viên hoặc người thân phải gửi đề nghị kèm giấy tờ xác nhận cần thiết tới Phòng Đào tạo trước ngày thi hoặc ngay sau thời điểm thi (thường là trong vòng 5 ngày).
+
+Tuy nhiên, trong một số tình huống đặc biệt, nhà trường có thể xem xét linh động hơn nếu lý do chính đáng và minh chứng rõ ràng. Do bạn nhập viện cấp cứu và chỉ được xuất viện sau một tuần, đây được xem là trường hợp bất khả kháng. Bạn nên trình bày tình trạng của mình cùng các giấy tờ liên quan trực tiếp với Phòng Đào tạo/Phòng Khảo thí để được xem xét.",3/3,3/3,3/3
+AG-060,Tình huống Lịch dự thính,"Em học khóa 2025 rớt môn Giải tích 1 ở HK1. Khi đến kỳ hè (HK253), hệ thống tự động xếp lịch học trả nợ môn Giải tích 1 cho sinh viên này. Nếu sinh viên muốn hủy lớp này thì làm thế nào?","Theo Thông báo 723 (HK252), sinh viên khóa 2025 không đạt Giải tích 1 sẽ bị buộc xếp lịch trả nợ trong HK hè (HK253). Nếu muốn hủy lớp đã xếp sẵn, sinh viên phải liên hệ Cố vấn học tập/Khoa để tư vấn lập kế hoạch học tập, sau đó nộp đơn hủy CÓ XÁC NHẬN CỦA KHOA trên hệ thống MyBK (mục Hỗ trợ trực tuyến BKSI).","Nếu sinh viên thuộc khóa 2025 muốn hủy lớp học trả nợ môn Giải tích 1 trong học kỳ hè (HK253), quy trình như sau:
+
+1. **Liên hệ tư vấn**: Sinh viên cần trao đổi với Giáo viên chủ nhiệm, Cố vấn học tập, hoặc Khoa để được tư vấn và xây dựng kế hoạch học tập phù hợp.
+
+2. **Đơn hủy lớp học**: Sinh viên nộp đơn hủy có sự xác nhận của Khoa lên hệ thống MyBK thông qua mục Hỗ trợ trực tuyến (BKSI).
+
+Hãy thực hiện đầy đủ các bước để đảm bảo quy trình được xử lý hiệu quả.",3/3,3/3,3/3
