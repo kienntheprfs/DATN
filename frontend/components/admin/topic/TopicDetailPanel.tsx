@@ -747,7 +747,7 @@ export function TopicDetailPanel({
                         Từ khóa chính
                       </h4>
                       <div className="flex flex-wrap gap-2">
-                        {selectedTopic.tags.map((tag) => (
+                        {selectedTopic.tags.filter(tag => tag.trim()).map((tag) => (
                           <span
                             key={tag}
                             className="break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[13px] font-medium text-slate-600"

@@ -204,6 +204,31 @@ async def trigger_job(
     )
 
 
+@router.get("/jobs", response_model=list[JobDetailResponse])
+async def list_jobs(
+    status: str | None = Query(None, description="Filter jobs by status (pending, running, succeeded, failed)"),
+    limit: int = Query(50, ge=1, le=100),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+) -> list[JobDetailResponse]:
+    """List jobs with optional status filtering."""
+    jobs = await TopicJobRepository.get_jobs_by_status(db, status=status, limit=limit)
+    return [
+        JobDetailResponse(
+            id=job.id,
+            time_range=job.time_range,
+            status=job.status,
+            stage=job.stage,
+            progress=job.progress,
+            message=job.message,
+            error_detail=job.error_detail,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            completed_at=job.completed_at,
+        )
+        for job in jobs
+    ]
+
+
 @router.get("/jobs/current", response_model=JobDetailResponse | None)
 async def get_current_job(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -251,29 +276,89 @@ async def get_job(
     )
 
 
-@router.get("/jobs/{job_id}/export/csv")
-async def download_job_csv(
+@router.delete("/jobs/{job_id}/cancel", response_model=JobDetailResponse)
+async def cancel_job(
     job_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> FileResponse:
-    """Download the CSV export file produced by a pipeline job."""
+) -> JobDetailResponse:
+    """Force-cancel a stuck/zombie job so a new one can be triggered.
+
+    Only jobs in *pending* or *running* status can be cancelled.
+    """
     job = await TopicJobRepository.get_by_id(db, job_id)
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
+        )
+    if job.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job is already in terminal state: {job.status}",
+        )
+    await TopicJobRepository.cancel_job(db, job, reason="cancelled by admin")
+    await db.commit()
+    await db.refresh(job)
+    return JobDetailResponse(
+        id=job.id,
+        time_range=job.time_range,
+        status=job.status,
+        stage=job.stage,
+        progress=job.progress,
+        message=job.message,
+        error_detail=job.error_detail,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        completed_at=job.completed_at,
+    )
 
-    output_dir = Path(settings.topic_output_dir)
-    csv_path = output_dir / f"{job_id}_topic_assignments.csv"
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job(
+    job_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Permanently delete a job record and all associated results.
+
+    This should be used to clean up failed or old jobs.
+    """
+    job = await TopicJobRepository.get_by_id(db, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
+        )
+
+    # We allow deleting jobs in any state, but usually users want to delete failed/completed ones.
+    # If a job is running, deleting it might cause the background task to fail silently or error out.
+    await TopicJobRepository.delete_job(db, job)
+    await db.commit()
+    return
+
+
+@router.get("/results/{result_id}/export/csv")
+async def download_job_csv(
+    result_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> FileResponse:
+    """Download the CSV export file produced by a pipeline job for a specific result."""
+    result = await TopicResultRepository.get_by_id(db, result_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result not found")
+
+    output_dir = Path(settings.topic_output_dir).resolve()
+    # Filename includes both job_id and topic_type
+    filename = f"{result.job_id}_{result.topic_type}_topic_assignments.csv"
+    csv_path = output_dir / filename
 
     if not csv_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSV export not found for this job",
+            detail=f"CSV export not found for this result at {csv_path}",
         )
 
     return FileResponse(
         path=str(csv_path),
         media_type="text/csv",
-        filename=f"topic_assignments_{job_id}.csv",
+        filename=f"topic_assignments_{result.topic_type}_{result.created_at.strftime('%Y%m%d')}.csv",
     )
 
 

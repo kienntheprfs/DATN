@@ -183,7 +183,7 @@ class RatingRepository:
             thread_stmt = text(
                 """
                 SELECT id, title
-                FROM api_gateway.threads
+                FROM agent_schema.conversations
                 WHERE id = ANY(:thread_ids)
                 """
             )

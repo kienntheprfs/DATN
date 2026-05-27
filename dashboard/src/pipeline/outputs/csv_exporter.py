@@ -17,7 +17,8 @@ class CSVExporter:
     """Export topic assignments to CSV file."""
 
     def __init__(self, output_dir: str = "topic_modeling_results") -> None:
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir).resolve()
+        # Ensure directory exists at initialization
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def export(
@@ -37,6 +38,9 @@ class CSVExporter:
 
         filename = f"{job_id}_{topic_type.value}_topic_assignments.csv"
         filepath = self.output_dir / filename
+        
+        # Ensure directory exists right before writing
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, quoting=csv.QUOTE_ALL)

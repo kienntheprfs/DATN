@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 knowledge/uploads
 knowledge/diagrams
 knowledge/tests
@@ -20,6 +19,7 @@ checkpoints.db-*
 
 dashboard/docker/data
 dashboard/topic_modeling_results
+dashboard/src/services/bertopic_output_vn
 
 # VSCode
 .vscode
@@ -167,6 +167,8 @@ venv.bak/
 # Spyder project settings
 .spyderproject
 .spyproject
+
+dashboard/src/services/bertopic_output_vn/*
 
 # Rope project settings
 .ropeproject

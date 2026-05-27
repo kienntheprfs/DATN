@@ -1,6 +1,6 @@
 """Repository methods for topic pipeline jobs."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -9,6 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.topic_pipeline import DashboardTopicPipelineJob, JobStage, JobStatus
+
+# Jobs that have not received a progress update in this many minutes are
+# considered stale/zombie and will be auto-failed before a new job is created.
+STALE_JOB_TIMEOUT_MINUTES: int = 30
 
 
 class JobConflictError(Exception):
@@ -65,15 +69,68 @@ class TopicJobRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def cancel_job(
+        db: AsyncSession,
+        job: DashboardTopicPipelineJob,
+        reason: str = "cancelled by user",
+    ) -> DashboardTopicPipelineJob:
+        """Force-cancel a running/pending job, marking it as FAILED."""
+        job.status = JobStatus.FAILED.value
+        job.stage = JobStage.COMPLETED.value
+        job.error_detail = reason[:2000]
+        job.completed_at = datetime.utcnow()
+        job.updated_at = datetime.utcnow()
+        db.add(job)
+        return job
+
+    @staticmethod
+    async def recover_stale_jobs(
+        db: AsyncSession,
+        timeout_minutes: int = STALE_JOB_TIMEOUT_MINUTES,
+    ) -> list[DashboardTopicPipelineJob]:
+        """Find active jobs that haven't been updated recently and mark them failed.
+
+        Returns the list of jobs that were auto-recovered.
+        """
+        cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+        statement = (
+            select(DashboardTopicPipelineJob)
+            .where(
+                and_(
+                    DashboardTopicPipelineJob.status.in_(
+                        [JobStatus.PENDING.value, JobStatus.RUNNING.value]
+                    ),
+                    DashboardTopicPipelineJob.updated_at < cutoff,
+                )
+            )
+        )
+        result = await db.execute(statement)
+        stale_jobs = list(result.scalars().all())
+        for job in stale_jobs:
+            await TopicJobRepository.cancel_job(
+                db,
+                job,
+                reason=f"auto-recovered: no progress for over {timeout_minutes} minutes",
+            )
+        return stale_jobs
+
+    @staticmethod
     async def create_job_if_no_active(
         db: AsyncSession,
         time_range: str,
     ) -> tuple[DashboardTopicPipelineJob, bool]:
         """Insert a new pending job only if no active job exists.
 
+        Stale jobs (no progress update for STALE_JOB_TIMEOUT_MINUTES) are
+        auto-recovered (marked as failed) before the conflict check so they
+        don't permanently block new runs.
+
         Returns (job, created) where created is True if the job was newly inserted.
         Raises JobConflictError if an active job already exists.
         """
+        # Auto-recover zombie jobs before checking for conflicts.
+        await TopicJobRepository.recover_stale_jobs(db)
+
         active = await TopicJobRepository.get_active_job(db)
         if active is not None:
             raise JobConflictError(
@@ -177,3 +234,25 @@ class TopicJobRepository:
         job.updated_at = datetime.utcnow()
         db.add(job)
         return job
+
+    @staticmethod
+    async def delete_job(
+        db: AsyncSession,
+        job: DashboardTopicPipelineJob,
+    ) -> None:
+        """Permanently delete a job and all its cascaded results/assignments."""
+        await db.delete(job)
+
+    @staticmethod
+    async def get_jobs_by_status(
+        db: AsyncSession,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[DashboardTopicPipelineJob]:
+        """Return a list of jobs filtered by status, ordered by creation time desc."""
+        statement = select(DashboardTopicPipelineJob)
+        if status:
+            statement = statement.where(DashboardTopicPipelineJob.status == status)
+        statement = statement.order_by(DashboardTopicPipelineJob.created_at.desc()).limit(limit)
+        result = await db.execute(statement)
+        return list(result.scalars().all())
