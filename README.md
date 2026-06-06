@@ -108,6 +108,11 @@ graph TB
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL (nếu không dùng Docker)
+- Git LFS (Large File Storage) - để quản lý các file lớn
+  ```bash
+  # Install Git LFS
+  git lfs install
+  ```
 
 ### Cài đặt và chạy
 
@@ -117,19 +122,28 @@ git clone https://github.com/your-org/DATN-Chatbot.git
 cd DATN-Chatbot
 ```
 
-#### 2. Cấu hình environment variables
+#### 2. Khởi tạo Git Submodules và Git LFS
+```bash
+# Cài đặt Git LFS
+git lfs install
+
+# Khởi tạo và cập nhật tất cả submodules (VD: LightRAG)
+git submodule update --init --recursive
+```
+
+#### 3. Cấu hình environment variables
 ```bash
 # Tạo file .env cho từng service
 cp .env.example .env
 # Chỉnh sửa .env với cấu hình của bạn
 ```
 
-#### 3. Chạy với Docker Compose (Recommended)
+#### 4. Chạy với Docker Compose (Recommended)
 ```bash
 docker-compose up -d
 ```
 
-#### 4. Chạy từng service (Manual)
+#### 5. Chạy từng service (Manual)
 
 **Knowledge Base Service**
 ```bash
@@ -170,8 +184,18 @@ uvicorn backend.main:app --reload --port 8001
 **Voice Service**
 ```bash
 cd voice
+# Cài đặt các thư viện phụ thuộc (Local Windows)
 pip install -r requirements.txt
-uvicorn src.main:app --reload --port 7860
+python server.py
+```
+
+**Hoặc chạy Voice Service bằng Docker Compose (Khuyên dùng)**
+```bash
+cd voice
+# 1. Đảm bảo đã tải các file model lớn qua Git LFS
+git lfs pull
+# 2. Khởi chạy cụm dịch vụ voice (bao gồm cả TTS)
+docker compose up -d
 ```
 
 **Frontend**

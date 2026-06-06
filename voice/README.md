@@ -249,59 +249,26 @@ const config = {
 };
 ```
 
-### Docker Compose with TURN
+### 🐳 Docker Compose Deployment
 
-Create `docker-compose.yml` file:
+We provide a pre-configured [docker-compose.yml](file:///d:/Code/DATN/DATN-Chatbot/voice/docker-compose.yml) in the `voice` directory that orchestrates:
+1. **Piper TTS Service** (`piper-tts` container, port `5000`)
+2. **Voice Service** (`voice-service` container, port `7860`)
 
-```yaml
-version: '3.8'
-
-services:
-  app:
-    build: .
-    ports:
-      - "7860:7860"
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - PIPER_TTS_URL=http://host.docker.internal:5000
-      - TURN_SERVER_URL=turn:your-turn-server.com:3478
-      - TURN_USERNAME=your-username
-      - TURN_CREDENTIAL=your-password
-    depends_on:
-      - tts
-      - ollama
-    volumes:
-      - ./config:/app/config
-
-  tts:
-    build: ./piper_tts
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./models:/app/models
-
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
-  # TURN server option (for production)
-  coturn:
-    image: coturn/coturn:latest
-    ports:
-      - "3478:3478/udp"
-      - "3478:3478/tcp"
-      - "5349:5349/udp"
-      - "5349:5349/tcp"
-    volumes:
-      - ./turnserver.conf:/etc/coturn/turnserver.conf
-    command: ["turnserver", "-c", "/etc/coturn/turnserver.conf"]
-
-volumes:
-  ollama_data:
+#### Prerequisite: Download Models via Git LFS
+Since STT and TTS ONNX models are large, they are tracked via Git LFS. Ensure Git LFS is installed and pull the actual model files before building/starting:
+```bash
+git lfs pull
 ```
+
+#### Run with Docker Compose
+To start the services, simply run the following command in the `voice` directory:
+```bash
+docker compose up -d
+```
+
+#### Linux Host / VM Configuration (No TURN Needed)
+For local development on Linux or deployment to a Linux VM, you can optimize connection establishing by using `network_mode: "host"` on the `voice-service` container. This shares the host's network stack directly, allowing WebRTC UDP ports to connect without NAT limitations or requiring a TURN server.
 
 ## 🔍 STUN vs TURN
 

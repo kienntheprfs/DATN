@@ -1,0 +1,548 @@
+generator dbml {
+  provider        = "prisma-dbml-generator"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["agent_schema", "api_gateway", "dashboard", "knowledge_schema", "wayfinder"]
+}
+
+model conversations {
+  id          String    @id @db.VarChar
+  user_id     String    @db.VarChar
+  title       String?   @db.VarChar
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  is_archived Boolean?
+
+  @@index([id], map: "ix_agent_schema_conversations_id")
+  @@index([user_id], map: "ix_agent_schema_conversations_user_id")
+  @@schema("agent_schema")
+}
+
+model missing_knowledge_logs {
+  id         String    @id @db.VarChar
+  thread_id  String    @db.VarChar
+  query      String    @db.VarChar
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([id], map: "ix_agent_schema_missing_knowledge_logs_id")
+  @@index([thread_id], map: "ix_agent_schema_missing_knowledge_logs_thread_id")
+  @@schema("agent_schema")
+}
+
+model missing_knowledge_logs_backup {
+  id         String    @id @db.VarChar
+  user_id    String    @db.VarChar
+  thread_id  String    @db.VarChar
+  query      String    @db.VarChar
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([id])
+  @@index([thread_id])
+  @@index([user_id])
+  @@schema("agent_schema")
+}
+
+model store {
+  prefix      String
+  key         String
+  value       Json
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at  DateTime? @db.Timestamptz(6)
+  ttl_minutes Int?
+
+  @@id([prefix, key])
+  @@index([expires_at], map: "idx_store_expires_at", where: raw("(expires_at IS NOT NULL)"))
+  @@index([prefix])
+  @@schema("agent_schema")
+}
+
+model store_migrations {
+  v Int @id
+
+  @@schema("agent_schema")
+}
+
+model api_gateway_alembic_version {
+  version_num String @id(map: "alembic_version_pkc") @db.VarChar(32)
+
+  @@map("alembic_version")
+  @@schema("api_gateway")
+}
+
+model refresh_tokens {
+  id         String    @id @db.VarChar(36)
+  token      String    @unique(map: "ix_refresh_tokens_token") @db.VarChar(500)
+  user_id    String    @db.VarChar(36)
+  is_revoked Boolean   @default(false)
+  expires_at DateTime  @db.Timestamp(6)
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  revoked_at DateTime? @db.Timestamp(6)
+  user_agent String?   @db.VarChar(500)
+  ip_address String?   @db.VarChar(45)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_refresh_tokens_user_id_users")
+
+  @@index([expires_at], map: "ix_refresh_tokens_expires_at")
+  @@index([is_revoked], map: "ix_refresh_tokens_is_revoked")
+  @@index([user_id], map: "ix_refresh_tokens_user_id")
+  @@schema("api_gateway")
+}
+
+model resource_ownerships {
+  id            String   @id @db.VarChar(36)
+  resource_type String   @db.VarChar(50)
+  resource_id   String   @db.VarChar(255)
+  owner_id      String   @db.VarChar(36)
+  created_at    DateTime @db.Timestamp(6)
+  users         users    @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([resource_id], map: "ix_resource_ownerships_resource_id")
+  @@index([resource_type], map: "ix_resource_ownerships_resource_type")
+  @@schema("api_gateway")
+}
+
+model roles {
+  id          String       @id @db.VarChar(36)
+  name        String       @unique @db.VarChar(50)
+  description String?      @db.VarChar(255)
+  created_at  DateTime     @db.Timestamp(6)
+  user_roles  user_roles[]
+
+  @@index([name], map: "ix_roles_name")
+  @@schema("api_gateway")
+}
+
+model threads {
+  id         String   @id @db.VarChar(36)
+  user_id    String   @db.VarChar(36)
+  agent_id   String?  @db.VarChar(100)
+  title      String?  @db.VarChar(255)
+  created_at DateTime @db.Timestamp(6)
+  updated_at DateTime @db.Timestamp(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "ix_threads_user_id")
+  @@index([user_id, created_at], map: "ix_threads_user_id_created_at")
+  @@schema("api_gateway")
+}
+
+model user_roles {
+  user_id String @db.VarChar(36)
+  role_id String @db.VarChar(36)
+  roles   roles  @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users   users  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, role_id])
+  @@schema("api_gateway")
+}
+
+model users {
+  id                  String                @id @db.VarChar(36)
+  email               String                @unique @db.VarChar(255)
+  hashed_password     String?               @db.VarChar(255)
+  is_active           Boolean
+  is_superuser        Boolean
+  created_at          DateTime              @db.Timestamp(6)
+  updated_at          DateTime              @db.Timestamp(6)
+  auth_provider       String                @default("local") @db.VarChar(20)
+  google_id           String?               @unique(map: "ix_users_google_id") @db.VarChar(255)
+  avatar_url          String?               @db.VarChar(500)
+  display_name        String?               @db.VarChar(255)
+  refresh_tokens      refresh_tokens[]
+  resource_ownerships resource_ownerships[]
+  threads             threads[]
+  user_roles          user_roles[]
+
+  @@index([email], map: "ix_users_email")
+  @@schema("api_gateway")
+}
+
+model dashboard_alembic_version {
+  version_num String @id(map: "alembic_version_pkc") @db.VarChar(32)
+
+  @@map("alembic_version")
+  @@schema("dashboard")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dashboard_answer_ratings {
+  id         String   @id(map: "pk_dashboard_answer_ratings") @db.Uuid
+  user_id    String   @db.VarChar(36)
+  run_id     String   @db.VarChar(255)
+  rating     String   @db.VarChar(10)
+  comment    String?  @db.VarChar(1000)
+  thread_id  String   @db.VarChar(36)
+  agent_id   String?  @db.VarChar(100)
+  created_at DateTime @db.Timestamptz(6)
+  updated_at DateTime @db.Timestamptz(6)
+
+  @@unique([user_id, run_id], map: "uq_dashboard_user_run_rating")
+  @@index([agent_id], map: "idx_dashboard_answer_ratings_agent_id")
+  @@index([run_id], map: "idx_dashboard_answer_ratings_run_id")
+  @@index([thread_id], map: "idx_dashboard_answer_ratings_thread_id")
+  @@index([user_id], map: "idx_dashboard_answer_ratings_user_id")
+  @@schema("dashboard")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dashboard_pinned_posts {
+  id            String   @id(map: "pk_dashboard_pinned_posts") @db.Uuid
+  display_order Int      @unique(map: "uq_dashboard_pinned_posts_display_order")
+  title         String   @db.VarChar(255)
+  ref_id        String   @unique(map: "uq_dashboard_pinned_posts_ref_id") @db.VarChar(50)
+  category      String   @db.VarChar(100)
+  pinned_date   DateTime @db.Date
+  summary       String   @db.VarChar(5000)
+  source_url    String   @db.VarChar(2048)
+  document_type String   @db.VarChar(150)
+  tags          Json     @db.Json
+  created_by    String   @db.VarChar(64)
+  created_at    DateTime @db.Timestamptz(6)
+  updated_at    DateTime @db.Timestamptz(6)
+
+  @@index([category], map: "idx_dashboard_pinned_posts_category")
+  @@index([pinned_date], map: "idx_dashboard_pinned_posts_pinned_date")
+  @@index([updated_at], map: "idx_dashboard_pinned_posts_updated_at")
+  @@schema("dashboard")
+}
+
+model dashboard_topic_assignments {
+  id                      String                  @id(map: "pk_dashboard_topic_assignments") @db.Uuid
+  result_id               String                  @db.Uuid
+  question                String                  @db.VarChar(5000)
+  topic_id                Int
+  label                   String?                 @db.VarChar(255)
+  source                  String                  @db.VarChar(100)
+  original_created_at     DateTime?               @db.Timestamptz(6)
+  created_at              DateTime                @db.Timestamptz(6)
+  dashboard_topic_results dashboard_topic_results @relation(fields: [result_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_dashboard_topic_assignment_result")
+
+  @@index([original_created_at], map: "idx_dashboard_topic_assignments_original_created_at")
+  @@index([result_id], map: "idx_dashboard_topic_assignments_result_id")
+  @@index([result_id, topic_id], map: "idx_dashboard_topic_assignments_result_topic")
+  @@index([topic_id], map: "idx_dashboard_topic_assignments_topic_id")
+  @@schema("dashboard")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model dashboard_topic_pipeline_jobs {
+  id                      String                    @id(map: "pk_dashboard_topic_pipeline_jobs") @db.Uuid
+  time_range              String                    @db.VarChar(10)
+  status                  String                    @unique(map: "uq_dashboard_topic_pipeline_jobs_one_active", where: raw("((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying])::text[]))")) @default("'pending'") @db.VarChar(20)
+  stage                   String                    @default("'pending'") @db.VarChar(30)
+  progress                Int                       @default(0)
+  message                 String?                   @db.VarChar(500)
+  error_detail            String?                   @db.VarChar(2000)
+  created_at              DateTime                  @db.Timestamptz(6)
+  updated_at              DateTime                  @db.Timestamptz(6)
+  completed_at            DateTime?                 @db.Timestamptz(6)
+  dashboard_topic_results dashboard_topic_results[]
+
+  @@index([created_at], map: "idx_dashboard_topic_pipeline_jobs_created_at")
+  @@index([status], map: "idx_dashboard_topic_pipeline_jobs_status")
+  @@schema("dashboard")
+}
+
+model dashboard_topic_results {
+  id                            String                        @id(map: "pk_dashboard_topic_results") @db.Uuid
+  job_id                        String                        @db.Uuid
+  topic_type                    String                        @db.VarChar(50)
+  time_range                    String                        @db.VarChar(10)
+  n_topics                      Int
+  n_documents                   Int
+  topic_summary                 Json                          @db.Json
+  topic_keywords                Json                          @default("{}") @db.Json
+  topic_sentiment               Json                          @default("{}") @db.Json
+  topic_marked                  Json                          @default("{}") @db.Json
+  created_at                    DateTime                      @db.Timestamptz(6)
+  dashboard_topic_assignments   dashboard_topic_assignments[]
+  dashboard_topic_pipeline_jobs dashboard_topic_pipeline_jobs @relation(fields: [job_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_dashboard_topic_result_job")
+
+  @@index([job_id], map: "idx_dashboard_topic_results_job_id")
+  @@index([topic_type, created_at], map: "idx_dashboard_topic_results_topic_type_created")
+  @@schema("dashboard")
+}
+
+model trace_spans {
+  id                  BigInt    @id @default(autoincrement())
+  trace_id            String    @db.VarChar(64)
+  span_id             String    @db.VarChar(32)
+  parent_span_id      String?   @db.VarChar(32)
+  service_name        String    @db.VarChar(100)
+  operation_name      String    @db.VarChar(500)
+  start_time          DateTime  @db.Timestamp(6)
+  end_time            DateTime? @db.Timestamp(6)
+  duration_ms         Float?
+  status_code         Int?
+  status_message      String?   @db.VarChar(255)
+  attributes          Json?     @db.Json
+  events              Json?     @db.Json
+  resource_attributes Json?     @db.Json
+  created_at          DateTime  @db.Timestamp(6)
+
+  @@index([operation_name], map: "idx_trace_spans_operation_name")
+  @@index([parent_span_id], map: "idx_trace_spans_parent_span_id")
+  @@index([service_name], map: "idx_trace_spans_service_name")
+  @@index([span_id], map: "idx_trace_spans_span_id")
+  @@index([start_time], map: "idx_trace_spans_start_time")
+  @@index([trace_id], map: "idx_trace_spans_trace_id")
+  @@schema("dashboard")
+}
+
+model chunks {
+  id             Int       @id @default(autoincrement())
+  document_id    Int
+  chunk_index    Int
+  content        String
+  embedding_id   String    @db.VarChar(100)
+  chunk_metadata Json?
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @db.Timestamptz(6)
+  documents      documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([document_id, chunk_index], map: "uq_document_chunk_index")
+  @@index([document_id], map: "ix_knowledge_schema_chunks_document_id")
+  @@index([embedding_id], map: "ix_knowledge_schema_chunks_embedding_id")
+  @@schema("knowledge_schema")
+}
+
+model document_storages {
+  id          Int         @id @default(autoincrement())
+  name        String      @db.VarChar(255)
+  description String?
+  config      Json?
+  created_at  DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime    @default(now()) @db.Timestamptz(6)
+  documents   documents[]
+
+  @@index([name], map: "ix_knowledge_schema_document_storages_name")
+  @@schema("knowledge_schema")
+}
+
+model document_tags {
+  document_id Int
+  tag_id      Int
+  documents   documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tags        tags      @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([document_id, tag_id])
+  @@schema("knowledge_schema")
+}
+
+model documents {
+  id                      Int               @id @default(autoincrement())
+  storage_id              Int
+  title                   String            @db.VarChar(500)
+  status                  String            @db.VarChar(50)
+  document_type           String            @db.VarChar(20)
+  file_path               String            @db.VarChar(1024)
+  file_size               Int
+  checksum                String            @db.VarChar(64)
+  processing_status       String            @db.VarChar(20)
+  processing_error        String?
+  processing_started_at   DateTime?         @db.Timestamptz(6)
+  processing_completed_at DateTime?         @db.Timestamptz(6)
+  deletion_error          String?
+  deletion_started_at     DateTime?         @db.Timestamptz(6)
+  deletion_completed_at   DateTime?         @db.Timestamptz(6)
+  meta_data               Json?
+  created_at              DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime          @default(now()) @db.Timestamptz(6)
+  chunks                  chunks[]
+  document_tags           document_tags[]
+  document_storages       document_storages @relation(fields: [storage_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  faqs                    faqs[]
+  formal_documents        formal_documents?
+
+  @@index([checksum], map: "ix_knowledge_schema_documents_checksum")
+  @@index([processing_status], map: "ix_knowledge_schema_documents_processing_status")
+  @@index([status], map: "ix_knowledge_schema_documents_status")
+  @@schema("knowledge_schema")
+}
+
+model faq_question_variants {
+  id           Int    @id @default(autoincrement())
+  faq_id       Int
+  question     String
+  embedding_id String @db.VarChar(100)
+  faqs         faqs   @relation(fields: [faq_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([embedding_id], map: "ix_knowledge_schema_faq_question_variants_embedding_id")
+  @@schema("knowledge_schema")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model faqs {
+  id                    Int                     @id @default(autoincrement())
+  source                String                  @db.VarChar(20)
+  document_id           Int?
+  answer                String
+  meta_data             Json?
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                @default(now()) @db.Timestamptz(6)
+  faq_question_variants faq_question_variants[]
+  documents             documents?              @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([source, document_id], map: "idx_faq_source_document")
+  @@index([document_id], map: "ix_knowledge_schema_faqs_document_id")
+  @@index([source], map: "ix_knowledge_schema_faqs_source")
+  @@schema("knowledge_schema")
+}
+
+model formal_documents {
+  document_id       Int       @id
+  lightrag_track_id String?   @db.VarChar(255)
+  lightrag_doc_id   String?   @db.VarChar(255)
+  sync_status       String    @db.VarChar(20)
+  sync_error        String?
+  last_synced_at    DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
+  documents         documents @relation(fields: [document_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([lightrag_doc_id], map: "ix_knowledge_schema_formal_documents_lightrag_doc_id")
+  @@index([lightrag_track_id], map: "ix_knowledge_schema_formal_documents_lightrag_track_id")
+  @@index([sync_status], map: "ix_knowledge_schema_formal_documents_sync_status")
+  @@schema("knowledge_schema")
+}
+
+model tags {
+  id            Int             @id @default(autoincrement())
+  name          String          @db.VarChar(100)
+  slug          String          @unique(map: "ix_knowledge_schema_tags_slug") @db.VarChar(100)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  document_tags document_tags[]
+
+  @@index([name], map: "ix_knowledge_schema_tags_name")
+  @@schema("knowledge_schema")
+}
+
+model wayfinder_alias {
+  id             Int            @id @default(autoincrement())
+  node_id        Int
+  name           String         @db.VarChar
+  wayfinder_node wayfinder_node @relation(fields: [node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([node_id], map: "ix_wayfinder_alias_node_id")
+  @@schema("wayfinder")
+}
+
+model wayfinder_building {
+  id             Int              @id @default(autoincrement())
+  name           String           @db.VarChar
+  description    String?          @db.VarChar
+  real_image_url String?          @db.VarChar
+  wayfinder_map  wayfinder_map[]
+  wayfinder_node wayfinder_node[]
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_edge {
+  id                                                          Int            @id @default(autoincrement())
+  start_node_id                                               Int
+  end_node_id                                                 Int
+  type                                                        String         @db.VarChar
+  weight                                                      Float
+  bidirectional                                               Boolean
+  polyline                                                    Json?
+  wayfinder_node_wayfinder_edge_end_node_idTowayfinder_node   wayfinder_node @relation("wayfinder_edge_end_node_idTowayfinder_node", fields: [end_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wayfinder_node_wayfinder_edge_start_node_idTowayfinder_node wayfinder_node @relation("wayfinder_edge_start_node_idTowayfinder_node", fields: [start_node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_event {
+  id             Int             @id @default(autoincrement())
+  name           String          @db.VarChar
+  description    String?         @db.VarChar
+  start_date     String          @db.VarChar
+  end_date       String?         @db.VarChar
+  start_time     String?         @db.VarChar
+  end_time       String?         @db.VarChar
+  location_name  String?         @db.VarChar
+  node_id        Int?
+  organizer      String?         @db.VarChar
+  category       String?         @db.VarChar
+  is_active      Boolean
+  created_at     String?         @db.VarChar
+  wayfinder_node wayfinder_node? @relation(fields: [node_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_map {
+  id                 Int                 @id @default(autoincrement())
+  name               String              @db.VarChar
+  image_url          String              @db.VarChar
+  floor_level        Int?
+  scale_ratio        Float
+  building_id        Int?
+  wayfinder_building wayfinder_building? @relation(fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wayfinder_node     wayfinder_node[]
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_missing_location {
+  id               Int     @id @default(autoincrement())
+  name             String  @db.VarChar
+  building_name    String? @db.VarChar
+  floor_level      Int?
+  description      String? @db.VarChar
+  requested_by     String? @db.VarChar
+  status           String  @db.VarChar
+  resolved_node_id Int?
+  resolved_at      String? @db.VarChar
+  resolved_by      String? @db.VarChar
+  admin_note       String? @db.VarChar
+  created_at       String? @db.VarChar
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_missing_route {
+  id             Int     @id @default(autoincrement())
+  start_node_id  Int?
+  start_name     String  @db.VarChar
+  start_building String? @db.VarChar
+  start_floor    Int?
+  end_node_id    Int?
+  end_name       String  @db.VarChar
+  end_building   String? @db.VarChar
+  end_floor      Int?
+  reason         String? @db.VarChar
+  status         String  @db.VarChar
+  resolved_note  String? @db.VarChar
+  resolved_at    String? @db.VarChar
+  resolved_by    String? @db.VarChar
+  reported_by    String? @db.VarChar
+  created_at     String? @db.VarChar
+
+  @@schema("wayfinder")
+}
+
+model wayfinder_node {
+  id                                                          Int                 @id @default(autoincrement())
+  name                                                        String              @db.VarChar
+  x                                                           Float
+  y                                                           Float
+  description                                                 String?             @db.VarChar
+  real_image_url                                              String?             @db.VarChar
+  type                                                        String              @db.VarChar
+  map_id                                                      Int
+  building_id                                                 Int?
+  wayfinder_alias                                             wayfinder_alias[]
+  wayfinder_edge_wayfinder_edge_end_node_idTowayfinder_node   wayfinder_edge[]    @relation("wayfinder_edge_end_node_idTowayfinder_node")
+  wayfinder_edge_wayfinder_edge_start_node_idTowayfinder_node wayfinder_edge[]    @relation("wayfinder_edge_start_node_idTowayfinder_node")
+  wayfinder_event                                             wayfinder_event[]
+  wayfinder_building                                          wayfinder_building? @relation(fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wayfinder_map                                               wayfinder_map       @relation(fields: [map_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([map_id], map: "ix_wayfinder_node_map_id")
+  @@schema("wayfinder")
+}

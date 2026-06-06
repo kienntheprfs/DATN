@@ -1,16 +1,17 @@
 # server.py
 from fastapi import FastAPI, Body
 from fastapi.responses import Response
+import platform
 import subprocess
 import io
 
 app = FastAPI()
 
 # CẤU HÌNH ĐƯỜNG DẪN
-# Nếu bạn dùng piper cài qua pip:
-PIPER_PATH = "./piper/piper.exe"
-# Nếu bạn dùng file exe tải về (Windows):
-# PIPER_PATH = "./piper.exe"
+if platform.system() == "Windows":
+    PIPER_PATH = "./piper/piper.exe"
+else:
+    PIPER_PATH = "./piper/piper"
 
 # ĐƯỜNG DẪN MODEL (Đổi tên đúng file bạn tải)
 MODEL_PATH = "./piper/vi_VN-vais1000-medium.onnx"
