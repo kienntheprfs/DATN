@@ -90,12 +90,12 @@
 			"options": { "cwd": "${workspaceFolder}/api_gateway" },
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
-		{
-			"label": "Start Dashboard Infrastructure (Docker)",
-			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/dashboard/docker && npx @infisical/cli run --path=/dashboard -- docker compose up -d",
-			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
-		},
+		// {
+		// 	"label": "Start Dashboard Infrastructure (Docker)",
+		// 	"type": "shell",
+		// 	"command": "cd /d ${workspaceFolder}/dashboard/docker && npx @infisical/cli run --path=/dashboard -- docker compose up -d",
+		// 	"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		// },
 
 		// ==========================================
 		// 2. ORCHESTRATION
@@ -111,7 +111,7 @@
 				"Start Voice Service",
 				"Start API Gateway Auth Service",
 				"Start API Gateway (Docker)",
-				"Start Dashboard Infrastructure (Docker)",
+				// "Start Dashboard Infrastructure (Docker)",
 				"Start Dashboard Service",
 				"Start Agent Service (Backend)",
 				"Start Frontend"
@@ -179,6 +179,12 @@
 			"presentation": { "panel": "shared" }
 		},
 		{
+			"label": "Download VnCoreNLP Model",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/dashboard && if not exist src\\services\\data\\VnCoreNLP\\.git (git clone https://github.com/vncorenlp/VnCoreNLP.git src/services/data/VnCoreNLP) else (echo VnCoreNLP already downloaded)",
+			"presentation": { "panel": "shared" }
+		},
+		{
 			"label": "Sync Agent Service Dependencies",
 			"type": "shell",
 			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && uv sync",
@@ -201,6 +207,7 @@
 				"Install Voice Requirements",
 				"Sync API Gateway Dependencies",
 				"Sync Dashboard Dependencies",
+				"Download VnCoreNLP Model",
 				"Sync Agent Service Dependencies",
 				"Install Frontend Dependencies"
 			]

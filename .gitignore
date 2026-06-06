@@ -20,6 +20,7 @@ checkpoints.db-*
 dashboard/docker/data
 dashboard/topic_modeling_results
 dashboard/src/services/bertopic_output_vn
+dashboard/src/services/data/VnCoreNLP/
 
 # VSCode
 .vscode
