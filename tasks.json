@@ -25,6 +25,18 @@
 		},
 
 		// ==========================================
+		// 0. INITIALIZE GIT SUBMODULES & LFS
+		// ==========================================
+		{
+			"label": "Initialize Git Submodules & LFS",
+			"type": "shell",
+			"command": "powershell",
+			"args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/init-submodules.ps1"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"presentation": { "panel": "shared" }
+		},
+
+		// ==========================================
 		// 1. START SERVICES (WITH INFISICAL INJECTION)
 		// ==========================================
 		{
@@ -52,9 +64,16 @@
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
+			"label": "Pull LFS Files for Voice",
+			"type": "shell",
+			"command": "cd /d ${workspaceFolder}/voice && git lfs pull",
+			"presentation": { "panel": "shared" }
+		},
+		{
 			"label": "Start Voice Service",
 			"type": "shell",
 			"command": "cd /d ${workspaceFolder}/voice && npx @infisical/cli run --path=/voice -- uv run python server.py",
+			"dependsOn": ["Pull LFS Files for Voice"],
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
 		{
@@ -145,43 +164,43 @@
 		{
 			"label": "Install LightRAG Requirements",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/LightRAG && uv pip install -e \".[test,offline]\"",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/LightRAG\" -Mode \"editable\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Install Knowledge Requirements",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/knowledge && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/knowledge\" -Mode \"pip\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Install Wayfinder Requirements",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/wayfinder && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/wayfinder\" -Mode \"pip\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Install Voice Requirements",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/voice && uv venv --python 3.11 --clear && uv pip install -r requirements.txt",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/voice\" -Mode \"pip\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Sync API Gateway Dependencies",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/api_gateway && uv sync",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/api_gateway\" -Mode \"sync\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Sync Dashboard Dependencies",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/dashboard && uv sync",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/dashboard\" -Mode \"sync\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
 			"label": "Sync Agent Service Dependencies",
 			"type": "shell",
-			"command": "cd /d ${workspaceFolder}/agent-service-toolkit && uv sync",
+			"command": "powershell -ExecutionPolicy Bypass -File ${workspaceFolder}/install-dependencies.ps1 -ServicePath \"${workspaceFolder}/agent-service-toolkit\" -Mode \"sync\"",
 			"presentation": { "panel": "shared" }
 		},
 		{
@@ -194,7 +213,7 @@
 			"label": "Install All Requirements",
 			"dependsOrder": "sequence",
 			"dependsOn": [
-				"Download All Secrets",
+				"Initialize Git Submodules & LFS",
 				"Install LightRAG Requirements",
 				"Install Knowledge Requirements",
 				"Install Wayfinder Requirements",
@@ -212,7 +231,7 @@
 		{
 			"label": "Check Infisical",
 			"type": "shell",
-			"command": "npx @infisical/cli",
+			"command": "npx @infisical/cli --version",
 			"presentation": { "panel": "shared" }
 		},
 		{
