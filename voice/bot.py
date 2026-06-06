@@ -215,8 +215,9 @@ async def run_bot(
             #     ),
             # )
 
+            piper_tts_url = os.getenv("PIPER_TTS_URL", "http://127.0.0.1:5000")
             tts = PiperTTSService(
-                base_url="http://127.0.0.1:5000",
+                base_url=piper_tts_url,
                 aiohttp_session=session,
                 sample_rate=24000,
                 voice_id="vi_VN-vais1000-medium",

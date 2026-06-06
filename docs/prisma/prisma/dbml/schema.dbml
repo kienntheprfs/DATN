@@ -1,0 +1,476 @@
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Table conversations {
+  id String [pk]
+  user_id String [not null]
+  title String
+  updated_at DateTime [default: `now()`]
+  created_at DateTime [default: `now()`]
+  is_archived Boolean
+}
+
+Table missing_knowledge_logs {
+  id String [pk]
+  thread_id String [not null]
+  query String [not null]
+  created_at DateTime [default: `now()`]
+}
+
+Table missing_knowledge_logs_backup {
+  id String [pk]
+  user_id String [not null]
+  thread_id String [not null]
+  query String [not null]
+  created_at DateTime [default: `now()`]
+}
+
+Table store {
+  prefix String [not null]
+  key String [not null]
+  value Json [not null]
+  created_at DateTime [default: `now()`]
+  updated_at DateTime [default: `now()`]
+  expires_at DateTime
+  ttl_minutes Int
+
+  indexes {
+    (prefix, key) [pk]
+  }
+}
+
+Table store_migrations {
+  v Int [pk]
+}
+
+Table alembic_version {
+  version_num String [pk]
+}
+
+Table refresh_tokens {
+  id String [pk]
+  token String [unique, not null]
+  user_id String [not null]
+  is_revoked Boolean [not null, default: false]
+  expires_at DateTime [not null]
+  created_at DateTime [default: `now()`, not null]
+  revoked_at DateTime
+  user_agent String
+  ip_address String
+  users users [not null]
+}
+
+Table resource_ownerships {
+  id String [pk]
+  resource_type String [not null]
+  resource_id String [not null]
+  owner_id String [not null]
+  created_at DateTime [not null]
+  users users [not null]
+}
+
+Table roles {
+  id String [pk]
+  name String [unique, not null]
+  description String
+  created_at DateTime [not null]
+  user_roles user_roles [not null]
+}
+
+Table threads {
+  id String [pk]
+  user_id String [not null]
+  agent_id String
+  title String
+  created_at DateTime [not null]
+  updated_at DateTime [not null]
+  users users [not null]
+}
+
+Table user_roles {
+  user_id String [not null]
+  role_id String [not null]
+  roles roles [not null]
+  users users [not null]
+
+  indexes {
+    (user_id, role_id) [pk]
+  }
+}
+
+Table users {
+  id String [pk]
+  email String [unique, not null]
+  hashed_password String
+  is_active Boolean [not null]
+  is_superuser Boolean [not null]
+  created_at DateTime [not null]
+  updated_at DateTime [not null]
+  auth_provider String [not null, default: 'local']
+  google_id String [unique]
+  avatar_url String
+  display_name String
+  refresh_tokens refresh_tokens [not null]
+  resource_ownerships resource_ownerships [not null]
+  threads threads [not null]
+  user_roles user_roles [not null]
+}
+
+Table alembic_version {
+  version_num String [pk]
+}
+
+Table dashboard_answer_ratings {
+  id String [pk]
+  user_id String [not null]
+  run_id String [not null]
+  rating String [not null]
+  comment String
+  thread_id String [not null]
+  agent_id String
+  created_at DateTime [not null]
+  updated_at DateTime [not null]
+
+  indexes {
+    (user_id, run_id) [unique]
+  }
+
+  Note: 'This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.'
+}
+
+Table dashboard_pinned_posts {
+  id String [pk]
+  display_order Int [unique, not null]
+  title String [not null]
+  ref_id String [unique, not null]
+  category String [not null]
+  pinned_date DateTime [not null]
+  summary String [not null]
+  source_url String [not null]
+  document_type String [not null]
+  tags Json [not null]
+  created_by String [not null]
+  created_at DateTime [not null]
+  updated_at DateTime [not null]
+
+  Note: 'This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.'
+}
+
+Table dashboard_topic_assignments {
+  id String [pk]
+  result_id String [not null]
+  question String [not null]
+  topic_id Int [not null]
+  label String
+  source String [not null]
+  original_created_at DateTime
+  created_at DateTime [not null]
+  dashboard_topic_results dashboard_topic_results [not null]
+}
+
+Table dashboard_topic_pipeline_jobs {
+  id String [pk]
+  time_range String [not null]
+  status String [not null, default: ''pending'']
+  stage String [not null, default: ''pending'']
+  progress Int [not null, default: 0]
+  message String
+  error_detail String
+  created_at DateTime [not null]
+  updated_at DateTime [not null]
+  completed_at DateTime
+  dashboard_topic_results dashboard_topic_results [not null]
+
+  Note: 'This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.'
+}
+
+Table dashboard_topic_results {
+  id String [pk]
+  job_id String [not null]
+  topic_type String [not null]
+  time_range String [not null]
+  n_topics Int [not null]
+  n_documents Int [not null]
+  topic_summary Json [not null]
+  topic_keywords Json [not null, default: '{}']
+  topic_sentiment Json [not null, default: '{}']
+  topic_marked Json [not null, default: '{}']
+  created_at DateTime [not null]
+  dashboard_topic_assignments dashboard_topic_assignments [not null]
+  dashboard_topic_pipeline_jobs dashboard_topic_pipeline_jobs [not null]
+}
+
+Table trace_spans {
+  id BigInt [pk, increment]
+  trace_id String [not null]
+  span_id String [not null]
+  parent_span_id String
+  service_name String [not null]
+  operation_name String [not null]
+  start_time DateTime [not null]
+  end_time DateTime
+  duration_ms Float
+  status_code Int
+  status_message String
+  attributes Json
+  events Json
+  resource_attributes Json
+  created_at DateTime [not null]
+}
+
+Table chunks {
+  id Int [pk, increment]
+  document_id Int [not null]
+  chunk_index Int [not null]
+  content String [not null]
+  embedding_id String [not null]
+  chunk_metadata Json
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  documents documents [not null]
+
+  indexes {
+    (document_id, chunk_index) [unique]
+  }
+}
+
+Table document_storages {
+  id Int [pk, increment]
+  name String [not null]
+  description String
+  config Json
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  documents documents [not null]
+}
+
+Table document_tags {
+  document_id Int [not null]
+  tag_id Int [not null]
+  documents documents [not null]
+  tags tags [not null]
+
+  indexes {
+    (document_id, tag_id) [pk]
+  }
+}
+
+Table documents {
+  id Int [pk, increment]
+  storage_id Int [not null]
+  title String [not null]
+  status String [not null]
+  document_type String [not null]
+  file_path String [not null]
+  file_size Int [not null]
+  checksum String [not null]
+  processing_status String [not null]
+  processing_error String
+  processing_started_at DateTime
+  processing_completed_at DateTime
+  deletion_error String
+  deletion_started_at DateTime
+  deletion_completed_at DateTime
+  meta_data Json
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  chunks chunks [not null]
+  document_tags document_tags [not null]
+  document_storages document_storages [not null]
+  faqs faqs [not null]
+  formal_documents formal_documents
+}
+
+Table faq_question_variants {
+  id Int [pk, increment]
+  faq_id Int [not null]
+  question String [not null]
+  embedding_id String [not null]
+  faqs faqs [not null]
+}
+
+Table faqs {
+  id Int [pk, increment]
+  source String [not null]
+  document_id Int
+  answer String [not null]
+  meta_data Json
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  faq_question_variants faq_question_variants [not null]
+  documents documents
+
+  Note: 'This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.'
+}
+
+Table formal_documents {
+  document_id Int [pk]
+  lightrag_track_id String
+  lightrag_doc_id String
+  sync_status String [not null]
+  sync_error String
+  last_synced_at DateTime
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  documents documents [not null]
+}
+
+Table tags {
+  id Int [pk, increment]
+  name String [not null]
+  slug String [unique, not null]
+  created_at DateTime [default: `now()`, not null]
+  updated_at DateTime [default: `now()`, not null]
+  document_tags document_tags [not null]
+}
+
+Table wayfinder_alias {
+  id Int [pk, increment]
+  node_id Int [not null]
+  name String [not null]
+  wayfinder_node wayfinder_node [not null]
+}
+
+Table wayfinder_building {
+  id Int [pk, increment]
+  name String [not null]
+  description String
+  real_image_url String
+  wayfinder_map wayfinder_map [not null]
+  wayfinder_node wayfinder_node [not null]
+}
+
+Table wayfinder_edge {
+  id Int [pk, increment]
+  start_node_id Int [not null]
+  end_node_id Int [not null]
+  type String [not null]
+  weight Float [not null]
+  bidirectional Boolean [not null]
+  polyline Json
+  wayfinder_node_wayfinder_edge_end_node_idTowayfinder_node wayfinder_node [not null]
+  wayfinder_node_wayfinder_edge_start_node_idTowayfinder_node wayfinder_node [not null]
+}
+
+Table wayfinder_event {
+  id Int [pk, increment]
+  name String [not null]
+  description String
+  start_date String [not null]
+  end_date String
+  start_time String
+  end_time String
+  location_name String
+  node_id Int
+  organizer String
+  category String
+  is_active Boolean [not null]
+  created_at String
+  wayfinder_node wayfinder_node
+}
+
+Table wayfinder_map {
+  id Int [pk, increment]
+  name String [not null]
+  image_url String [not null]
+  floor_level Int
+  scale_ratio Float [not null]
+  building_id Int
+  wayfinder_building wayfinder_building
+  wayfinder_node wayfinder_node [not null]
+}
+
+Table wayfinder_missing_location {
+  id Int [pk, increment]
+  name String [not null]
+  building_name String
+  floor_level Int
+  description String
+  requested_by String
+  status String [not null]
+  resolved_node_id Int
+  resolved_at String
+  resolved_by String
+  admin_note String
+  created_at String
+}
+
+Table wayfinder_missing_route {
+  id Int [pk, increment]
+  start_node_id Int
+  start_name String [not null]
+  start_building String
+  start_floor Int
+  end_node_id Int
+  end_name String [not null]
+  end_building String
+  end_floor Int
+  reason String
+  status String [not null]
+  resolved_note String
+  resolved_at String
+  resolved_by String
+  reported_by String
+  created_at String
+}
+
+Table wayfinder_node {
+  id Int [pk, increment]
+  name String [not null]
+  x Float [not null]
+  y Float [not null]
+  description String
+  real_image_url String
+  type String [not null]
+  map_id Int [not null]
+  building_id Int
+  wayfinder_alias wayfinder_alias [not null]
+  wayfinder_edge_wayfinder_edge_end_node_idTowayfinder_node wayfinder_edge [not null]
+  wayfinder_edge_wayfinder_edge_start_node_idTowayfinder_node wayfinder_edge [not null]
+  wayfinder_event wayfinder_event [not null]
+  wayfinder_building wayfinder_building
+  wayfinder_map wayfinder_map [not null]
+}
+
+Ref: refresh_tokens.user_id > users.id [delete: Cascade]
+
+Ref: resource_ownerships.owner_id > users.id [delete: Cascade]
+
+Ref: threads.user_id > users.id [delete: Cascade]
+
+Ref: user_roles.role_id > roles.id [delete: Cascade]
+
+Ref: user_roles.user_id > users.id [delete: Cascade]
+
+Ref: dashboard_topic_assignments.result_id > dashboard_topic_results.id [delete: Cascade]
+
+Ref: dashboard_topic_results.job_id > dashboard_topic_pipeline_jobs.id [delete: Cascade]
+
+Ref: chunks.document_id > documents.id [delete: Cascade]
+
+Ref: document_tags.document_id > documents.id [delete: Cascade]
+
+Ref: document_tags.tag_id > tags.id [delete: Cascade]
+
+Ref: documents.storage_id > document_storages.id [delete: No Action]
+
+Ref: faq_question_variants.faq_id > faqs.id [delete: Cascade]
+
+Ref: faqs.document_id > documents.id [delete: Cascade]
+
+Ref: formal_documents.document_id - documents.id [delete: Cascade]
+
+Ref: wayfinder_alias.node_id > wayfinder_node.id [delete: No Action]
+
+Ref: wayfinder_edge.end_node_id > wayfinder_node.id [delete: No Action]
+
+Ref: wayfinder_edge.start_node_id > wayfinder_node.id [delete: No Action]
+
+Ref: wayfinder_event.node_id > wayfinder_node.id [delete: No Action]
+
+Ref: wayfinder_map.building_id > wayfinder_building.id [delete: No Action]
+
+Ref: wayfinder_node.building_id > wayfinder_building.id [delete: No Action]
+
+Ref: wayfinder_node.map_id > wayfinder_map.id [delete: No Action]

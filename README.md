@@ -170,8 +170,18 @@ uvicorn backend.main:app --reload --port 8001
 **Voice Service**
 ```bash
 cd voice
+# Cài đặt các thư viện phụ thuộc (Local Windows)
 pip install -r requirements.txt
-uvicorn src.main:app --reload --port 7860
+python server.py
+```
+
+**Hoặc chạy Voice Service bằng Docker Compose (Khuyên dùng)**
+```bash
+cd voice
+# 1. Đảm bảo đã tải các file model lớn qua Git LFS
+git lfs pull
+# 2. Khởi chạy cụm dịch vụ voice (bao gồm cả TTS)
+docker compose up -d
 ```
 
 **Frontend**
