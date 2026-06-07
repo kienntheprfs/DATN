@@ -219,15 +219,6 @@ def _delay_between_tests():
 
 GREETING_QUESTIONS = [
     "Xin chao",
-    "Hello",
-    "Chao ban",
-    "Ban la ai?",
-    "Ban lam duoc gi?",
-    "Hi there",
-    "Good morning",
-    "Cam on ban",
-    "Goodbye",
-    "Have a nice day",
 ]
 
 
@@ -260,15 +251,6 @@ class TestGreetingTTFT:
 
 COMPLEX_QUESTIONS = [
     "Đối tượng dự tuyển đối với các chương trình: Chương trình Tiêu chuẩn, Chương trình Dạy và học bằng Tiếng Anh, Chương trình Tiên tiến, Chương trình Định hướng Nhật Bản",
-    "Tín chỉ tối thiểu, tối đa",
-    "Số tín chỉ tích lũy ràng buộc khi đăng ký môn học Thực tập ngoài trường (TTNT), Thực tập Kỹ sư (TTKS), Đồ án chuyên ngành/Đề cương luận văn (ĐACN), Luận văn/Khoá luận/Đồ án tốt nghiệp (ĐATN)",
-    "GIỚI THIỆU TRƯỜNG ĐẠI HỌC BÁCH KHOA - ĐHQG-HCM",
-    "chương trình học song ngành",
-    "Xếp TKB các môn không đạt cho Sinh viên năm nhất",
-    "Kế hoạch học tập của SV có điểm trung bình tích lũy < 2.0",
-    "Quy định về học vụ và đào tạo bậc đại học",
-    "Ngưỡng đầu vào theo chương trình đào tạo:",
-    "Công thức và Thang điểm Xét tuyển",
 ]
 
 

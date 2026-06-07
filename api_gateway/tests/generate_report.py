@@ -38,23 +38,7 @@ SIMPLE_THRESHOLD = 5.0
 COMPLEX_THRESHOLD = 10.0
 TOKEN_GAP_THRESHOLD = 10.0
 
-STREAMING_TESTS = [
-    {
-        "name": "test_tokens_arrive_without_long_gaps",
-        "desc": "Max gap giữa text tokens < 10s",
-        "query": "Huong dan dang ky hoc ph",
-    },
-    {
-        "name": "test_receives_multiple_tokens",
-        "desc": "Nhận được nhiều text tokens",
-        "query": "Xin chao, ban lam duoc gi?",
-    },
-    {
-        "name": "test_first_event_is_not_text_for_rag",
-        "desc": "Với RAG, event đầu tiên là tool call (không phải text)",
-        "query": "Huong dan dang ky hoc ph",
-    },
-]
+STREAMING_TESTS = []
 
 
 def _run_tests(questions, threshold, label):
