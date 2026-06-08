@@ -21,7 +21,7 @@ import type {
   TimeFilter,
   TimeFilterOption,
 } from "./MissingInMapTypes";
-import { missingInMapApi } from "@/services";
+import { missingInMapApi, wayfindingApi } from "@/services";
 
 const PAGE_SIZE = 5;
 const ROUTE_STATUS_OPTIONS: StatusFilterOption[] = [
@@ -117,9 +117,9 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
     },
   });
 
-  const updateRouteStatusMutation = useMutation({
-    mutationFn: ({ id, status, note }: { id: number; status: any; note?: string }) =>
-      missingInMapApi.updateRouteStatus(id, status, note),
+  const updateRouteMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: any }) =>
+      missingInMapApi.updateRoute(id, payload),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["missing-routes"] }),
@@ -207,7 +207,7 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
 
   const actionMeta = useMemo(() => getActionMeta(pendingAction), [pendingAction]);
 
-  async function confirmAction() {
+  async function confirmAction(_?: number, startNodeId?: number, endNodeId?: number) {
     if (!pendingAction) {
       return;
     }
@@ -216,20 +216,44 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
 
     try {
       if (pendingAction.type === "draw-route") {
-        await updateRouteStatusMutation.mutateAsync({
+        if (!startNodeId || !endNodeId) {
+          setActionError("Vui lòng chọn điểm bắt đầu và kết thúc.");
+          toast.error("Vui lòng chọn điểm bắt đầu và kết thúc.");
+          return;
+        }
+
+        // Verify that a path exists between the selected nodes
+        try {
+          await wayfindingApi.findRoute({
+            map_id: 0,
+            start_node_id: startNodeId,
+            end_node_id: endNodeId,
+          });
+        } catch (error) {
+          setActionError("Không tìm thấy đường đi giữa hai điểm này trên bản đồ. Vui lòng vẽ tuyến đường trước.");
+          toast.error("Không tìm thấy đường đi giữa hai điểm này.");
+          return;
+        }
+
+        await updateRouteMutation.mutateAsync({
           id: pendingAction.rowId,
-          status: "resolved",
-          note: "Đã vẽ và đồng bộ tuyến đường vào dữ liệu bản đồ.",
+          payload: {
+            status: "resolved",
+            start_node_id: startNodeId,
+            end_node_id: endNodeId,
+            resolved_note: "Đã liên kết tuyến đường và đồng bộ vào dữ liệu bản đồ.",
+          },
         });
         toast.success("Đã cập nhật tuyến đường thành công.");
-        router.push("/navigation/editor");
       }
 
       if (pendingAction.type === "remove") {
-        await updateRouteStatusMutation.mutateAsync({
+        await updateRouteMutation.mutateAsync({
           id: pendingAction.rowId,
-          status: "rejected",
-          note: "Đã loại bỏ theo xác nhận của quản trị viên.",
+          payload: {
+            status: "rejected",
+            resolved_note: "Đã loại bỏ theo xác nhận của quản trị viên.",
+          },
         });
         toast.success("Đã loại bỏ yêu cầu thành công.");
       }
@@ -241,7 +265,7 @@ export function MissingInMapRoutePanel({ activeTab, onTabChange }: MissingInMapR
     }
   }
 
-  const isSubmitting = updateRouteStatusMutation.isPending;
+  const isSubmitting = updateRouteMutation.isPending;
   const isLoading = routesQuery.isLoading || routeStatsQuery.isLoading;
 
   return (

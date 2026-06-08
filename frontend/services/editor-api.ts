@@ -49,9 +49,10 @@ export const editorApi = {
     return res.data;
   },
 
-  getEdges: async (mapId: number) => {
+  getEdges: async (mapId?: number) => {
+    const params = mapId !== undefined ? { map_id: mapId } : {};
     const res = await apiClient.get<MapEdge[]>("/wayfinder/api/edges", {
-      params: { map_id: mapId },
+      params,
     });
     return res.data;
   },

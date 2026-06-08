@@ -111,9 +111,9 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
     queryFn: () => missingInMapApi.getRouteStats(),
   });
 
-  const updateLocationStatusMutation = useMutation({
-    mutationFn: ({ id, status, note }: { id: number; status: any; note?: string }) =>
-      missingInMapApi.updateLocationStatus(id, status, note),
+  const updateLocationMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: any }) =>
+      missingInMapApi.updateLocation(id, payload),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["missing-locations"] }),
@@ -211,7 +211,7 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
 
   const actionMeta = useMemo(() => getActionMeta(pendingAction), [pendingAction]);
 
-  async function confirmAction() {
+  async function confirmAction(selectedNodeId?: number) {
     if (!pendingAction) {
       return;
     }
@@ -220,20 +220,30 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
 
     try {
       if (pendingAction.type === "add-location") {
-        await updateLocationStatusMutation.mutateAsync({
+        if (!selectedNodeId) {
+          setActionError("Vui lòng chọn một điểm để liên kết.");
+          toast.error("Vui lòng chọn một điểm để liên kết.");
+          return;
+        }
+
+        await updateLocationMutation.mutateAsync({
           id: pendingAction.rowId,
-          status: "resolved",
-          note: "Đã chuyển cho đội bản đồ xử lý.",
+          payload: {
+            status: "resolved",
+            resolved_node_id: selectedNodeId,
+            admin_note: "Đã liên kết với điểm trên bản đồ.",
+          },
         });
         showActionSuccess(pendingAction.type);
-        router.push("/navigation/editor");
       }
 
       if (pendingAction.type === "remove") {
-        await updateLocationStatusMutation.mutateAsync({
+        await updateLocationMutation.mutateAsync({
           id: pendingAction.rowId,
-          status: "rejected",
-          note: "Đã loại bỏ theo xác nhận của quản trị viên.",
+          payload: {
+            status: "rejected",
+            admin_note: "Đã loại bỏ theo xác nhận của quản trị viên.",
+          },
         });
         showActionSuccess(pendingAction.type);
       }
@@ -245,7 +255,7 @@ export function MissingInMapLocationPanel({ activeTab, onTabChange }: MissingInM
     }
   }
 
-  const isSubmitting = updateLocationStatusMutation.isPending;
+  const isSubmitting = updateLocationMutation.isPending;
   const isLoading = locationsQuery.isLoading || locationStatsQuery.isLoading;
 
   return (

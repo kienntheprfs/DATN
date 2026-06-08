@@ -49,6 +49,7 @@ export type MissingRouteStats = {
   total: number;
   pending: number;
   resolved: number;
+  rejected: number;
 };
 
 export const missingInMapApi = {
@@ -145,9 +146,11 @@ export const missingInMapApi = {
       start_name: string;
       start_building: string;
       start_floor: number;
+      start_node_id: number | null;
       end_name: string;
       end_building: string;
       end_floor: number;
+      end_node_id: number | null;
     }>
   ) => {
     const response = await apiClient.patch<MissingRouteItem>(`/wayfinder/api/missing-routes/${id}`, payload);
