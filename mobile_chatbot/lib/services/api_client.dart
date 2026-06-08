@@ -7,13 +7,19 @@ import '../utils/constants.dart';
 class ApiClient {
   Uri _uri(String path) => Uri.parse('${AppConstants.apiBase}$path');
 
-  Future<List<String>> fetchAgents() async {
+  Future<List<AgentInfo>> fetchAgents() async {
     final response = await http.get(_uri('/agent/info'));
     if (response.statusCode ~/ 100 != 2) throw Exception(response.statusCode);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final raw = body['agents'] as List<dynamic>? ?? [];
     return raw
-        .map((e) => (e as Map<String, dynamic>)['key']?.toString() ?? 'chatbot')
+        .map((e) {
+          final map = e as Map<String, dynamic>;
+          return AgentInfo(
+            key: map['key']?.toString() ?? 'chatbot',
+            description: map['description']?.toString(),
+          );
+        })
         .toList();
   }
 
@@ -64,19 +70,24 @@ class ApiClient {
     required String threadId,
     required String agentId,
     required Rating rating,
+    String? comment,
   }) async {
+    final body = <String, dynamic>{
+      'run_id': runId,
+      'thread_id': threadId,
+      'agent_id': agentId,
+      'rating': rating == Rating.like ? 'LIKE' : 'DISLIKE',
+    };
+    if (comment != null && comment.isNotEmpty) {
+      body['comment'] = comment;
+    }
     final response = await http.post(
       _uri('/dashboard/ratings'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({
-        'run_id': runId,
-        'thread_id': threadId,
-        'agent_id': agentId,
-        'rating': rating == Rating.like ? 'LIKE' : 'DISLIKE',
-      }),
+      body: jsonEncode(body),
     );
     if (response.statusCode ~/ 100 != 2) throw Exception(response.statusCode);
   }

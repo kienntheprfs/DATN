@@ -7,10 +7,16 @@ import 'package:mobile_chatbot/models/chat_models.dart';
 // Các hàm parse logic được trích xuất từ ApiClient để test
 
 /// Parse agents response (trích từ ApiClient.fetchAgents)
-List<String> parseAgents(Map<String, dynamic> body) {
+List<AgentInfo> parseAgents(Map<String, dynamic> body) {
   final raw = body['agents'] as List<dynamic>? ?? [];
   return raw
-      .map((e) => (e as Map<String, dynamic>)['key']?.toString() ?? 'chatbot')
+      .map((e) {
+        final map = e as Map<String, dynamic>;
+        return AgentInfo(
+          key: map['key']?.toString() ?? 'chatbot',
+          description: map['description']?.toString(),
+        );
+      })
       .toList();
 }
 
@@ -143,15 +149,21 @@ List<ChatMessage> parseHistoryMessages(Map<String, dynamic> body) {
 
 void main() {
   group('Parse Agents', () {
-    test('parse danh sách agents với key', () {
+    test('parse danh sách agents với key và description', () {
       final body = {
         'agents': [
-          {'key': 'knowledge-base-agent', 'name': 'Hỏi đáp'},
-          {'key': 'map-assistant', 'name': 'Chỉ đường'},
+          {'key': 'knowledge-base-agent', 'description': 'Trả lời câu hỏi về quy chế'},
+          {'key': 'map-assistant', 'description': 'Tìm đường trong trường'},
         ],
       };
       final result = parseAgents(body);
-      expect(result, ['knowledge-base-agent', 'map-assistant']);
+      expect(result, hasLength(2));
+      expect(result[0].key, 'knowledge-base-agent');
+      expect(result[0].description, 'Trả lời câu hỏi về quy chế');
+      expect(result[0].displayName, 'Hỏi đáp quy chế');
+      expect(result[1].key, 'map-assistant');
+      expect(result[1].description, 'Tìm đường trong trường');
+      expect(result[1].displayName, 'Bản đồ & Chỉ đường');
     });
 
     test('fallback về chatbot khi không có key', () {
@@ -162,8 +174,19 @@ void main() {
         ],
       };
       final result = parseAgents(body);
-      expect(result[0], 'chatbot');
-      expect(result[1], 'valid-agent');
+      expect(result[0].key, 'chatbot');
+      expect(result[0].displayName, 'chatbot');
+      expect(result[1].key, 'valid-agent');
+    });
+
+    test('description null khi không có description', () {
+      final body = {
+        'agents': [
+          {'key': 'test-agent'},
+        ],
+      };
+      final result = parseAgents(body);
+      expect(result[0].description, isNull);
     });
 
     test('trả về list rỗng khi agents null', () {

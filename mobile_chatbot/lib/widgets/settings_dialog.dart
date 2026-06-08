@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/chat_models.dart';
 import '../utils/constants.dart';
 
 class SettingsDialog extends StatefulWidget {
@@ -12,7 +13,7 @@ class SettingsDialog extends StatefulWidget {
     required this.isVoiceConnected,
   });
 
-  final List<String> agents;
+  final List<AgentInfo> agents;
   final String selectedAgent;
   final ValueChanged<String> onAgentChanged;
   final VoidCallback onAuthPressed;
@@ -100,9 +101,30 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   icon: const Icon(Icons.keyboard_arrow_down_rounded),
                   items: widget.agents
                       .map(
-                        (a) => DropdownMenuItem(
-                          value: a,
-                          child: Text(a, style: const TextStyle(fontSize: 15)),
+                        (a) => DropdownMenuItem<String>(
+                          value: a.key,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                a.displayName,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (a.description != null && a.description!.isNotEmpty)
+                                Text(
+                                  a.description!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
                         ),
                       )
                       .toList(),

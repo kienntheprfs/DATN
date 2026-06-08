@@ -183,3 +183,23 @@ class FloorSegment {
   final List<Offset> path;
   final List<String> steps;
 }
+
+class AgentInfo {
+  AgentInfo({required this.key, this.description});
+
+  final String key;
+  final String? description;
+
+  String get displayName {
+    switch (key) {
+      case 'router-agent':
+        return 'Trợ lý thông minh';
+      case 'knowledge-base-agent':
+        return 'Hỏi đáp quy chế';
+      case 'map-assistant':
+        return 'Bản đồ & Chỉ đường';
+      default:
+        return key;
+    }
+  }
+}

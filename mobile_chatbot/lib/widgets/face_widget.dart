@@ -60,6 +60,9 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
 
+    // Đổi số này để phóng to/thu nhỏ toàn bộ khuôn mặt (1.0 là gốc, 1.5 là to gấp rưỡi...)
+    const double scaleFactor = 1.25;
+
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -70,30 +73,40 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
           children: [
             SizedBox(height: topPadding + 60),
 
-            // Hàng Mắt và Má hồng
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildEyeWithBlush(context, false),
-                const SizedBox(width: 220), // tăng khoảng cách vì mắt to hơn
-                _buildEyeWithBlush(context, true),
-              ],
-            ),
+            // Bọc toàn bộ phần khuôn mặt vào Transform.scale
+            Transform.scale(
+              scale: scaleFactor, // BÍ QUYẾT LÀ Ở ĐÂY NÈ
+              alignment: Alignment
+                  .topCenter, // Giữ điểm neo ở trên cùng để phóng to không bị lẹm lên trên
+              child: Column(
+                children: [
+                  // Hàng Mắt và Má hồng
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildEyeWithBlush(context, false),
+                      const SizedBox(width: 150),
+                      _buildEyeWithBlush(context, true),
+                    ],
+                  ),
 
-            // Miệng
-            Transform.translate(
-              offset: const Offset(0, -160),
-              child: lottie.Lottie.asset(
-                'mouth_animation.json',
-                width: 420, // TO HƠN
-                controller: _mouthController,
-                onLoaded: (composition) {
-                  _mouthController.duration = composition.duration;
-                  if (widget.isSpeaking) _mouthController.repeat();
-                },
-                frameRate: lottie.FrameRate.max,
-                filterQuality: FilterQuality.high,
+                  // Miệng
+                  Transform.translate(
+                    offset: const Offset(0, -160),
+                    child: lottie.Lottie.asset(
+                      'mouth_animation.json',
+                      width: 420,
+                      controller: _mouthController,
+                      onLoaded: (composition) {
+                        _mouthController.duration = composition.duration;
+                        if (widget.isSpeaking) _mouthController.repeat();
+                      },
+                      frameRate: lottie.FrameRate.max,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -137,9 +150,9 @@ class _FaceWidgetState extends State<FaceWidget> with TickerProviderStateMixin {
 
         // Má hồng
         Positioned(
-          bottom: -10, // dính sát dưới mắt
-          left: mirrored ? null : 10,
-          right: mirrored ? 10 : null,
+          bottom: 10, // dính sát dưới mắt
+          left: mirrored ? null : 17,
+          right: mirrored ? 17 : null,
           child: const BlushDot(),
         ),
       ],
@@ -153,7 +166,7 @@ class BlushDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 100,
+      width: 120,
       height: 100,
       decoration: BoxDecoration(
         shape: BoxShape.circle,

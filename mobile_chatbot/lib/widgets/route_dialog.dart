@@ -13,20 +13,109 @@ class RouteDialog extends StatefulWidget {
 class _RouteDialogState extends State<RouteDialog> {
   int _currentStep = 0;
   int _activeFloorIdx = 0;
-  static const double _mapWidth = 800;
+  static const double _refMapWidth = 800;
+  static const double _refMapHeight = 600;
+  final _transformationController = TransformationController();
+  final _mapKey = GlobalKey();
+  Size _mapSize = const Size(300, 300);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateActiveFloorForStep(0);
+      _centerOnCurrentStep();
+    });
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _centerOnCoord(Offset coord) {
+    if (_mapSize.width <= 0 || _mapSize.height <= 0) return;
+    const S = 1.3;
+    final dx = _mapSize.width / 2 - coord.dx * S;
+    final dy = _mapSize.height / 2 - coord.dy * S;
+    _transformationController.value = Matrix4.identity()
+      ..translate(dx, dy)
+      ..scale(S);
+  }
+
+  void _centerOnCurrentStep() {
+    final instructions = widget.route.instructions ?? [];
+    if (_currentStep < instructions.length) {
+      final coord = instructions[_currentStep].coordinate;
+      if (coord != null) _centerOnCoord(coord);
+    }
+  }
+
+  String? get _activeMapImageUrl {
+    final routeMaps = widget.route.routeMaps;
+    if (routeMaps != null && _activeFloorIdx < routeMaps.length) {
+      return routeMaps[_activeFloorIdx].map.imageUrl;
+    }
+    return widget.route.map.imageUrl;
+  }
+
+  void _updateActiveFloorForStep(int stepIdx) {
+    final route = widget.route;
+    final instructions = route.instructions;
+    if (instructions == null || stepIdx >= instructions.length) return;
+    final coord = instructions[stepIdx].coordinate;
+    if (coord == null || route.routeMaps == null) return;
+
+    for (var i = 0; i < route.routeMaps!.length; i++) {
+      final match = route.routeMaps![i].nodes.any((n) =>
+          (n.x - coord.dx).abs() < 5 && (n.y - coord.dy).abs() < 5);
+      if (match) {
+        _activeFloorIdx = i;
+        break;
+      }
+    }
+  }
+
+  List<Offset> _currentFloorPath() {
+    final route = widget.route;
+
+    // Priority 1: use floors data if available (already has per-floor path)
+    if (route.floors != null && _activeFloorIdx < route.floors!.length) {
+      final floor = route.floors![_activeFloorIdx];
+      if (floor.path.length >= 2) return floor.path;
+    }
+
+    // Priority 2: filter full path by matching nodes on this floor
+    if (route.routeMaps != null && _activeFloorIdx < route.routeMaps!.length) {
+      final floorNodes = route.routeMaps![_activeFloorIdx].nodes;
+      if (floorNodes.length >= 2) {
+        final result = <Offset>[];
+        for (final pt in route.path) {
+          final isOnFloor = floorNodes.any((n) =>
+              (pt.dx - n.x).abs() < 3 && (pt.dy - n.y).abs() < 3);
+          if (isOnFloor) result.add(pt);
+        }
+        if (result.length >= 2) return result;
+      }
+    }
+
+    // Fallback: full path
+    return route.path;
+  }
 
   @override
   Widget build(BuildContext context) {
     final route = widget.route;
-    final totalSteps = route.steps.length;
+    final hasMultiFloor = route.routeMaps != null && route.routeMaps!.length > 1;
     final estimatedMinutes = route.totalDistanceM > 0
         ? (route.totalDistanceM / 80).ceil()
         : null;
-    final hasMultiFloor = route.routeMaps != null && route.routeMaps!.length > 1;
-    final activeInstruction = route.instructions != null && _currentStep < route.instructions!.length
-        ? route.instructions![_currentStep]
+    final instructions = route.instructions ?? [];
+    final totalSteps = instructions.length;
+    final activeInstruction = _currentStep < instructions.length
+        ? instructions[_currentStep]
         : null;
-    final currentCoord = activeInstruction?.coordinate;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -47,9 +136,9 @@ class _RouteDialogState extends State<RouteDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(route, estimatedMinutes, hasMultiFloor),
-            _buildMap(route, currentCoord),
-            _buildStepControl(route, totalSteps),
+            _buildHeader(route, estimatedMinutes),
+            _buildMap(activeInstruction?.coordinate),
+            _buildStepControl(instructions, totalSteps),
             if (hasMultiFloor) _buildFloorTabs(route),
           ],
         ),
@@ -57,7 +146,7 @@ class _RouteDialogState extends State<RouteDialog> {
     );
   }
 
-  Widget _buildHeader(RouteInfo route, int? estimatedMinutes, bool hasMultiFloor) {
+  Widget _buildHeader(RouteInfo route, int? estimatedMinutes) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
       decoration: BoxDecoration(
@@ -113,24 +202,6 @@ class _RouteDialogState extends State<RouteDialog> {
                         ),
                       ),
                     ],
-                    if (hasMultiFloor) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${route.routeMaps!.length} tầng',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.amber.shade700,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -155,68 +226,151 @@ class _RouteDialogState extends State<RouteDialog> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close_rounded, size: 20),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.grey.shade100,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, size: 20),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.grey.shade100,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMap(RouteInfo route, Offset? currentCoord) {
+  Widget _buildMap(Offset? currentCoord) {
     return SizedBox(
-      height: 280,
+      key: _mapKey,
+      height: 300,
       child: InteractiveViewer(
+        transformationController: _transformationController,
         maxScale: 3.0,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final scale = constraints.maxWidth / _mapWidth;
-            return AnimatedSwitcher(
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (constraints.hasBoundedWidth) {
+                _mapSize = constraints.biggest;
+              }
+            });
+            final scaleX = constraints.maxWidth / _refMapWidth;
+            final scaleY = constraints.maxHeight / _refMapHeight;
+            return ClipRect(
+              child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              switchInCurve: Curves.easeIn,
-              switchOutCurve: Curves.easeOut,
               child: Stack(
-                key: ValueKey('map-${_activeFloorIdx}'),
-              children: [
-                if (_activeMapImageUrl != null)
-                  Positioned.fill(
-                    child: Image.network(
-                      AppConstants.getFullImageUrl(_activeMapImageUrl!),
-                      fit: BoxFit.fill,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                key: ValueKey('map-$_activeFloorIdx'),
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  if (_activeMapImageUrl != null)
+                    Positioned.fill(
+                      child: Image.network(
+                        AppConstants.getFullImageUrl(_activeMapImageUrl!),
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
                     ),
-                  ),
-                CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: _RoutePainter(
-                    path: route.path,
-                    scale: scale,
-                    color: AppConstants.primaryColor,
-                  ),
-                ),
-                if (route.path.isNotEmpty) ...[
-                  _buildNode(route.path.first, scale, Colors.green),
-                  _buildNode(route.path.last, scale, Colors.red),
+                  ..._buildFloorPaths(scaleX, scaleY),
+                  ..._buildStartEndNodes(scaleX, scaleY),
+                  if (currentCoord != null)
+                    _buildCurrentNode(currentCoord, scaleX, scaleY),
                 ],
-                if (currentCoord != null)
-                  _buildCurrentNode(currentCoord, scale),
-              ],
+              ),
             ),
-          );
-        },
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildStepControl(RouteInfo route, int totalSteps) {
+  List<Widget> _buildFloorPaths(double scaleX, double scaleY) {
+    final floorPath = _currentFloorPath();
+    if (floorPath.length < 2) return [];
+
+    return [
+      Positioned.fill(
+        child: CustomPaint(
+          painter: _RoutePainter(
+            path: floorPath,
+            scaleX: scaleX,
+            scaleY: scaleY,
+            color: AppConstants.primaryColor,
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildStartEndNodes(double scaleX, double scaleY) {
+    final floorPath = _currentFloorPath();
+    if (floorPath.length < 2) return [];
+
+    return [
+      _buildNode(floorPath.first, scaleX, scaleY, Colors.green),
+      _buildNode(floorPath.last, scaleX, scaleY, Colors.red),
+    ];
+  }
+
+  Widget _buildNode(Offset pos, double scaleX, double scaleY, Color color) {
+    return Positioned(
+      left: pos.dx * scaleX - 6,
+      top: pos.dy * scaleY - 6,
+      child: Container(
+        width: 12,
+        height: 12,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentNode(Offset pos, double scaleX, double scaleY) {
+    return Positioned(
+      left: pos.dx * scaleX - 9,
+      top: pos.dy * scaleY - 9,
+      child: Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: Colors.blue,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blue.withOpacity(0.4),
+              blurRadius: 8,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: const Center(child: Icon(Icons.person, color: Colors.white, size: 10)),
+      ),
+    );
+  }
+
+  Widget _buildStepControl(List<InstructionStep> instructions, int totalSteps) {
+    final activeInstruction = _currentStep < instructions.length
+        ? instructions[_currentStep]
+        : null;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -228,14 +382,36 @@ class _RouteDialogState extends State<RouteDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Bước ${_currentStep + 1} / $totalSteps',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: AppConstants.secondaryColor.withOpacity(0.6),
-                  letterSpacing: 0.5,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Bước ${_currentStep + 1} / $totalSteps',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: AppConstants.secondaryColor.withOpacity(0.6),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  if (activeInstruction?.distanceM != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '${activeInstruction!.distanceM!.round()}m',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.blue.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Row(
                 children: [
@@ -244,7 +420,8 @@ class _RouteDialogState extends State<RouteDialog> {
                     onPressed: _currentStep > 0
                         ? () => setState(() {
                               _currentStep--;
-                              _updateActiveFloor(route);
+                              _updateActiveFloorForStep(_currentStep);
+                              _centerOnCurrentStep();
                             })
                         : null,
                   ),
@@ -254,7 +431,8 @@ class _RouteDialogState extends State<RouteDialog> {
                     onPressed: _currentStep < totalSteps - 1
                         ? () => setState(() {
                               _currentStep++;
-                              _updateActiveFloor(route);
+                              _updateActiveFloorForStep(_currentStep);
+                              _centerOnCurrentStep();
                             })
                         : null,
                   ),
@@ -262,13 +440,45 @@ class _RouteDialogState extends State<RouteDialog> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            _currentStep < route.steps.length ? route.steps[_currentStep] : '',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              height: 1.4,
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade400,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.shade400.withOpacity(0.4),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    activeInstruction?.text ?? 'Bắt đầu di chuyển',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -299,7 +509,11 @@ class _RouteDialogState extends State<RouteDialog> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: GestureDetector(
-                      onTap: () => setState(() => _activeFloorIdx = idx),
+                      onTap: () => setState(() {
+                        _activeFloorIdx = idx;
+                        _updateActiveFloorForStep(_currentStep);
+                        _centerOnCurrentStep();
+                      }),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -326,79 +540,6 @@ class _RouteDialogState extends State<RouteDialog> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  String? get _activeMapImageUrl {
-    final routeMaps = widget.route.routeMaps;
-    if (routeMaps != null && _activeFloorIdx < routeMaps.length) {
-      return routeMaps[_activeFloorIdx].map.imageUrl;
-    }
-    return widget.route.map.imageUrl;
-  }
-
-  void _updateActiveFloor(RouteInfo route) {
-    if (route.routeMaps == null || route.routeMaps!.isEmpty) return;
-    final instruction = route.instructions != null && _currentStep < route.instructions!.length
-        ? route.instructions![_currentStep]
-        : null;
-    if (instruction?.coordinate == null) return;
-    final coord = instruction!.coordinate!;
-    for (var i = 0; i < route.routeMaps!.length; i++) {
-      final nodes = route.routeMaps![i].nodes;
-      final match = nodes.any((n) =>
-          (n.x - coord.dx).abs() < 5 && (n.y - coord.dy).abs() < 5);
-      if (match) {
-        _activeFloorIdx = i;
-        break;
-      }
-    }
-  }
-
-  Widget _buildNode(Offset pos, double scale, Color color) {
-    return Positioned(
-      left: pos.dx * scale - 6,
-      top: pos.dy * scale - 6,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.3),
-              blurRadius: 4,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCurrentNode(Offset pos, double scale) {
-    return Positioned(
-      left: pos.dx * scale - 9,
-      top: pos.dy * scale - 9,
-      child: Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          color: Colors.blue,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blue.withOpacity(0.4),
-              blurRadius: 8,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: const Center(child: Icon(Icons.person, color: Colors.white, size: 10)),
       ),
     );
   }
@@ -432,12 +573,14 @@ class _NavButton extends StatelessWidget {
 class _RoutePainter extends CustomPainter {
   _RoutePainter({
     required this.path,
-    required this.scale,
+    required this.scaleX,
+    required this.scaleY,
     required this.color,
   });
 
   final List<Offset> path;
-  final double scale;
+  final double scaleX;
+  final double scaleY;
   final Color color;
 
   @override
@@ -460,9 +603,9 @@ class _RoutePainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
     final drawingPath = Path();
-    drawingPath.moveTo(path[0].dx * scale, path[0].dy * scale);
+    drawingPath.moveTo(path[0].dx * scaleX, path[0].dy * scaleY);
     for (var i = 1; i < path.length; i++) {
-      drawingPath.lineTo(path[i].dx * scale, path[i].dy * scale);
+      drawingPath.lineTo(path[i].dx * scaleX, path[i].dy * scaleY);
     }
 
     canvas.drawPath(drawingPath, glowPaint);

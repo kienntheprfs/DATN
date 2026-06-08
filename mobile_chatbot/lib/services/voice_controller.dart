@@ -236,28 +236,39 @@ class VoiceController extends ChangeNotifier {
           }
           _startSpeakingTimeout(); // Proactive stop
 
-          if (data['final'] == true) {
-            final text = currentTranscript.trim();
-            if (text.isNotEmpty) {
-              final now = DateTime.now();
-              if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
-                _lastMessageTime = now;
-                
-                final normalizedNew = _normalizeForComparison(text);
-                if (transcriptHistory.isNotEmpty) {
-                  final normalizedOld = _normalizeForComparison(transcriptHistory.last);
-                  if (normalizedNew.startsWith(normalizedOld)) {
-                    transcriptHistory[transcriptHistory.length - 1] = text;
-                  } else if (transcriptHistory.last != text) {
-                    transcriptHistory.add(text);
+              if (data['final'] == true) {
+                final text = currentTranscript.trim();
+                if (text.isNotEmpty) {
+                  final now = DateTime.now();
+                  if (_lastMessageTime == null || now.difference(_lastMessageTime!) > _messageDebounce) {
+                    _lastMessageTime = now;
+                    
+                    // Dedup with exact text match (matching frontend)
+                    final userKey = 'user:$text';
+                    if (!seen.contains(userKey)) {
+                      seen.add(userKey);
+                      if (seen.length > 50) {
+                        final entries = seen.toList();
+                        seen.clear();
+                        seen.addAll(entries.skip(25));
+                      }
+                    }
+                    
+                    final normalizedNew = _normalizeForComparison(text);
+                    if (transcriptHistory.isNotEmpty) {
+                      final normalizedOld = _normalizeForComparison(transcriptHistory.last);
+                      if (normalizedNew.startsWith(normalizedOld)) {
+                        transcriptHistory[transcriptHistory.length - 1] = text;
+                      } else if (transcriptHistory.last != text) {
+                        transcriptHistory.add(text);
+                      }
+                    } else {
+                      transcriptHistory.add(text);
+                    }
+                    _append(Role.user, text);
+                    _startNoResponseTimer();
                   }
-                } else {
-                  transcriptHistory.add(text);
                 }
-                _append(Role.user, text);
-                _startNoResponseTimer();
-              }
-            }
           }
           notifyListeners();
         }
@@ -296,16 +307,21 @@ class VoiceController extends ChangeNotifier {
             final text = output.trim();
             _cancelNoResponseTimer();
             
-            final normalizedNew = _normalizeForComparison(text);
-            final key = 'bot:$normalizedNew';
+            // Exact text match dedup (matching frontend use-voice.ts)
+            final key = 'bot:$text';
+            if (seen.contains(key)) return;
+            seen.add(key);
             
-            // Replicate Web's recentMessagesRef logic: ignore if we've seen this exact chunk recently
-            if (seen.contains(key)) {
-              return;
+            // Capacity management: keep last 25 if over 50 (matching frontend)
+            if (seen.length > 50) {
+              final entries = seen.toList();
+              seen.clear();
+              seen.addAll(entries.skip(25));
             }
             
             // Cập nhật history với bot-output
             if (transcriptHistory.isNotEmpty) {
+              final normalizedNew = _normalizeForComparison(text);
               final normalizedOld = _normalizeForComparison(transcriptHistory.last);
               // Nếu text mới bao trùm text cũ (cumulative), cập nhật thay vì thêm mới
               if (normalizedNew.startsWith(normalizedOld)) {
@@ -380,20 +396,17 @@ class VoiceController extends ChangeNotifier {
     final parsedText = _parseMarkdown(text).trim();
     if (parsedText.isEmpty) return;
     
-    // 1. Deduplication key based on role and text only
+    // Dedup — _onData also adds to seen with raw text, so this catches remaining cases
     final key = '${role.name}:$parsedText';
     if (seen.contains(key)) return;
     seen.add(key);
 
-    // 2. Logic for appending or overwriting
     if (messages.isNotEmpty && messages.last.role == role) {
       final lastMsg = messages.last;
       
       final normalizedNew = _normalizeForComparison(parsedText);
       final normalizedOld = _normalizeForComparison(lastMsg.text);
 
-      // Nếu tin nhắn mới bắt đầu bằng tin nhắn cũ (so sánh không dấu), 
-      // thì đây là bản cập nhật đầy đủ (overwrite)
       if (normalizedNew.startsWith(normalizedOld) && normalizedOld.isNotEmpty) {
         messages[messages.length - 1] = ChatMessage(
           role, 
@@ -401,7 +414,6 @@ class VoiceController extends ChangeNotifier {
           runId: runId ?? lastMsg.runId
         );
       } else if (lastMsg.text != parsedText && !normalizedOld.contains(normalizedNew)) {
-        // Nếu là đoạn text mới hoàn toàn, append với dấu xuống dòng
         messages[messages.length - 1] = ChatMessage(
           role, 
           '${lastMsg.text}\n$parsedText', 
@@ -409,7 +421,6 @@ class VoiceController extends ChangeNotifier {
         );
       }
     } else {
-      // Tin nhắn đầu tiên cho role này
       messages.add(ChatMessage(role, parsedText, runId: runId));
     }
     notifyListeners();

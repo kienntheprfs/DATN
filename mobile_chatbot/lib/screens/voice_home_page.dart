@@ -23,9 +23,13 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
   late final voice = VoiceController(api: api, onError: _toast);
   String? token;
   String userId = '';
-  String selectedAgent = 'knowledge-base-agent';
+  String selectedAgent = 'router-agent';
   bool _isLoading = false;
-  List<String> agents = ['knowledge-base-agent', 'map-assistant'];
+  List<AgentInfo> agents = [
+    AgentInfo(key: 'router-agent'),
+    AgentInfo(key: 'knowledge-base-agent'),
+    AgentInfo(key: 'map-assistant'),
+  ];
   RouteInfo? latestRoute;
   String? lastAutoShownRouteKey;
   List<Landmark>? latestLandmarks;
@@ -67,15 +71,16 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
       if (!mounted || loaded.isEmpty) return;
       setState(() {
         agents = loaded;
-        // Map common keys to friendly names if needed
-        if (!agents.contains(selectedAgent)) {
-           if (agents.contains('knowledge-base-agent')) {
-             selectedAgent = 'knowledge-base-agent';
-           } else if (agents.contains('map-assistant')) {
-             selectedAgent = 'map-assistant';
-           } else if (agents.isNotEmpty) {
-             selectedAgent = agents.first;
-           }
+        if (!agents.any((a) => a.key == selectedAgent)) {
+          if (agents.any((a) => a.key == 'router-agent')) {
+            selectedAgent = 'router-agent';
+          } else if (agents.any((a) => a.key == 'knowledge-base-agent')) {
+            selectedAgent = 'knowledge-base-agent';
+          } else if (agents.any((a) => a.key == 'map-assistant')) {
+            selectedAgent = 'map-assistant';
+          } else if (agents.isNotEmpty) {
+            selectedAgent = agents.first.key;
+          }
         }
       });
     } catch (_) {}
@@ -169,6 +174,11 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
     Future.delayed(const Duration(seconds: 3), () {
       if (entry.mounted) entry.remove();
     });
+  }
+
+  String _getAgentDisplayName(String agentKey) {
+    final match = agents.where((a) => a.key == agentKey);
+    return match.isNotEmpty ? match.first.displayName : agentKey;
   }
 
   Future<void> _switchAgent(String agentId) async {
@@ -290,74 +300,275 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  _StatusIndicator(status: voice.status),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _AgentTab(
-                          label: 'HỎI ĐÁP',
-                          isSelected: selectedAgent == 'knowledge-base-agent',
-                          onPressed: () => _switchAgent('knowledge-base-agent'),
+                  // Left section: status + agent
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _StatusIndicator(status: voice.status),
+                      const SizedBox(width: 8),
+                      PopupMenuButton<String>(
+                        onSelected: _switchAgent,
+                        offset: const Offset(0, 4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const SizedBox(width: 8),
-                        _AgentTab(
-                          label: 'CHỈ ĐƯỜNG',
-                          isSelected: selectedAgent == 'map-assistant',
-                          onPressed: () => _switchAgent('map-assistant'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _HeaderAction(
-                    icon: Icons.history_rounded,
-                    onPressed: () async {
-                      if (token == null) {
-                        final result = await showDialog<(String, String)>(
-                          context: context,
-                          builder: (_) => AuthDialog(api: api),
-                        );
-                        if (result != null) {
-                          setState(() {
-                            token = result.$1;
-                            userId = result.$2;
-                          });
-                        } else {
-                          return;
-                        }
-                      }
-                      
-                      if (!mounted) return;
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => HistoryListScreen(
-                            token: token!,
-                            api: api,
+                        elevation: 4,
+                        itemBuilder: (context) {
+                          final items = <PopupMenuEntry<String>>[];
+                          items.add(
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Text(
+                                  'Chọn Agent hoạt động',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                          items.add(const PopupMenuDivider(height: 1));
+                          for (final a in agents) {
+                            final isSel = selectedAgent == a.key;
+                            items.add(
+                              PopupMenuItem<String>(
+                                value: a.key,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            a.displayName,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: isSel ? AppConstants.primaryColor : Colors.black87,
+                                            ),
+                                          ),
+                                          if (a.description != null && a.description!.isNotEmpty)
+                                            Text(
+                                              a.description!,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade500,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isSel)
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: AppConstants.primaryColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+                          return items;
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.settings, size: 13, color: AppConstants.secondaryColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Agent:',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                _getAgentDisplayName(selectedAgent),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppConstants.primaryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
+                            ],
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      if (voice.status == VoiceStatus.connected) const _TypingIndicator(),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  if (token != null)
-                    _HeaderAction(
-                      icon: Icons.logout_rounded,
-                      onPressed: () async {
-                        await voice.disconnect();
-                        _logout();
-                      },
-                    ),
-                  const SizedBox(width: 4),
-                  _HeaderAction(
-                    icon: Icons.close_rounded,
-                    onPressed: () async {
-                      await voice.disconnect();
-                      _logout();
-                      if (Navigator.canPop(context)) {
-                        Navigator.pop(context);
-                      }
-                    },
+                  const Spacer(),
+                  // Right section: call, mic toggle, history, logout, close
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Call button
+                      GestureDetector(
+                        onTap: connecting ? null : _toggleVoice,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            color: connected
+                                ? AppConstants.errorColor
+                                : AppConstants.primaryColor,
+                            boxShadow: [
+                              BoxShadow(
+                                color: (connected
+                                        ? AppConstants.errorColor
+                                        : AppConstants.primaryColor)
+                                    .withOpacity(0.3),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: connecting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      connected
+                                          ? Icons.call_end_rounded
+                                          : Icons.mic_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      connected ? 'Ngắt' : 'Kết nối',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      if (connected)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: GestureDetector(
+                            onTap: voice.toggleMute,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: voice.isMuted
+                                    ? AppConstants.errorColor.withOpacity(0.1)
+                                    : AppConstants.primaryColor.withOpacity(0.1),
+                                border: Border.all(
+                                  color: voice.isMuted
+                                      ? AppConstants.errorColor
+                                      : AppConstants.primaryColor,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Icon(
+                                voice.isMuted
+                                    ? Icons.mic_off_rounded
+                                    : Icons.mic_rounded,
+                                color: voice.isMuted
+                                    ? AppConstants.errorColor
+                                    : AppConstants.primaryColor,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Rating star
+                      if (voice.runId != null)
+                        _RatingStar(
+                          token: token,
+                          runId: voice.runId!,
+                          threadId: voice.threadId ?? '',
+                          agentId: selectedAgent,
+                          api: api,
+                        ),
+                      const SizedBox(width: 4),
+                      _HeaderAction(
+                        icon: Icons.history_rounded,
+                        onPressed: () async {
+                          if (token == null) {
+                            final result = await showDialog<(String, String)>(
+                              context: context,
+                              builder: (_) => AuthDialog(api: api),
+                            );
+                            if (result != null) {
+                              setState(() {
+                                token = result.$1;
+                                userId = result.$2;
+                              });
+                            } else {
+                              return;
+                            }
+                          }
+                          
+                          if (!mounted) return;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => HistoryListScreen(
+                                token: token!,
+                                api: api,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 4),
+                      if (token != null)
+                        _HeaderAction(
+                          icon: Icons.logout_rounded,
+                          onPressed: () async {
+                            await voice.disconnect();
+                            _logout();
+                          },
+                        ),
+                      const SizedBox(width: 4),
+                      _HeaderAction(
+                        icon: Icons.close_rounded,
+                        onPressed: () async {
+                          await voice.disconnect();
+                          _logout();
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -369,134 +580,120 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
             left: 20,
             right: 20,
             bottom: MediaQuery.of(context).padding.bottom + 20,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Transcript Card
-                if (voice.transcriptHistory.isNotEmpty || voice.currentTranscript.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+            child: (voice.transcriptHistory.isNotEmpty || voice.currentTranscript.isNotEmpty)
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            voice.currentSpeaker == Role.user
-                                ? Icons.person_rounded
-                                : Icons.smart_toy_rounded,
-                            size: 14,
-                            color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            voice.currentSpeaker == Role.user ? 'BẠN' : 'BOT',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1,
-                              color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 90),
-                        child: SingleChildScrollView(
-                          controller: _transcriptScrollController,
-                          child: MarkdownBody(
-                            data: voice.currentTranscript.isNotEmpty
-                                ? voice.currentTranscript
-                                : voice.transcriptHistory.join('\n'),
-                            styleSheet: MarkdownStyleSheet(
-                              p: const TextStyle(
-                                fontSize: 15,
-                                height: 1.4,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black87,
-                              ),
-                              img: const TextStyle(
-                                fontSize: 10,
-                              ),
-                            ),
-                            imageBuilder: (uri, title, alt) {
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                constraints: const BoxConstraints(maxHeight: 180),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 10,
-                                    ),
-                                  ],
+                      // Transcript
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  voice.currentSpeaker == Role.user
+                                      ? Icons.person_rounded
+                                      : Icons.smart_toy_rounded,
+                                  size: 14,
+                                  color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    AppConstants.getFullImageUrl(uri.toString()),
-                                    fit: BoxFit.contain,
+                                const SizedBox(width: 6),
+                                Text(
+                                  voice.currentSpeaker == Role.user ? 'BẠN' : 'BOT',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1,
+                                    color: voice.currentSpeaker == Role.user ? Colors.blue : Colors.purple,
                                   ),
                                 ),
-                              );
-                            },
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 90),
+                              child: SingleChildScrollView(
+                                controller: _transcriptScrollController,
+                                child: MarkdownBody(
+                                  data: voice.currentTranscript.isNotEmpty
+                                      ? voice.currentTranscript
+                                      : voice.transcriptHistory.join('\n'),
+                                  styleSheet: MarkdownStyleSheet(
+                                    p: const TextStyle(
+                                      fontSize: 15,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
+                                    img: const TextStyle(
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                  imageBuilder: (uri, title, alt) {
+                                    return Container(
+                                      margin: const EdgeInsets.symmetric(vertical: 8),
+                                      constraints: const BoxConstraints(maxHeight: 180),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 10,
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.network(
+                                          AppConstants.getFullImageUrl(uri.toString()),
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Action buttons bên phải
+                      if (latestConfirmationJson != null || latestLandmarks != null || latestRoute != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (latestConfirmationJson != null)
+                                _SmallAction(
+                                  icon: Icons.navigation_rounded,
+                                  onPressed: () => _openConfirmationDialog(latestConfirmationJson!),
+                                  color: Colors.purple.shade600,
+                                ),
+                              if (latestConfirmationJson != null && latestLandmarks != null)
+                                const SizedBox(height: 8),
+                              if (latestLandmarks != null)
+                                _SmallAction(
+                                  icon: Icons.image_search_rounded,
+                                  onPressed: () => _openLandmarkModal(latestLandmarks!),
+                                  color: Colors.blue.shade600,
+                                ),
+                              if ((latestConfirmationJson != null || latestLandmarks != null) && latestRoute != null)
+                                const SizedBox(height: 8),
+                              if (latestRoute != null)
+                                _SmallAction(
+                                  icon: Icons.map_outlined,
+                                  onPressed: () => _openRouteModal(latestRoute!),
+                                  color: Colors.orange.shade600,
+                                ),
+                            ],
                           ),
                         ),
-                      ),
                     ],
-                  ),
-                Row(
-                  children: [
-                    if (connected) ...[
-                      _CircularAction(
-                        icon: voice.isMuted
-                            ? Icons.mic_off_rounded
-                            : Icons.mic_rounded,
-                        onPressed: voice.toggleMute,
-                        color: voice.isMuted
-                            ? AppConstants.errorColor
-                            : AppConstants.primaryColor,
-                        isActive: !voice.isMuted,
-                      ),
-                      const SizedBox(width: 16),
-                    ],
-                    Expanded(
-                      child: _MainCallButton(
-                        isConnected: connected,
-                        isConnecting: connecting,
-                        onPressed: _toggleVoice,
-                      ),
-                    ),
-                    if (latestRoute != null || latestLandmarks != null || latestConfirmationJson != null) ...[
-                      const SizedBox(width: 16),
-                      if (latestConfirmationJson != null)
-                        _CircularAction(
-                          icon: Icons.navigation_rounded,
-                          onPressed: () => _openConfirmationDialog(latestConfirmationJson!),
-                          color: Colors.purple.shade600,
-                        ),
-                      if (latestLandmarks != null) ...[
-                        if (latestConfirmationJson != null) const SizedBox(width: 8),
-                        _CircularAction(
-                          icon: Icons.image_search_rounded,
-                          onPressed: () => _openLandmarkModal(latestLandmarks!),
-                          color: Colors.blue.shade600,
-                        ),
-                      ],
-                      if (latestRoute != null) ...[
-                        if (latestConfirmationJson != null || latestLandmarks != null) const SizedBox(width: 8),
-                        _CircularAction(
-                          icon: Icons.map_outlined,
-                          onPressed: () => _openRouteModal(latestRoute!),
-                          color: Colors.orange.shade600,
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ],
-            ),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -551,46 +748,94 @@ class _HeaderAction extends StatelessWidget {
   }
 }
 
-class _AgentTab extends StatelessWidget {
-  const _AgentTab({
-    required this.label,
-    required this.isSelected,
-    required this.onPressed,
-  });
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
 
-  final String label;
-  final bool isSelected;
-  final VoidCallback onPressed;
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: SizedBox(
+        width: 28,
+        height: 16,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(3, (i) {
+                final delay = i * 0.2;
+                final t = (_controller.value - delay).clamp(0.0, 1.0);
+                final wave = (1 - (t * 2 - 1).abs()) * 1.0;
+                final offset = 2.0 + (wave * 6.0);
+                return Transform.translate(
+                  offset: Offset(0, -offset),
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppConstants.primaryColor.withOpacity(0.4 + wave * 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallAction extends StatelessWidget {
+  const _SmallAction({
+    required this.icon,
+    required this.onPressed,
+    required this.color,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
       onTap: onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
-          color: isSelected ? AppConstants.primaryColor : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppConstants.primaryColor.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : null,
+          shape: BoxShape.circle,
+          color: color.withOpacity(0.1),
+          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
-            color: isSelected ? Colors.white : Colors.grey.shade600,
-          ),
-        ),
+        child: Icon(icon, color: color, size: 22),
       ),
     );
   }
@@ -635,60 +880,274 @@ class _CircularAction extends StatelessWidget {
   }
 }
 
-class _MainCallButton extends StatelessWidget {
-  const _MainCallButton({
-    required this.isConnected,
-    required this.isConnecting,
-    required this.onPressed,
+class _RatingStar extends StatefulWidget {
+  const _RatingStar({
+    required this.token,
+    required this.runId,
+    required this.threadId,
+    required this.agentId,
+    required this.api,
   });
 
-  final bool isConnected;
-  final bool isConnecting;
-  final VoidCallback onPressed;
+  final String? token;
+  final String runId;
+  final String threadId;
+  final String agentId;
+  final ApiClient api;
+
+  @override
+  State<_RatingStar> createState() => _RatingStarState();
+}
+
+class _RatingStarState extends State<_RatingStar> {
+  Rating? _rated;
+
+  void _showAuthRequired() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Vui lòng đăng nhập để đánh giá')),
+    );
+  }
+
+  Future<void> _handleLike() async {
+    if (_rated == Rating.like) return;
+    if (widget.token == null) { _showAuthRequired(); return; }
+    try {
+      await widget.api.submitRating(
+        token: widget.token!,
+        runId: widget.runId,
+        threadId: widget.threadId,
+        agentId: widget.agentId,
+        rating: Rating.like,
+      );
+      if (mounted) setState(() => _rated = Rating.like);
+    } catch (_) {}
+  }
+
+  Future<void> _handleDislike() async {
+    if (_rated == Rating.dislike) return;
+    if (widget.token == null) { _showAuthRequired(); return; }
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => _DislikeDialog(),
+    );
+    if (result == null) return;
+    try {
+      await widget.api.submitRating(
+        token: widget.token!,
+        runId: widget.runId,
+        threadId: widget.threadId,
+        agentId: widget.agentId,
+        rating: Rating.dislike,
+        comment: result,
+      );
+      if (mounted) setState(() => _rated = Rating.dislike);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: isConnecting ? null : onPressed,
-      borderRadius: BorderRadius.circular(30),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: 60,
-        decoration: BoxDecoration(
-          color: isConnected
-              ? AppConstants.errorColor
-              : AppConstants.primaryColor,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  (isConnected
-                          ? AppConstants.errorColor
-                          : AppConstants.primaryColor)
-                      .withOpacity(0.4),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isConnected ? Icons.call_end_rounded : Icons.mic_rounded,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              isConnecting
-                  ? 'ĐANG KẾT NỐI'
-                  : (isConnected ? 'KẾT THÚC' : 'BẮT ĐẦU NÓI'),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-                fontSize: 14,
+    return PopupMenuButton<Rating>(
+      onSelected: (rating) {
+        if (rating == Rating.like) {
+          _handleLike();
+        } else {
+          _handleDislike();
+        }
+      },
+      offset: const Offset(0, 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      elevation: 4,
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: Rating.like,
+          child: Row(
+            children: [
+              Icon(Icons.thumb_up_rounded, size: 18, color: _rated == Rating.like ? Colors.green.shade600 : Colors.grey),
+              const SizedBox(width: 8),
+              Text(
+                _rated == Rating.like ? 'Đã thích' : 'Thích',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: _rated == Rating.like ? FontWeight.w700 : FontWeight.w500,
+                  color: _rated == Rating.like ? Colors.green.shade700 : Colors.black87,
+                ),
               ),
+              if (_rated == Rating.like)
+                const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Icon(Icons.check, size: 16, color: Colors.green),
+                ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: Rating.dislike,
+          child: Row(
+            children: [
+              Icon(Icons.thumb_down_rounded, size: 18, color: _rated == Rating.dislike ? Colors.orange.shade600 : Colors.grey),
+              const SizedBox(width: 8),
+              Text(
+                _rated == Rating.dislike ? 'Đã không thích' : 'Không thích',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: _rated == Rating.dislike ? FontWeight.w700 : FontWeight.w500,
+                  color: _rated == Rating.dislike ? Colors.orange.shade700 : Colors.black87,
+                ),
+              ),
+              if (_rated == Rating.dislike)
+                const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Icon(Icons.check, size: 16, color: Colors.orange),
+                ),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _rated != null ? Colors.amber.withOpacity(0.15) : Colors.transparent,
+        ),
+        child: Icon(
+          _rated != null ? Icons.star_rounded : Icons.star_outline_rounded,
+          size: 18,
+          color: _rated != null ? Colors.amber.shade600 : AppConstants.secondaryColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _DislikeDialog extends StatefulWidget {
+  const _DislikeDialog();
+
+  @override
+  State<_DislikeDialog> createState() => _DislikeDialogState();
+}
+
+class _DislikeDialogState extends State<_DislikeDialog> {
+  final _tags = [
+    'Thông tin sai',
+    'Không rõ ràng',
+    'Chưa đầy đủ',
+    'Quá dài',
+    'Không liên quan',
+    'Khác',
+  ];
+  final Set<String> _selectedTags = {};
+  final _commentController = TextEditingController();
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final comment = _selectedTags.join(', ') +
+        (_commentController.text.isNotEmpty
+            ? '. ${_commentController.text}'
+            : '');
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Phản hồi về câu trả lời',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Chọn lý do (tùy chọn)',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _tags.map((tag) {
+                final isSelected = _selectedTags.contains(tag);
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    if (isSelected) {
+                      _selectedTags.remove(tag);
+                    } else {
+                      _selectedTags.add(tag);
+                    }
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppConstants.primaryColor
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppConstants.primaryColor
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Nhận xét thêm',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _commentController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Nhập nhận xét của bạn...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Hủy'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, comment),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Gửi phản hồi'),
+                ),
+              ],
             ),
           ],
         ),
@@ -696,6 +1155,7 @@ class _MainCallButton extends StatelessWidget {
     );
   }
 }
+
 class _PremiumToast extends StatefulWidget {
   const _PremiumToast({required this.message, required this.onDismiss});
   final String message;

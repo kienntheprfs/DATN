@@ -69,8 +69,18 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
     Navigator.of(context, rootNavigator: true).pop();
   }
 
-  void _handleSkip() {
-    widget.onConfirm('Tôi không biết chính xác ở đâu');
+  void _handleReportMissing() {
+    String message;
+    if (_needsStart && _needsEnd) {
+      message = 'Không tìm thấy điểm bắt đầu hoặc điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.';
+    } else if (_needsStart) {
+      message = 'Không tìm thấy điểm bắt đầu phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.';
+    } else if (_needsEnd) {
+      message = 'Không tìm thấy điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.';
+    } else {
+      message = 'Không có địa điểm nào phù hợp. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.';
+    }
+    widget.onConfirm(message);
     Navigator.of(context, rootNavigator: true).pop();
   }
 
@@ -298,18 +308,29 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
               ),
               const SizedBox(height: 12),
 
-              // Skip button
+              // Report missing button
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: _handleSkip,
-                  child: Text(
-                    'Tôi không biết chính xác ở đâu',
-                    style: TextStyle(
-                      color: AppConstants.secondaryColor.withOpacity(0.7),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  onPressed: _handleReportMissing,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade400),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Không có trong các lựa chọn - Báo cáo với quản trị viên',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.orange.shade400,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
