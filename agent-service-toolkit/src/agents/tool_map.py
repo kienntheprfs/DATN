@@ -308,9 +308,14 @@ def find_route_func(
             if not results:
                 return None, None, None
             
-            # If only one result, use it
+            # If only one result, check if score is high enough
             if len(results) == 1:
-                return results[0]["node_id"], format_location(results[0]), None
+                score = results[0].get("score", 0)
+                if score >= 98:
+                    return results[0]["node_id"], format_location(results[0]), None
+                else:
+                    # Score not high enough, need confirmation
+                    return None, None, [format_location(results[0])]
             
             # If multiple results, check if the first one is a very strong match
             score1 = results[0].get("score", 0)
@@ -327,19 +332,59 @@ def find_route_func(
             if score1 - score2 >= 20:
                 return results[0]["node_id"], format_location(results[0]), None
             
-            # Otherwise, it's ambiguous
-            # Tin tưởng hoàn toàn vào sắp xếp của Backend, lấy Top 10 gợi ý
-            opts = [format_location(r) for r in results[:10]]
-            return None, None, opts
+            # Filter options: chỉ lấy score >= 60
+            high_score_results = [r for r in results if r.get("score", 0) >= 60]
+            
+            if high_score_results:
+                # Có ít nhất 1 kết quả có score >= 60, lấy danh sách này làm options
+                opts = [format_location(r) for r in high_score_results]
+                return None, None, opts
+            else:
+                # Không có kết quả nào >= 60, báo là không rõ
+                return None, None, []  # Empty list signals "not found"
 
         start_node_id, start_display, start_opts = get_best_node(start_results, from_location)
         end_node_id, end_display, end_opts = get_best_node(end_results, to_location)
 
+        # Handle case where score is too low (empty options list)
+        if start_opts is not None and len(start_opts) == 0:
+            _report_missing_location_internal(
+                name=from_location,
+                building_name=None,
+                floor_level=None,
+                description=f"Người dùng tìm đường từ '{from_location}' nhưng không có kết quả phù hợp (score < 60). Yêu cầu xác nhận hoặc báo cáo.",
+            )
+            return json.dumps({
+                "type": "route",
+                "status": "error",
+                "error_type": "start_not_found",
+                "message": f"Không tìm thấy điểm xuất phát phù hợp cho '{from_location}'. Vui lòng kiểm tra lại tên địa điểm hoặc cung cấp thông tin chi tiết hơn (ví dụ: 'Phòng 101 Tòa B4' hoặc 'Tầng 1 - Khu A').",
+                "start_name": from_location,
+                "end_name": to_location,
+            })
+        
+        if end_opts is not None and len(end_opts) == 0:
+            _report_missing_location_internal(
+                name=to_location,
+                building_name=None,
+                floor_level=None,
+                description=f"Người dùng tìm đường đến '{to_location}' nhưng không có kết quả phù hợp (score < 60). Yêu cầu xác nhận hoặc báo cáo.",
+            )
+            return json.dumps({
+                "type": "route",
+                "status": "error",
+                "error_type": "end_not_found",
+                "message": f"Không tìm thấy điểm đến phù hợp cho '{to_location}'. Vui lòng kiểm tra lại tên địa điểm hoặc cung cấp thông tin chi tiết hơn (ví dụ: 'Phòng 101 Tòa B4' hoặc 'Thư viện Tầng 3').",
+                "start_name": from_location,
+                "end_name": to_location,
+            })
+
+        # Check if confirmation is needed (ambiguous - multiple options >= 60)
         if not start_node_id or not end_node_id:
             return json.dumps({
                 "type": "route",
                 "status": "needs_confirmation",
-                "message": "Tìm thấy nhiều địa điểm phù hợp. Vui lòng chọn địa điểm chính xác:",
+                "message": "Tìm thấy nhiều địa điểm phù hợp. Vui lòng chọn điểm chính xác:",
                 "start_name": from_location,
                 "end_name": to_location,
                 "start_options": start_opts if not start_node_id else [start_display],

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, MapPin, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { getFullImageUrl } from '@/services/wayfinding-client';
 
 interface Landmark {
@@ -16,10 +16,12 @@ interface Landmark {
 interface LandmarkCarouselProps {
   landmarks: Landmark[];
   onConfirm: (landmark: Landmark) => void;
+  onReportMissing?: () => void;
   disabled?: boolean;
+  mode?: 'location' | 'destination'; // 'location' = xác nhận vị trí hiện tại, 'destination' = chọn điểm đến
 }
 
-export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: LandmarkCarouselProps) {
+export function LandmarkCarousel({ landmarks, onConfirm, onReportMissing, disabled = false, mode = 'location' }: LandmarkCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   if (!landmarks || landmarks.length === 0) return null;
@@ -28,6 +30,9 @@ export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: Lan
 
   const next = () => setCurrentIndex((prev) => (prev + 1) % landmarks.length);
   const prev = () => setCurrentIndex((prev) => (prev - 1 + landmarks.length) % landmarks.length);
+
+  const isDestinationMode = mode === 'destination';
+  const confirmButtonText = isDestinationMode ? 'Chọn điểm đến này' : 'Tôi đang ở đây';
 
   return (
     <div className="flex flex-col gap-3 my-2 max-w-lg mx-auto overflow-hidden">
@@ -89,8 +94,20 @@ export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: Lan
         className="w-full h-10 gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50"
       >
         <CheckCircle2 className="w-4 h-4" />
-        <span className="font-bold text-xs uppercase tracking-wide">Tôi đang ở đây</span>
+        <span className="font-bold text-xs uppercase tracking-wide">{confirmButtonText}</span>
       </Button>
+
+      {onReportMissing && (
+        <Button 
+          onClick={onReportMissing}
+          variant="outline" 
+          size="sm" 
+          className="w-full gap-2 text-muted-foreground hover:text-foreground text-xs rounded-xl"
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Không có trong các lựa chọn - Báo cáo với quản trị viên
+        </Button>
+      )}
     </div>
   );
 }

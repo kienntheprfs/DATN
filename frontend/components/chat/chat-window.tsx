@@ -123,6 +123,16 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 		}
 	};
 
+	const handleReportMissing = () => {
+		if (needsStart && needsEnd) {
+			onSelect(`Không tìm thấy điểm bắt đầu hoặc điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
+		} else if (needsStart) {
+			onSelect(`Không tìm thấy điểm bắt đầu phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
+		} else if (needsEnd) {
+			onSelect(`Không tìm thấy điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
+		}
+	};
+
 	const canConfirm = (!needsStart || selectedStart) && (!needsEnd || selectedEnd);
 
 	return (
@@ -193,12 +203,13 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					</Button>
 
 					<Button 
-						variant="ghost" 
+						variant="outline" 
 						size="sm" 
-						onClick={() => onSelect("Tôi không biết chính xác ở đâu")}
-						className="text-muted-foreground hover:text-foreground text-xs"
+						onClick={handleReportMissing}
+						className="w-full text-muted-foreground hover:text-foreground text-xs rounded-xl gap-2"
 					>
-						Tôi không biết chính xác ở đâu
+						<AlertTriangle className="w-3.5 h-3.5" />
+						Không có trong các lựa chọn - Báo cáo với quản trị viên
 					</Button>
 				</div>
 			</div>
@@ -836,7 +847,11 @@ export function ChatWindow({
 										<HistoryToolCollapsible key={`history-tool-${toolMsg.id}`} name={toolMsg.toolName || "tool"} content={toolMsg.content} />
 									);
 								})}
-								{showToolsForThisGroup && currentTools.map((tool) => (
+								{showToolsForThisGroup && currentTools.filter(tool => {
+									// Only show tools that are NOT already in toolMessages
+									const toolIds = group.toolMessages?.map(m => m.id) || [];
+									return !toolIds.includes(tool.id);
+								}).map((tool) => (
 									<ToolCollapsible key={`active-tool-${tool.id}`} tool={tool} />
 								))}
 								{displayRouteData && (
@@ -922,6 +937,11 @@ export function ChatWindow({
 							onConfirm={(landmark) => {
 								if (sendMessage) {
 									sendMessage(`Tôi đang ở ${landmark.name}`);
+								}
+							}}
+							onReportMissing={() => {
+								if (sendMessage) {
+									sendMessage(`Không có địa điểm nào phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
 								}
 							}}
 						/>
