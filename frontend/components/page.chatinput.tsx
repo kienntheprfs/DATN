@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation, Settings } from "lucide-react";
+import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation, Settings, Map, Image } from "lucide-react";
 import { useAgent } from "@/contexts/agent-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,10 @@ interface ChatInputProps {
   showDocumentButton?: boolean;
   onDocumentToggle?: () => void;
   defaultQueryMode?: QueryMode;
+  hasRouteData?: boolean;
+  hasLandmarkData?: boolean;
+  onShowRoute?: () => void;
+  onShowLandmarks?: () => void;
 }
 
 export function ChatInput({
@@ -62,6 +66,10 @@ export function ChatInput({
   showDocumentButton = false,
   onDocumentToggle,
   defaultQueryMode,
+  hasRouteData = false,
+  hasLandmarkData = false,
+  onShowRoute,
+  onShowLandmarks,
 }: ChatInputProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -247,6 +255,43 @@ export function ChatInput({
                 <TooltipContent>
                   Hiển thị tài liệu
                 </TooltipContent>
+              </Tooltip>
+            )}
+            {hasRouteData && onShowRoute && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Xem bản đồ chỉ đường"
+                    className="h-11 px-3 rounded-none text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-primary transition-all gap-1.5"
+                    onClick={onShowRoute}
+                  >
+                    <Map className="size-4 text-primary" aria-hidden="true" />
+                    <span>Xem bản đồ</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Xem bản đồ chỉ đường</TooltipContent>
+              </Tooltip>
+            )}
+
+            {hasLandmarkData && onShowLandmarks && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Xem hình ảnh gợi ý"
+                    className="h-11 px-3 rounded-none text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-primary transition-all gap-1.5"
+                    onClick={onShowLandmarks}
+                  >
+                    <Image className="size-4 text-primary" aria-hidden="true" />
+                    <span>Xem ảnh gợi ý</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Xem hình ảnh địa điểm gợi ý</TooltipContent>
               </Tooltip>
             )}
           </div>

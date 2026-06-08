@@ -498,6 +498,32 @@ interface GroupedMessages {
 	messages: ChatMessage[];
 	toolMessages?: ChatMessage[];
 	routeData?: RouteData;
+	landmarkData?: any[];
+}
+
+function cleanLandmarkText(text: string, landmarks: any[] | null | undefined): string {
+	if (!text || !landmarks || landmarks.length === 0) return text;
+	
+	let cleaned = text;
+	for (const landmark of landmarks) {
+		const name = landmark.name || landmark.title || "";
+		if (!name) continue;
+		try {
+			const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			const pattern = new RegExp(
+				`\\s*${escapedName}\\s*(?:\\n\\s*)*[\\-*•]?\\s*(?:Hình ảnh|Hình ảnh:|image:|ảnh:)\\s*(?:\\n\\s*)*${escapedName}\\s*(?:\\n\\s*)*`,
+				'gi'
+			);
+			cleaned = cleaned.replace(pattern, '\n');
+		} catch (e) {
+			console.error("Regex cleaning error:", e);
+		}
+	}
+	
+	cleaned = cleaned.replace(/(?:\n\s*)*(?:Hình ảnh:|Hình ảnh|ảnh:)\s*(?:\n\s*)*/gi, '\n');
+	cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+	
+	return cleaned.trim();
 }
 
 export function ChatWindow({ 
@@ -519,7 +545,13 @@ export function ChatWindow({
 	sendMessage
 }: ChatWindowProps) {
 	const isActive = isStreaming || isTyping;
-	const scrollRef = useRef<HTMLDivElement>(null);
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	const scrollToBottom = () => {
+		if (messagesEndRef.current) {
+			messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+		}
+	};
 
 	const visibleMessages = messages;
 	
@@ -531,9 +563,7 @@ export function ChatWindow({
 	const hasVoiceMessage = visibleMessages.length > 0;
 
 	useEffect(() => {
-		if (scrollRef.current) {
-			scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-		}
+		scrollToBottom();
 	}, [visibleMessages, currentTools.length, partialText]);
 
 	const groupedMessages = useMemo(() => {
@@ -560,22 +590,36 @@ export function ChatWindow({
 			}
 		}
 
-		// Extract routeData for each group
+		// Extract routeData and landmarkData for each group
 		for (const group of groups) {
 			if (group.role !== "assistant") continue;
-			// Check both messages and toolMessages for route data
+			// Check both messages and toolMessages
 			const messagesToCheck = [...(group.toolMessages || []), ...group.messages];
 			for (const m of messagesToCheck) {
 				// Check if it's a tool message or has toolName
 				const isToolMessage = m.msgType === "tool" || m.toolName;
 				if (isToolMessage && m.content) {
-					const toolName = (m.toolName || "").toLowerCase();
-					if (toolName.includes('route') || toolName.includes('find') || toolName.includes('map')) {
+					const toolName = m.toolName || "";
+					const toolNameLower = toolName.toLowerCase();
+					if (toolName === 'GetLandmarkImages' || toolName === 'GuessLocationByDescription') {
+						try {
+							const parsed = JSON.parse(m.content);
+							let landmarks = null;
+							if (Array.isArray(parsed)) landmarks = parsed;
+							else if (parsed.landmarks && Array.isArray(parsed.landmarks)) landmarks = parsed.landmarks;
+							else if (parsed.results && Array.isArray(parsed.results)) landmarks = parsed.results;
+							
+							if (landmarks) {
+								group.landmarkData = landmarks;
+							}
+						} catch {
+							// Not JSON
+						}
+					} else if (toolNameLower.includes('route') || toolNameLower.includes('find') || toolNameLower.includes('map')) {
 						try {
 							const parsed = JSON.parse(m.content);
 							if (parsed.type === 'route' && parsed.status === 'success') {
 								group.routeData = parsed as RouteData;
-								break;
 							}
 						} catch {
 							// Not JSON
@@ -688,12 +732,10 @@ export function ChatWindow({
 	
 	useEffect(() => {
 		if (routeDataForDisplay || confirmationData || landmarkData || isStreaming) {
-			setTimeout(() => {
-				scrollRef.current?.scrollTo({
-					top: scrollRef.current.scrollHeight,
-					behavior: "smooth",
-				});
+			const timer = setTimeout(() => {
+				scrollToBottom();
 			}, 100);
+			return () => clearTimeout(timer);
 		}
 	}, [routeDataForDisplay, confirmationData, landmarkData, isStreaming]);
 
@@ -718,7 +760,7 @@ export function ChatWindow({
 			role="log"
 			aria-live="polite"
 		>
-			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4" ref={scrollRef}>
+			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
 				{isHistoryLoading && messages.length === 0 && (
 					<div className="flex gap-4 justify-start animate-in fade-in duration-300">
 						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
@@ -734,9 +776,11 @@ export function ChatWindow({
 					const isMessageActive = isLastGroup && isActive;
 					const groupRunId = getGroupRunId(group);
 					const groupId = getGroupId(group);
-					const combinedContent = group.role === "assistant" 
+					const rawCombinedContent = group.role === "assistant" 
 						? group.messages.map(m => m.content).filter(Boolean).join(" ")
 						: "";
+					const displayLandmarkData = isLastGroup && landmarkData ? landmarkData : group.landmarkData;
+					const combinedContent = cleanLandmarkText(rawCombinedContent, displayLandmarkData);
 					const isThinkingMessage = isMessageActive && !combinedContent && !isVoiceMode && currentTools.length === 0;
 					const showToolsForThisGroup = isLastGroup && currentTools.length > 0;
 					const ratingId = groupRunId || groupId;
@@ -923,7 +967,9 @@ export function ChatWindow({
 					</div>
 				)}
 
-
+				{/* Spacer to prevent being covered by the fixed chat input */}
+				{!readOnly && <div ref={messagesEndRef} className="h-32 md:h-40 shrink-0" />}
+				{readOnly && <div ref={messagesEndRef} className="h-2 shrink-0" />}
 			</div>
 		</div>
 	);

@@ -30,7 +30,7 @@ export function LandmarkCarousel({ landmarks, onConfirm, disabled = false }: Lan
   const prev = () => setCurrentIndex((prev) => (prev - 1 + landmarks.length) % landmarks.length);
 
   return (
-    <div className="flex flex-col gap-3 my-2 max-w-full overflow-hidden">
+    <div className="flex flex-col gap-3 my-2 max-w-lg mx-auto overflow-hidden">
       <div className="relative group rounded-2xl overflow-hidden bg-slate-900 aspect-video shadow-2xl border border-border/50">
         {current.real_image_url ? (
           <img

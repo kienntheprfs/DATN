@@ -25,15 +25,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-#   redis:
-#     image: redis/redis-stack:latest
-#     container_name: redis_stack
-#     ports:
-#       - "6379:6379"
-#       - "8009:8001"
-#     volumes:
-#       - redis_data:/data
-
-# volumes:
-#   redis_data:

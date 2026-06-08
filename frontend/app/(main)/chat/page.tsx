@@ -14,6 +14,9 @@ import { toast } from "sonner";
 import { getUserId, authService } from "@/services/auth-api";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useAppStore } from "@/stores/app.store";
+import { MiniNavigation } from "@/components/chat/MapPreview";
+import { LandmarkCarousel } from "@/components/chat/LandmarkCarousel";
+import { CustomModal } from "@/components/features/faq/CustomModal";
 
 function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: () => void; onConversationStart?: () => void }) {
 	const searchParams = useSearchParams();
@@ -30,6 +33,8 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	const { state } = useSidebar();
 	const isMobile = useIsMobile();
 	const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false);
+	const [showRouteModal, setShowRouteModal] = useState(false);
+	const [showLandmarkModal, setShowLandmarkModal] = useState(false);
 
 	const chatKey = useMemo(() => `chat-${urlThreadId || "new"}`, [urlThreadId]);
 
@@ -58,6 +63,36 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		initialQueryMode: urlQueryMode || undefined,
 		key: chatKey,
 	});
+
+	const latestRouteData = useMemo(() => {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i];
+			if (m.msgType === "tool" && m.content) {
+				try {
+					const parsed = JSON.parse(m.content);
+					if (parsed.type === "route" && parsed.status === "success") {
+						return parsed;
+					}
+				} catch {}
+			}
+		}
+		return null;
+	}, [messages]);
+
+	const latestLandmarkData = useMemo(() => {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i];
+			if (m.msgType === "tool" && m.content) {
+				try {
+					const parsed = JSON.parse(m.content);
+					if (Array.isArray(parsed)) return parsed;
+					if (parsed.landmarks && Array.isArray(parsed.landmarks)) return parsed.landmarks;
+					if (parsed.results && Array.isArray(parsed.results) && m.toolName === "GuessLocationByDescription") return parsed.results;
+				} catch {}
+			}
+		}
+		return null;
+	}, [messages]);
 
 	const citations = useMemo(() => {
 		const allCitations: Array<{ file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string; is_faq?: boolean; faq_source?: string }> = [];
@@ -240,6 +275,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			if (text.trim()) {
 				addUserMessage(text);
 				clearVoiceTools();
+				setIsDocumentPanelOpen(false);
 			}
 		},
 		onBotOutput: (text, runId) => {
@@ -278,6 +314,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 	};
 
 	const handleSendMessage = (message: string, queryMode?: QueryMode) => {
+		setIsDocumentPanelOpen(false);
 		if (voice.state === "connected") {
 			addUserMessage(message);
 			voice.sendTextMessage(message);
@@ -370,7 +407,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 				<div
 					className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
 				>
-					<div className="mx-auto w-full max-w-4xl">
+					<div className="mx-auto w-full max-w-4xl flex flex-col gap-2">
 						<ChatInput
 							isLoading={isLoading}
 							onSubmitMessage={handleSendMessage}
@@ -386,10 +423,47 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							showDocumentButton={true}
 							onDocumentToggle={() => setIsDocumentPanelOpen(!isDocumentPanelOpen)}
 							defaultQueryMode={urlQueryMode || undefined}
+							hasRouteData={!!latestRouteData}
+							hasLandmarkData={!!latestLandmarkData}
+							onShowRoute={() => setShowRouteModal(true)}
+							onShowLandmarks={() => setShowLandmarkModal(true)}
 						/>
 					</div>
 				</div>
 			)}
+
+			<CustomModal
+				isOpen={showRouteModal}
+				onClose={() => setShowRouteModal(false)}
+				title="Bản đồ chỉ đường"
+				description="Bản đồ chỉ đường chi tiết giữa hai địa điểm"
+				size="xl"
+			>
+				<div className="h-[60vh] min-h-[400px] overflow-hidden rounded-lg border border-slate-200">
+					{latestRouteData && <MiniNavigation routeData={latestRouteData} />}
+				</div>
+			</CustomModal>
+
+			<CustomModal
+				isOpen={showLandmarkModal}
+				onClose={() => setShowLandmarkModal(false)}
+				title="Hình ảnh địa điểm gợi ý"
+				description="Chọn hình ảnh địa điểm bạn nhận diện được để tiếp tục hướng dẫn"
+				size="md"
+			>
+				<div className="min-h-[300px] overflow-y-auto">
+					{latestLandmarkData && (
+						<LandmarkCarousel
+							landmarks={latestLandmarkData}
+							disabled={false}
+							onConfirm={(landmark) => {
+								handleSendMessage(`Tôi đang ở ${landmark.name}`);
+								setShowLandmarkModal(false);
+							}}
+						/>
+					)}
+				</div>
+			</CustomModal>
 		</>
 	);
 }

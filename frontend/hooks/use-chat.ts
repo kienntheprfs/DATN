@@ -89,6 +89,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	const toolContentRef = useRef<string | null>(null);
 	const toolTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const currentRunIdRef = useRef<string | null>(null);
+	const toolNamesRef = useRef<Record<string, string>>({});
 	const threadIdGeneratedRef = useRef(false);
 	const hasInitializedRef = useRef(false);
 	const keyRef = useRef(options.key);
@@ -196,6 +197,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			setIsLoading(true);
 			setError(null);
 			setCurrentTools([]);
+			toolNamesRef.current = {};
 
 			const userMsg: ChatMessage = {
 				id: `user-${Date.now()}`,
@@ -267,11 +269,30 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 										: t
 								)
 							);
+							const tName = toolNamesRef.current[toolId] || "tool";
+							setMessages((prev) => {
+								if (prev.some((m) => m.id === toolId)) {
+									return prev.map((m) =>
+										m.id === toolId ? { ...m, content } : m
+									);
+								}
+								const newToolMsg: ChatMessage = {
+									id: toolId,
+									role: "assistant",
+									content: content,
+									msgType: "tool",
+									toolName: tName,
+								};
+								return [...prev, newToolMsg];
+							});
 							continue;
 						}
 
 						if (msgType === "ai" && toolCalls && toolCalls.length > 0) {
 							setIsTyping(false);
+							for (const tool of toolCalls) {
+								toolNamesRef.current[tool.id] = tool.name;
+							}
 							setCurrentTools((prev) => {
 								const nextTools = [...prev];
 								for (const tool of toolCalls) {

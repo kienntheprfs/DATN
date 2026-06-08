@@ -109,6 +109,13 @@
 			"options": { "cwd": "${workspaceFolder}/api_gateway" },
 			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
 		},
+		{
+			"label": "Start Shared Infrastructure (Docker)",
+			"type": "shell",
+			"command": "docker-compose up -d",
+			"options": { "cwd": "${workspaceFolder}" },
+			"presentation": { "echo": true, "reveal": "always", "panel": "dedicated", "showReuseMessage": true }
+		},
 		// {
 		// 	"label": "Start Dashboard Infrastructure (Docker)",
 		// 	"type": "shell",
@@ -123,6 +130,7 @@
 			"label": "Start Full Stack",
 			"dependsOrder": "parallel",
 			"dependsOn": [
+				"Start Shared Infrastructure (Docker)",
 				"Start LightRAG Service",
 				"Start Knowledge Service",
 				"Start Wayfinder Service",
