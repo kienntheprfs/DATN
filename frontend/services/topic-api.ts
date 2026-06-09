@@ -72,6 +72,7 @@ export interface TopicListItem {
   knowledge_updated: boolean;
   discarded: boolean;
   evidence_document_ids: number[];
+  pinned_post_ids: string[];
   featured_entity: string;
   featured_entity_rate: number;
   confidence: number;
@@ -154,6 +155,7 @@ export interface TopicPinRequest {
   knowledge_updated?: boolean;
   discarded?: boolean;
   evidence_document_ids?: number[];
+  pinned_post_ids?: string[];
 }
 
 export interface TopicPinResponse {
@@ -163,6 +165,7 @@ export interface TopicPinResponse {
   knowledge_updated: boolean;
   discarded: boolean;
   evidence_document_ids: number[];
+  pinned_post_ids: string[];
 }
 
 // ---------------------------------------------------------------------------

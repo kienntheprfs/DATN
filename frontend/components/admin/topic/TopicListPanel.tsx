@@ -147,7 +147,10 @@ export function TopicListPanel({
                 }`}
               >
                 <div className="mb-1 flex items-start justify-between gap-3">
-                  <h3 className="flex-1 break-all text-base font-bold leading-tight text-slate-900">
+                  <h3
+                    className="flex-1 max-w-[50%] truncate text-base font-bold leading-tight text-slate-900"
+                    title={topic.title}
+                  >
                     {topic.title}
                   </h3>
                   <span className="shrink-0 font-sans text-[12px] font-bold uppercase text-slate-400">
@@ -158,7 +161,7 @@ export function TopicListPanel({
                   {topic.summary}
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <TopicStatusPill
                       status={topic.status}
                       pinned={topic.pinned}

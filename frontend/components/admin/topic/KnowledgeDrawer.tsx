@@ -154,7 +154,7 @@ export function KnowledgeDrawer({
                 {isConfirmed ? (
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-emerald-600">
                     <span className="material-symbols-outlined text-sm">check_circle</span>
-                    Đã xử lý
+                    Đã cập nhật tri thức
                   </span>
                 ) : linkedDocIds.length > 0 ? (
                   <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-500/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-blue-600">
@@ -231,7 +231,7 @@ export function KnowledgeDrawer({
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
                           : "bg-blue-50 text-blue-700 border-blue-200"
                       }`}>
-                        {isConfirmed ? "Đã xử lý" : "Đang xử lý"}
+                        {isConfirmed ? "Đã cập nhật tri thức" : "Đang xử lý"}
                       </span>
                       {!isConfirmed && (
                         <button

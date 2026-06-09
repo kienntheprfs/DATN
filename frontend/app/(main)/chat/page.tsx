@@ -9,6 +9,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
+import QuickSuggestions from "@/components/quick-suggestions";
 import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
 import { getUserId, authService } from "@/services/auth-api";
@@ -405,9 +406,10 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			</div>
 			{!isReadOnly && (
 				<div
-					className={`fixed bottom-0 border-t border-border bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
+					className={`fixed bottom-0 bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
 				>
 					<div className="mx-auto w-full max-w-4xl flex flex-col gap-2">
+						<QuickSuggestions />
 						<ChatInput
 							isLoading={isLoading}
 							onSubmitMessage={handleSendMessage}

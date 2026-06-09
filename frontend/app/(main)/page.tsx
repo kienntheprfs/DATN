@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { BadgeCheckIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-import SuggestionSection from "@/components/page.suggest";
+// import SuggestionSection from "@/components/page.suggest";
+import QuickSuggestions from "@/components/quick-suggestions";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
 
 export default function Home() {
@@ -42,13 +43,17 @@ export default function Home() {
 					</p>
 				</div>
 
-				<ChatInput
-					voiceAgentId="chatbot"
-					onVoiceToggle={handleVoiceToggle}
-					onSubmitAndRedirect={handleSubmitAndRedirect}
-				/>
+				<div className="w-full flex flex-col gap-2">
+					<QuickSuggestions />
 
-				<SuggestionSection />
+					<ChatInput
+						voiceAgentId="chatbot"
+						onVoiceToggle={handleVoiceToggle}
+						onSubmitAndRedirect={handleSubmitAndRedirect}
+					/>
+				</div>
+
+				{/* <SuggestionSection /> */}
 
 				<footer className="max-w-2xl text-sm text-center text-muted-foreground mb-3">
 					<p className="whitespace-nowrap">Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp dụng.</p>
@@ -58,3 +63,4 @@ export default function Home() {
 		</div>
 	);
 }
+

@@ -106,6 +106,7 @@ def _build_topic_list_item(
     discarded = pin.get("discarded", False)
 
     evidence_document_ids = pin.get("evidence_document_ids", [])
+    pinned_post_ids = pin.get("pinned_post_ids", [])
 
     # Keywords from topic_keywords JSON
     kw_key = str(topic_id)
@@ -156,6 +157,7 @@ def _build_topic_list_item(
         knowledge_updated=knowledge_updated,
         discarded=discarded,
         evidence_document_ids=evidence_document_ids,
+        pinned_post_ids=pinned_post_ids,
         featured_entity=featured_entity,
         featured_entity_rate=featured_entity_rate,
         confidence=confidence,
@@ -594,6 +596,7 @@ async def update_topic_pin(
         knowledge_updated=body.knowledge_updated,
         discarded=body.discarded,
         evidence_document_ids=body.evidence_document_ids,
+        pinned_post_ids=body.pinned_post_ids,
     )
     await db.commit()
 
@@ -604,4 +607,5 @@ async def update_topic_pin(
         knowledge_updated=pin_state["knowledge_updated"],
         discarded=pin_state.get("discarded", False),
         evidence_document_ids=pin_state.get("evidence_document_ids", []),
+        pinned_post_ids=pin_state.get("pinned_post_ids", []),
     )

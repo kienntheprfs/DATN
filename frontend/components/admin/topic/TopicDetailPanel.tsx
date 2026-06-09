@@ -188,6 +188,7 @@ type TopicDetailPanelProps = {
   linkedDocs?: any[];
   isConfirmed?: boolean;
   onOpenKnowledgeDrawer: () => void;
+  onOpenPinnedPostDrawer: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -569,6 +570,7 @@ export function TopicDetailPanel({
   linkedDocs = [],
   isConfirmed = false,
   onOpenKnowledgeDrawer,
+  onOpenPinnedPostDrawer,
 }: TopicDetailPanelProps) {
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -640,7 +642,7 @@ export function TopicDetailPanel({
                       Mã chủ đề: {selectedTopic.topic_id}
                     </span> */}
                     {selectedTopic.discarded && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-slate-600 whitespace-nowrap">
                         <span className="material-symbols-outlined text-[14px]">delete</span>
                         Đã loại bỏ
                       </span>
@@ -648,17 +650,17 @@ export function TopicDetailPanel({
                     {!selectedTopic.discarded && (
                       <>
                         {isConfirmed ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-emerald-600 animate-in fade-in zoom-in-95 duration-200">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-emerald-600 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap">
                             <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                            Đã xử lý
+                            Đã cập nhật tri thức
                           </span>
                         ) : linkedDocs.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-blue-600 animate-in fade-in zoom-in-95 duration-200">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-blue-600 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap">
                             <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
                             Đang xử lý
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-amber-600 animate-in fade-in zoom-in-95 duration-200">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-amber-600 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap">
                             <span className="material-symbols-outlined text-[14px]">hourglass_empty</span>
                             Chờ xử lý
                           </span>
@@ -666,7 +668,7 @@ export function TopicDetailPanel({
                       </>
                     )}
                     {selectedTopic.pinned && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-red-600">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-red-600 whitespace-nowrap">
                         <span className="material-symbols-outlined text-[14px]">push_pin</span>
                         Đã ghim bài lên trang chủ
                       </span>
@@ -888,10 +890,10 @@ export function TopicDetailPanel({
         {selectedTopic?.pinned ? (
           <button
             type="button"
-            onClick={openPinConfirm}
+            onClick={onOpenPinnedPostDrawer}
             disabled={isPinning || isLoading || !selectedTopic || selectedTopic.discarded}
-            className="inline-flex items-center gap-2 rounded-sm border-2 border-slate-300 bg-slate-100 px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-slate-500 shadow-sm transition-colors cursor-not-allowed"
-            title="Đã ghim trang chủ — bấm để bỏ ghim"
+            className="inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 bg-emerald-700 hover:bg-emerald-800"
+            title="Đã ghim trang chủ — bấm để chỉnh sửa bài ghim"
           >
             {isPinning ? (
               <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
@@ -903,7 +905,7 @@ export function TopicDetailPanel({
         ) : (
           <button
             type="button"
-            onClick={openPinConfirm}
+            onClick={onOpenPinnedPostDrawer}
             disabled={isPinning || isLoading || !selectedTopic || selectedTopic.discarded}
             className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
             title={selectedTopic?.discarded ? "Không thể ghim chủ đề đã loại bỏ" : "Ghim bài viết lên trang chủ"}
@@ -936,7 +938,7 @@ export function TopicDetailPanel({
           ) : (
             <span className="material-symbols-outlined text-sm">history_edu</span>
           )}
-          {isConfirmed ? "Đã xử lý" : linkedDocs.length > 0 ? "Đang xử lý" : "Cập nhật tri thức"}
+          {isConfirmed ? "Đã cập nhật tri thức" : linkedDocs.length > 0 ? "Đang xử lý" : "Cập nhật tri thức"}
         </button>
 
         {/* Discard / Restore button */}
@@ -959,9 +961,20 @@ export function TopicDetailPanel({
           <button
             type="button"
             onClick={openDiscardConfirm}
-            disabled={isDiscarding || isLoading || !selectedTopic}
+            disabled={
+              isDiscarding ||
+              isLoading ||
+              !selectedTopic ||
+              selectedTopic.pinned ||
+              selectedTopic.knowledge_updated ||
+              isConfirmed
+            }
             className="inline-flex items-center gap-2 rounded-sm border-2 border-red-500 bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-            title="Loại bỏ chủ đề"
+            title={
+              selectedTopic?.pinned || selectedTopic?.knowledge_updated || isConfirmed
+                ? "Không thể loại bỏ chủ đề đã ghim hoặc đã cập nhật tri thức"
+                : "Loại bỏ chủ đề"
+            }
           >
             {isDiscarding ? (
               <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>

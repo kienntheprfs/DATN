@@ -9,6 +9,7 @@ import { PipelineConfirmModal } from "@/components/admin/topic/PipelineConfirmMo
 import { TopicDetailPanel } from "@/components/admin/topic/TopicDetailPanel";
 import { TopicListPanel } from "@/components/admin/topic/TopicListPanel";
 import { KnowledgeDrawer } from "@/components/admin/topic/KnowledgeDrawer";
+import { PinnedPostDrawer } from "@/components/admin/topic/PinnedPostDrawer";
 import type { PipelineRange, TrendView } from "@/components/admin/topic/TopicTypes";
 import topicService from "@/services/topic-api";
 import type { TopicListItem } from "@/services/topic-api";
@@ -37,6 +38,7 @@ export function TopicPageContent() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null); // "topicType:topicId"
   const [trendView, setTrendView] = useState<TrendView>("day");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isPinnedDrawerOpen, setIsPinnedDrawerOpen] = useState(false);
   
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [pipelineRange, setPipelineRange] = useState<PipelineRange>("1w");
@@ -176,6 +178,7 @@ export function TopicPageContent() {
       knowledgeUpdated,
       discarded,
       evidenceDocumentIds,
+      pinnedPostIds,
     }: {
       resultId: string;
       topicId: number;
@@ -183,19 +186,18 @@ export function TopicPageContent() {
       knowledgeUpdated?: boolean;
       discarded?: boolean;
       evidenceDocumentIds?: number[];
+      pinnedPostIds?: string[];
     }) =>
       topicService.updatePin(resultId, topicId, {
         pinned,
         knowledge_updated: knowledgeUpdated,
         discarded,
         evidence_document_ids: evidenceDocumentIds,
+        pinned_post_ids: pinnedPostIds,
       }),
     onSuccess: (_, variables) => {
       if (variables.pinned !== undefined) {
-        toast.success(variables.pinned ? "Đã đánh dấu ghim bài" : "Đã bỏ ghim");
-        if (variables.pinned) {
-          router.push("/admin/pinned-post");
-        }
+        toast.success(variables.pinned ? "Đã đánh dấu ghim bài thành công!" : "Đã bỏ ghim");
       }
       if (variables.knowledgeUpdated !== undefined) {
         toast.success(
@@ -206,6 +208,9 @@ export function TopicPageContent() {
       }
       if (variables.evidenceDocumentIds !== undefined) {
         toast.success("Đã cập nhật tài liệu minh chứng thành công!");
+      }
+      if (variables.pinnedPostIds !== undefined && variables.pinned === undefined) {
+        toast.success("Đã cập nhật danh sách bài ghim liên kết!");
       }
       if (variables.discarded !== undefined) {
         toast.success(variables.discarded ? "Đã loại bỏ chủ đề" : "Đã khôi phục chủ đề");
@@ -288,6 +293,54 @@ export function TopicPageContent() {
     });
   };
 
+  const handleLinkPinnedPost = (postId: string) => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.pinned_post_ids ?? [];
+    if (currentIds.includes(postId)) return;
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      pinnedPostIds: [...currentIds, postId],
+    });
+  };
+
+  const handleUnlinkPinnedPost = (postId: string) => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.pinned_post_ids ?? [];
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      pinnedPostIds: currentIds.filter((id) => id !== postId),
+    });
+  };
+
+  const handleConfirmPin = () => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.pinned_post_ids ?? [];
+    if (currentIds.length === 0) {
+      toast.error("Không thể ghim vì chưa có bài ghim nào được liên kết!");
+      return;
+    }
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      pinned: true,
+      pinnedPostIds: currentIds,
+    });
+    setIsPinnedDrawerOpen(false);
+  };
+
+  const handleUnpin = () => {
+    if (!selectedTopic) return;
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      pinned: false,
+      pinnedPostIds: [],
+    });
+    setIsPinnedDrawerOpen(false);
+  };
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -318,6 +371,7 @@ export function TopicPageContent() {
           linkedDocs={new Array(mappedSelectedTopic?.linkedDocIds?.length ?? 0).fill({})}
           isConfirmed={mappedSelectedTopic ? mappedSelectedTopic.isConfirmed : false}
           onOpenKnowledgeDrawer={() => setIsDrawerOpen(true)}
+          onOpenPinnedPostDrawer={() => setIsPinnedDrawerOpen(true)}
         />
         {/* Left: topic list panel — filters by topic_type client-side */}
         <TopicListPanel
@@ -360,6 +414,21 @@ export function TopicPageContent() {
             handleConfirmKnowledgeUpdate();
             setIsDrawerOpen(false);
           }}
+        />
+      )}
+
+      {/* Pinned Post Drawer */}
+      {mappedSelectedTopic && (
+        <PinnedPostDrawer
+          isOpen={isPinnedDrawerOpen}
+          onClose={() => setIsPinnedDrawerOpen(false)}
+          topicTitle={mappedSelectedTopic.title}
+          linkedPinnedPostIds={mappedSelectedTopic.pinned_post_ids || []}
+          onLinkPinnedPost={handleLinkPinnedPost}
+          onUnlinkPinnedPost={handleUnlinkPinnedPost}
+          isConfirmed={mappedSelectedTopic.pinned}
+          onConfirm={handleConfirmPin}
+          onUnpin={handleUnpin}
         />
       )}
     </div>
