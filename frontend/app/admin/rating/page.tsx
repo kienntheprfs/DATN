@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { RatingDataPanel } from "@/components/admin/rating/RatingDataPanel";
 import { RatingDetailModal } from "@/components/admin/rating/RatingDetailModal";
 import { RatingFilterPanel, RatingFilters } from "@/components/admin/rating/RatingFilterPanel";
+import { RatingStats } from "@/components/admin/rating/RatingStats";
 import type { RatingRow } from "@/components/admin/rating/Rating.types";
 
 function toInputDate(value: Date): string {
@@ -61,6 +62,8 @@ export default function RatingPage() {
 							</div>
 						</div>
 					</div>
+
+					<RatingStats filters={debouncedFilters} />
 
 					<RatingFilterPanel
 						filters={draftFilters}

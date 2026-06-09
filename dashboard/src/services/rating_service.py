@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.settings import settings
 from src.models import AnswerRating, RatingValue
 from src.repositories.rating_repository import RatingRepository
-from src.schemas.rating import RatingAdminListItem, RatingAdminListParams, RatingAdminListResponse, RatingCreate, RatingResponse, RatingStats
+from src.schemas.rating import DailyRatingStat, RatingAdminListItem, RatingAdminListParams, RatingAdminListResponse, RatingAdminStatsResponse, RatingCreate, RatingResponse, RatingStats, DislikeReasonStat
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -237,16 +237,19 @@ class RatingService:
         if not messages:
             return missing_question, missing_answer
 
-        ai_index = next(
-            (
-                index
-                for index, msg in enumerate(messages)
-                if msg.get("type") == "ai" and str(msg.get("run_id") or "") == run_id
-            ),
-            None,
-        )
+        # Find all AI messages matching the run_id
+        matching_ai_indices = [
+            index
+            for index, msg in enumerate(messages)
+            if msg.get("type") == "ai" and str(msg.get("run_id") or "") == run_id
+        ]
 
-        if ai_index is not None:
+        if matching_ai_indices:
+            # Prefer the one with non-empty content, or fallback to the last matching AI message
+            ai_index = next(
+                (idx for idx in matching_ai_indices if messages[idx].get("content")),
+                matching_ai_indices[-1]
+            )
             ai_message = messages[ai_index]
             question_message = next(
                 (msg for msg in reversed(messages[:ai_index]) if msg.get("type") == "human"),
@@ -268,6 +271,54 @@ class RatingService:
         question = str(question_message.get("content") or missing_question) if question_message else missing_question
         answer = str(last_ai.get("content") or missing_answer)
         return question, answer
+
+    @staticmethod
+    async def get_admin_stats(
+        db: AsyncSession,
+        *,
+        search: Optional[str] = None,
+        rating: Optional[RatingValue] = None,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> RatingAdminStatsResponse:
+        """Calculate and return admin rating statistics and daily trend."""
+        total, like_count, dislike_count, daily_raw, reasons_count = await RatingRepository.get_admin_stats(
+            db,
+            search=search,
+            rating=rating,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        like_percentage: float = (like_count / total * 100.0) if total > 0 else 0.0
+
+        daily_stats = []
+        for d, likes, dislikes in daily_raw:
+            if isinstance(d, (datetime, date)):
+                d_str = d.strftime("%Y-%m-%d")
+            else:
+                d_str = str(d)
+            daily_stats.append(
+                DailyRatingStat(
+                    date=d_str,
+                    like_count=likes,
+                    dislike_count=dislikes,
+                )
+            )
+
+        dislike_reasons = [
+            DislikeReasonStat(reason=reason, count=count)
+            for reason, count in reasons_count.items()
+        ]
+
+        return RatingAdminStatsResponse(
+            total=total,
+            like_count=like_count,
+            dislike_count=dislike_count,
+            like_percentage=round(like_percentage, 2),
+            daily_stats=daily_stats,
+            dislike_reasons=dislike_reasons,
+        )
 
     @staticmethod
     def _validate_comment(rating: RatingValue, comment: Optional[str]) -> None:

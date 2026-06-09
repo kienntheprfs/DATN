@@ -221,3 +221,33 @@ async def test_get_admin_ratings_requires_admin_role_and_supports_filters(client
     assert len(payload["items"]) == 1
     assert payload["items"][0]["rating"] == "DISLIKE"
     assert payload["items"][0]["comment"] == "not good"
+
+
+@pytest.mark.asyncio
+async def test_get_admin_rating_stats(client: AsyncClient) -> None:
+    # Get stats as non-admin -> 403
+    forbidden_resp = await client.get(
+        "/ratings/admin/stats",
+        headers={"X-User-Id": "user-a", "X-User-Roles": "user"},
+    )
+    assert forbidden_resp.status_code == 403
+
+    # Get stats as admin -> 200
+    admin_resp = await client.get(
+        "/ratings/admin/stats",
+        headers={"X-User-Id": "admin-1", "X-User-Roles": "admin"},
+    )
+    assert admin_resp.status_code == 200
+    stats = admin_resp.json()
+    assert "total" in stats
+    assert "like_count" in stats
+    assert "dislike_count" in stats
+    assert "like_percentage" in stats
+    assert "daily_stats" in stats
+    assert isinstance(stats["daily_stats"], list)
+    assert "dislike_reasons" in stats
+    assert isinstance(stats["dislike_reasons"], list)
+    reasons_map = {r["reason"]: r["count"] for r in stats["dislike_reasons"]}
+    for r in ["Thông tin sai", "Không rõ ràng", "Chưa đầy đủ", "Quá dài", "Không liên quan", "Khác"]:
+        assert r in reasons_map
+    assert reasons_map["Khác"] >= 1

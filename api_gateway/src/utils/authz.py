@@ -18,6 +18,9 @@ def is_admin_only_route(method: str, path: str) -> bool:
     if path.startswith("/dashboard/ratings/stats/agent/"):
         return True
 
+    if path.startswith("/dashboard/ratings/admin"):
+        return True
+
     if path == "/dashboard/pinned-posts/reorder":
         return True
 
