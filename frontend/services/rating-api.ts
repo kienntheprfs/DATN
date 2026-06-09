@@ -22,6 +22,32 @@ export interface RatingResponse {
 	updated_at: string;
 }
 
+export interface DailyRatingStat {
+	date: string;
+	like_count: number;
+	dislike_count: number;
+}
+
+export interface DislikeReasonStat {
+	reason: string;
+	count: number;
+}
+
+export interface AdminRatingStatsResponse {
+	total: number;
+	like_count: number;
+	dislike_count: number;
+	like_percentage: number;
+	daily_stats: DailyRatingStat[];
+	dislike_reasons: DislikeReasonStat[];
+}
+
+export interface AdminRatingStatsParams {
+	search?: string;
+	from_date?: string;
+	to_date?: string;
+}
+
 export interface AdminRatingListParams {
 	page: number;
 	page_size: number;
@@ -86,6 +112,17 @@ export const ratingService = {
 				from_date: params.from_date || undefined,
 				to_date: params.to_date || undefined,
 				sort_by: params.sort_by || undefined,
+			},
+		});
+		return response.data;
+	},
+
+	async getAdminRatingStats(params: AdminRatingStatsParams): Promise<AdminRatingStatsResponse> {
+		const response = await apiClient.get<AdminRatingStatsResponse>(`/dashboard/ratings/admin/stats`, {
+			params: {
+				search: params.search || undefined,
+				from_date: params.from_date || undefined,
+				to_date: params.to_date || undefined,
 			},
 		});
 		return response.data;

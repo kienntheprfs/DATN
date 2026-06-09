@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import String, asc, case, cast, desc, func, or_, text
+from sqlalchemy import Date, String, asc, case, cast, desc, func, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -220,3 +220,97 @@ class RatingRepository:
                 user_name_map = {}
 
         return thread_name_map, user_name_map
+
+    @staticmethod
+    async def get_admin_stats(
+        db: AsyncSession,
+        *,
+        search: Optional[str] = None,
+        rating: Optional[RatingValue] = None,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> tuple[int, int, int, list[tuple[date, int, int]], dict[str, int]]:
+        """Return aggregate stats, daily trend, and dislike reasons for admin dashboard."""
+        like_case = case((AnswerRating.rating == RatingValue.LIKE.value, 1), else_=0)
+        dislike_case = case((AnswerRating.rating == RatingValue.DISLIKE.value, 1), else_=0)
+
+        totals_statement = select(
+            func.count(AnswerRating.id),
+            func.sum(like_case),
+            func.sum(dislike_case),
+        )
+        totals_statement = RatingRepository._build_admin_filters(
+            totals_statement,
+            search=search,
+            rating=rating,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        totals_result = await db.execute(totals_statement)
+        totals_row = totals_result.one()
+        total = int(totals_row[0] or 0)
+        like_count = int(totals_row[1] or 0)
+        dislike_count = int(totals_row[2] or 0)
+
+        date_expr = func.date(AnswerRating.created_at)
+        daily_statement = (
+            select(
+                date_expr,
+                func.sum(like_case),
+                func.sum(dislike_case),
+            )
+            .group_by(date_expr)
+            .order_by(date_expr)
+        )
+        daily_statement = RatingRepository._build_admin_filters(
+            daily_statement,
+            search=search,
+            rating=rating,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        daily_result = await db.execute(daily_statement)
+        daily_rows = daily_result.all()
+
+        daily_stats = []
+        for row in daily_rows:
+            d = row[0]
+            likes = int(row[1] or 0)
+            dislikes = int(row[2] or 0)
+            daily_stats.append((d, likes, dislikes))
+
+        # Count dislike reasons from dislike rating comments
+        reasons_list = [
+            "Thông tin sai",
+            "Không rõ ràng",
+            "Chưa đầy đủ",
+            "Quá dài",
+            "Không liên quan",
+            "Khác"
+        ]
+        reasons_count = {reason: 0 for reason in reasons_list}
+        
+        if dislike_count > 0:
+            dislike_query = select(AnswerRating.comment).where(
+                AnswerRating.rating == RatingValue.DISLIKE.value
+            )
+            dislike_query = RatingRepository._build_admin_filters(
+                dislike_query,
+                search=search,
+                from_date=from_date,
+                to_date=to_date,
+            )
+            dislike_result = await db.execute(dislike_query)
+            dislike_comments = [row[0] for row in dislike_result.all() if row[0]]
+
+            for comment in dislike_comments:
+                matched = False
+                for reason in reasons_list:
+                    if reason in comment:
+                        reasons_count[reason] += 1
+                        matched = True
+                if not matched:
+                    reasons_count["Khác"] += 1
+
+        return total, like_count, dislike_count, daily_stats, reasons_count

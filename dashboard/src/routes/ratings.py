@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.models import RatingValue
-from src.schemas.rating import RatingAdminListParams, RatingAdminListResponse, RatingCreate, RatingResponse, RatingStats
+from src.schemas.rating import RatingAdminListParams, RatingAdminListResponse, RatingAdminStatsResponse, RatingCreate, RatingResponse, RatingStats
 from src.services.rating_service import RatingService
 
 
@@ -112,3 +112,28 @@ async def get_admin_ratings(
         sort_by=sort_by,
     )
     return await RatingService.list_admin_ratings(db, params=params)
+
+
+@router.get("/admin/stats", response_model=RatingAdminStatsResponse)
+async def get_admin_ratings_stats(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+    x_user_roles: Annotated[str | None, Header(alias="X-User-Roles")] = None,
+    search: str | None = None,
+    rating: RatingValue | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> RatingAdminStatsResponse:
+    """Get aggregate rating stats and daily trends for admin dashboard."""
+    _require_user_id(x_user_id)
+    is_admin: bool = "admin" in _parse_roles(x_user_roles)
+    if not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
+
+    return await RatingService.get_admin_stats(
+        db,
+        search=search,
+        rating=rating,
+        from_date=from_date,
+        to_date=to_date,
+    )

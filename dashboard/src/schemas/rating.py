@@ -103,3 +103,29 @@ class RatingAdminListResponse(BaseModel):
     page_size: int
     total_items: int
     total_pages: int
+
+
+class DailyRatingStat(BaseModel):
+    """Daily aggregated count of likes/dislikes."""
+
+    date: date
+    like_count: int
+    dislike_count: int
+
+
+class DislikeReasonStat(BaseModel):
+    """Aggregate count for a single dislike reason tag."""
+
+    reason: str
+    count: int
+
+
+class RatingAdminStatsResponse(BaseModel):
+    """Overall, daily, and reason-based rating statistics for the admin dashboard."""
+
+    total: int
+    like_count: int
+    dislike_count: int
+    like_percentage: float
+    daily_stats: list[DailyRatingStat]
+    dislike_reasons: list[DislikeReasonStat]
