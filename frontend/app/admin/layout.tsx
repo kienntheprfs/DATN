@@ -35,7 +35,7 @@ export default function AdminLayout({
           </AgentProvider>
         </ReactQueryProvider>
       </TooltipProvider>
-      <Toaster />
+      <Toaster position="top-center" />
     </>
   );
 }

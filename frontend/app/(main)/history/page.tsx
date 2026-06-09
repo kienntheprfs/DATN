@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, SortDesc, Pencil, Trash2, MoreVertical, Check, X, ExternalLink } from "lucide-react";
+import { Search, SortDesc, Pencil, Trash2, MoreVertical, Check, X, ExternalLink, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/stores/app.store";
 import { authService } from "@/services/auth-api";
 import type { HistoryItem } from "@/types/history";
@@ -33,7 +33,7 @@ type SortOption = "newest" | "oldest" | "az";
 export default function HistoryPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, history, isLoadingHistory, hasMoreHistory, fetchMoreHistory, clearAllHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle } = useAppStore();
+  const { user, history, isLoadingHistory, isErrorHistory, hasMoreHistory, fetchMoreHistory, clearAllHistory, refreshHistory, deleteHistoryItem, updateHistoryItemTitle } = useAppStore();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filteredHistory, setFilteredHistory] = useState<Array<HistoryItem & { displayTimestamp?: string }>>([]);
@@ -58,10 +58,10 @@ export default function HistoryPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!isCheckingAuth) {
+    if (!isCheckingAuth && !isErrorHistory) {
       refreshHistory();
     }
-  }, [isCheckingAuth]);
+  }, [isCheckingAuth, isErrorHistory]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -249,6 +249,18 @@ export default function HistoryPage() {
           {isLoadingHistory && history.length === 0 ? (
             <div className="flex items-center justify-center py-10">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : isErrorHistory ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-red-200 rounded-lg bg-red-50/30 p-6">
+              <RefreshCw className="h-10 w-10 text-red-500/80 mb-3 animate-pulse" />
+              <p className="text-red-700 font-semibold mb-1">Không thể tải lịch sử tra cứu</p>
+              <p className="text-xs text-muted-foreground mb-4 max-w-sm">
+                Đã thử tải tự động 5 lần nhưng kết nối thất bại. Vui lòng bấm nút tải lại để thử lại thủ công.
+              </p>
+              <Button onClick={() => refreshHistory()} className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Tải lại
+              </Button>
             </div>
           ) : filteredHistory.length > 0 ? (
             filteredHistory.map((item, index) => (

@@ -2,15 +2,17 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { PipelineConfirmModal } from "@/components/admin/topic/PipelineConfirmModal";
 import { TopicDetailPanel } from "@/components/admin/topic/TopicDetailPanel";
 import { TopicListPanel } from "@/components/admin/topic/TopicListPanel";
+import { KnowledgeDrawer } from "@/components/admin/topic/KnowledgeDrawer";
 import type { PipelineRange, TrendView } from "@/components/admin/topic/TopicTypes";
 import topicService from "@/services/topic-api";
 import type { TopicListItem } from "@/services/topic-api";
+import type { KnowledgeAdminDocumentItem } from "@/services/knowledge-api";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -27,13 +29,15 @@ const PIPELINE_RANGE_TO_TIME_RANGE: Record<PipelineRange, string> = {
 // Page component
 // ---------------------------------------------------------------------------
 
-export default function TopicPage() {
+export function TopicPageContent() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
   // --- UI state ---
   const [selectedKey, setSelectedKey] = useState<string | null>(null); // "topicType:topicId"
   const [trendView, setTrendView] = useState<TrendView>("day");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [pipelineRange, setPipelineRange] = useState<PipelineRange>("1w");
 
@@ -90,6 +94,33 @@ export default function TopicPage() {
     allTopics[0] ??
     null;
 
+  // Map topics to inject backend status (isConfirmed & linkedDocsCount) for the sidebar and detail panels
+  const mappedTopics = useMemo(() => {
+    return allTopics.map((topic) => {
+      const evidenceDocIds = topic.evidence_document_ids ?? [];
+      const linkedDocsCount = evidenceDocIds.length;
+      const isConfirmed = topic.knowledge_updated;
+
+      return {
+        ...topic,
+        linkedDocsCount,
+        isConfirmed,
+      };
+    });
+  }, [allTopics]);
+
+  const mappedSelectedTopic = useMemo(() => {
+    if (!selectedTopic) return null;
+    const evidenceDocIds = selectedTopic.evidence_document_ids ?? [];
+    const isConfirmed = selectedTopic.knowledge_updated;
+
+    return {
+      ...selectedTopic,
+      linkedDocIds: evidenceDocIds,
+      isConfirmed,
+    };
+  }, [selectedTopic]);
+
   // The topicType is derived from whichever topic is selected
   const topicType = selectedTopic?.topic_type ?? "missing_knowledge";
 
@@ -143,15 +174,21 @@ export default function TopicPage() {
       topicId,
       pinned,
       knowledgeUpdated,
+      discarded,
+      evidenceDocumentIds,
     }: {
       resultId: string;
       topicId: number;
       pinned?: boolean;
       knowledgeUpdated?: boolean;
+      discarded?: boolean;
+      evidenceDocumentIds?: number[];
     }) =>
       topicService.updatePin(resultId, topicId, {
         pinned,
         knowledge_updated: knowledgeUpdated,
+        discarded,
+        evidence_document_ids: evidenceDocumentIds,
       }),
     onSuccess: (_, variables) => {
       if (variables.pinned !== undefined) {
@@ -163,12 +200,15 @@ export default function TopicPage() {
       if (variables.knowledgeUpdated !== undefined) {
         toast.success(
           variables.knowledgeUpdated
-            ? "Đã đánh dấu cập nhật tri thức"
+            ? "Đã xác nhận cập nhật tri thức thành công!"
             : "Đã bỏ đánh dấu tri thức"
         );
-        if (variables.knowledgeUpdated) {
-          router.push("/admin/knowledge");
-        }
+      }
+      if (variables.evidenceDocumentIds !== undefined) {
+        toast.success("Đã cập nhật tài liệu minh chứng thành công!");
+      }
+      if (variables.discarded !== undefined) {
+        toast.success(variables.discarded ? "Đã loại bỏ chủ đề" : "Đã khôi phục chủ đề");
       }
       // Refresh both lists so pin states update
       queryClient.invalidateQueries({ queryKey: ["topics", "list"] });
@@ -204,45 +244,92 @@ export default function TopicPage() {
     });
   };
 
+  const handleDiscardTopic = () => {
+    if (!selectedTopic) return;
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      discarded: !selectedTopic.discarded,
+    });
+  };
+
+  const handleLinkDoc = (docId: number) => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.evidence_document_ids ?? [];
+    if (currentIds.includes(docId)) return;
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      evidenceDocumentIds: [...currentIds, docId],
+    });
+  };
+
+  const handleUnlinkDoc = (docId: number) => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.evidence_document_ids ?? [];
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      evidenceDocumentIds: currentIds.filter((id) => id !== docId),
+    });
+  };
+
+  const handleConfirmKnowledgeUpdate = () => {
+    if (!selectedTopic) return;
+    const currentIds = selectedTopic.evidence_document_ids ?? [];
+    if (currentIds.length === 0) {
+      toast.error("Không thể xác nhận vì chưa có tài liệu liên kết!");
+      return;
+    }
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      knowledgeUpdated: true,
+    });
+  };
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light text-base md:-m-6">
+    <div className="-m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light text-base md:-m-6 relative">
       <div
         className={`grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] ${
           showPipelineModal ? "select-none blur-xs" : ""
         }`}
       >
-         {/* Right: detail panel — topicType derived from selected topic */}
         <TopicDetailPanel
           isLoading={isLoadingTopics}
           isError={isTopicsError}
-          selectedTopic={selectedTopic}
+          selectedTopic={mappedSelectedTopic as any}
           topicType={topicType}
           trendView={trendView}
           isPinning={pinMutation.isPending && pinMutation.variables?.pinned !== undefined}
           isUpdatingKnowledge={
             pinMutation.isPending && pinMutation.variables?.knowledgeUpdated !== undefined
           }
+          isDiscarding={pinMutation.isPending && pinMutation.variables?.discarded !== undefined}
           onTrendViewChange={setTrendView}
           onPinTopic={handlePinTopic}
           onUpdateKnowledge={handleUpdateKnowledge}
+          onDiscardTopic={handleDiscardTopic}
+          // Dynamic document and status props
+          linkedDocs={new Array(mappedSelectedTopic?.linkedDocIds?.length ?? 0).fill({})}
+          isConfirmed={mappedSelectedTopic ? mappedSelectedTopic.isConfirmed : false}
+          onOpenKnowledgeDrawer={() => setIsDrawerOpen(true)}
         />
         {/* Left: topic list panel — filters by topic_type client-side */}
         <TopicListPanel
           isLoading={isLoadingTopics}
           isError={isTopicsError}
-          topics={allTopics}
+          topics={mappedTopics}
           selectedTopicKey={selectedKey}
           currentJob={currentJob ?? null}
           onTopicSelect={(key) => setSelectedKey(key)}
           onOpenPipelineModal={() => setShowPipelineModal(true)}
           onRetry={refetchTopics}
         />
-
-       
       </div>
 
       {showPipelineModal && (
@@ -258,6 +345,46 @@ export default function TopicPage() {
           onConfirm={handleRunPipeline}
         />
       )}
+
+      {/* Knowledge Drawer (covering TopicListPanel on the right side of the entire layout container) */}
+      {mappedSelectedTopic && (
+        <KnowledgeDrawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+          topicTitle={mappedSelectedTopic.title}
+          linkedDocIds={mappedSelectedTopic.linkedDocIds}
+          onLinkDoc={handleLinkDoc}
+          onUnlinkDoc={handleUnlinkDoc}
+          isConfirmed={mappedSelectedTopic.isConfirmed}
+          onConfirm={() => {
+            handleConfirmKnowledgeUpdate();
+            setIsDrawerOpen(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+export default function TopicPage() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            refetchOnMount: false,
+            staleTime: 5 * 60 * 1000,
+            gcTime: 30 * 60 * 1000,
+          },
+        },
+      }),
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TopicPageContent />
+    </QueryClientProvider>
   );
 }

@@ -143,6 +143,11 @@ export const knowledgeService = {
     });
     return response.data;
   },
+
+  async getDocumentDetail(documentId: number): Promise<KnowledgeAdminDocumentItem> {
+    const response = await apiClient.get<KnowledgeAdminDocumentItem>(`/kb/documents/${documentId}`);
+    return response.data;
+  },
 };
 
 export default knowledgeService;

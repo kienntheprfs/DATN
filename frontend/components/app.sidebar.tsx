@@ -150,10 +150,10 @@ export function AppSidebar() {
 
     // Refresh history on navigation, but NOT during initial load (init handles that separately)
     useEffect(() => {
-        if (!isInitializing && user) {
+        if (!isInitializing && user && !isErrorHistory) {
             refreshHistory();
         }
-    }, [pathname]);
+    }, [pathname, isInitializing, user, isErrorHistory]);
 
     // Single init effect: login() then mark done
     useEffect(() => {
@@ -162,10 +162,10 @@ export function AppSidebar() {
 
     // After init: load history for the first time if not yet loaded
     useEffect(() => {
-        if (user && history.length === 0 && hasMoreHistory && !isLoadingHistory) {
+        if (user && history.length === 0 && hasMoreHistory && !isLoadingHistory && !isErrorHistory) {
             fetchMoreHistory();
         }
-    }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory]);
+    }, [user, history.length, hasMoreHistory, isLoadingHistory, fetchMoreHistory, isErrorHistory]);
 
     const handleLogout = async () => {
         await logout();

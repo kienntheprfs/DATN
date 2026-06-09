@@ -321,16 +321,31 @@ class TopicResultRepository:
     ) -> dict:
         """Return the pin state for a (result, topic) pair from the JSON column."""
         key = str(topic_id)
-        default = {"pinned": False, "knowledge_updated": False}
-        return (result.topic_marked or {}).get(key, default)
+        default = {"pinned": False, "knowledge_updated": False, "discarded": False, "evidence_document_ids": []}
+        state = (result.topic_marked or {}).get(key, default)
+        # Ensure all keys are in state
+        return {
+            "pinned": state.get("pinned", False),
+            "knowledge_updated": state.get("knowledge_updated", False),
+            "discarded": state.get("discarded", False),
+            "evidence_document_ids": state.get("evidence_document_ids", []),
+        }
 
     @staticmethod
     async def get_all_pin_states(
         result: DashboardTopicResult,
     ) -> dict[int, dict]:
-        """Return all pin states as {topic_id: {pinned, knowledge_updated}}."""
+        """Return all pin states as {topic_id: {pinned, knowledge_updated, discarded, evidence_document_ids}}."""
         pins = result.topic_marked or {}
-        return {int(k): v for k, v in pins.items()}
+        return {
+            int(k): {
+                "pinned": v.get("pinned", False),
+                "knowledge_updated": v.get("knowledge_updated", False),
+                "discarded": v.get("discarded", False),
+                "evidence_document_ids": v.get("evidence_document_ids", []),
+            }
+            for k, v in pins.items()
+        }
 
     @staticmethod
     async def upsert_pin(
@@ -340,8 +355,10 @@ class TopicResultRepository:
         *,
         pinned: Optional[bool] = None,
         knowledge_updated: Optional[bool] = None,
+        discarded: Optional[bool] = None,
+        evidence_document_ids: Optional[list[int]] = None,
     ) -> dict:
-        """Upsert pin/knowledge state in the topic_marked JSON column.
+        """Upsert pin/knowledge/discarded/evidence state in the topic_marked JSON column.
 
         Returns the updated pin state dict for the topic.
         """
@@ -351,12 +368,30 @@ class TopicResultRepository:
 
         key = str(topic_id)
         pins = dict(result.topic_marked or {})
-        current = pins.get(key, {"pinned": False, "knowledge_updated": False})
+        current = pins.get(key, {"pinned": False, "knowledge_updated": False, "discarded": False, "evidence_document_ids": []})
+
+        # Ensure all keys exist in current
+        if "pinned" not in current:
+            current["pinned"] = False
+        if "knowledge_updated" not in current:
+            current["knowledge_updated"] = False
+        if "discarded" not in current:
+            current["discarded"] = False
+        if "evidence_document_ids" not in current:
+            current["evidence_document_ids"] = []
 
         if pinned is not None:
             current["pinned"] = pinned
         if knowledge_updated is not None:
             current["knowledge_updated"] = knowledge_updated
+        if discarded is not None:
+            current["discarded"] = discarded
+            if discarded:
+                current["pinned"] = False
+                current["knowledge_updated"] = False
+                current["evidence_document_ids"] = []
+        if evidence_document_ids is not None:
+            current["evidence_document_ids"] = evidence_document_ids
 
         pins[key] = current
         result.topic_marked = pins

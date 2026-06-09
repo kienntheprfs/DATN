@@ -131,6 +131,8 @@ class TopicListItem(BaseModel):
     status: str                    # derived: new | stable | waiting
     pinned: bool
     knowledge_updated: bool
+    discarded: bool = False
+    evidence_document_ids: list[int] = []
     featured_entity: str           # keyword with highest score in topic
     featured_entity_rate: float    # occurrence rate % of the featured entity
     confidence: float              # avg score of top keyword (proxy for cluster quality)
@@ -162,6 +164,8 @@ class TopicPinRequest(BaseModel):
 
     pinned: Optional[bool] = None
     knowledge_updated: Optional[bool] = None
+    discarded: Optional[bool] = None
+    evidence_document_ids: Optional[list[int]] = None
 
 
 class TopicPinResponse(BaseModel):
@@ -171,6 +175,8 @@ class TopicPinResponse(BaseModel):
     topic_id: int
     pinned: bool
     knowledge_updated: bool
+    discarded: bool
+    evidence_document_ids: list[int] = []
 
 
 # ---------------------------------------------------------------------------

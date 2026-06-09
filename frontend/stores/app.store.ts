@@ -105,7 +105,7 @@ export const useAppStore = create<AppState>()(
             isErrorHistory: false
           });
         } catch (error) {
-          console.error("Lỗi khi tải lịch sử (sau 10 lần thử):", error);
+          console.error("Lỗi khi tải lịch sử (sau 5 lần thử):", error);
           set({ isLoadingHistory: false, isErrorHistory: true });
         }
       },
@@ -135,7 +135,7 @@ export const useAppStore = create<AppState>()(
             }));
 
         } catch (error) {
-            console.error("Lỗi khi tải thêm lịch sử (sau 10 lần thử):", error);
+            console.error("Lỗi khi tải thêm lịch sử (sau 5 lần thử):", error);
             set({ isLoadingHistory: false, isErrorHistory: true });
         }
       },

@@ -70,6 +70,8 @@ export interface TopicListItem {
   status: "new" | "stable" | "waiting";
   pinned: boolean;
   knowledge_updated: boolean;
+  discarded: boolean;
+  evidence_document_ids: number[];
   featured_entity: string;
   featured_entity_rate: number;
   confidence: number;
@@ -150,6 +152,8 @@ export interface TopicKeywordsResponse {
 export interface TopicPinRequest {
   pinned?: boolean;
   knowledge_updated?: boolean;
+  discarded?: boolean;
+  evidence_document_ids?: number[];
 }
 
 export interface TopicPinResponse {
@@ -157,6 +161,8 @@ export interface TopicPinResponse {
   topic_id: number;
   pinned: boolean;
   knowledge_updated: boolean;
+  discarded: boolean;
+  evidence_document_ids: number[];
 }
 
 // ---------------------------------------------------------------------------

@@ -163,6 +163,9 @@ export function TopicListPanel({
                       status={topic.status}
                       pinned={topic.pinned}
                       knowledgeUpdated={topic.knowledge_updated}
+                      discarded={topic.discarded}
+                      linkedDocsCount={(topic as any).linkedDocsCount}
+                      isConfirmed={(topic as any).isConfirmed}
                     />
                     {/* Topic type badge */}
                     {/* <span

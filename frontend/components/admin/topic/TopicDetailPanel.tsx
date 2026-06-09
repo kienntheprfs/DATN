@@ -20,7 +20,7 @@ import topicService from "@/services/topic-api";
 
 type ConfirmModalProps = {
   open: boolean;
-  type: "pin" | "knowledge" | null;
+  type: "pin" | "knowledge" | "discard" | null;
   topic: TopicListItem | null;
   isLoading: boolean;
   onConfirm: () => void;
@@ -30,11 +30,10 @@ type ConfirmModalProps = {
 function ConfirmModal({ open, type, topic, isLoading, onConfirm, onCancel }: ConfirmModalProps) {
   if (!open || !topic || !type) return null;
 
-  const isPin = type === "pin";
   const isPinned = topic.pinned;
   const isKnowledgeUpdated = topic.knowledge_updated;
 
-  const config = isPin
+  const config = type === "pin"
     ? {
         icon: isPinned ? "bookmark_remove" : "push_pin",
         iconBg: isPinned ? "bg-orange-100" : "bg-blue-100",
@@ -50,7 +49,8 @@ function ConfirmModal({ open, type, topic, isLoading, onConfirm, onCancel }: Con
           ? "bg-orange-500 hover:bg-orange-600 text-white"
           : "bg-primary hover:bg-primary-dark text-white",
       }
-    : {
+    : type === "knowledge"
+    ? {
         icon: isKnowledgeUpdated ? "undo" : "history_edu",
         iconBg: isKnowledgeUpdated ? "bg-slate-100" : "bg-pink-100",
         iconColor: isKnowledgeUpdated ? "text-slate-600" : "text-pink-600",
@@ -64,6 +64,21 @@ function ConfirmModal({ open, type, topic, isLoading, onConfirm, onCancel }: Con
         confirmStyle: isKnowledgeUpdated
           ? "bg-slate-600 hover:bg-slate-700 text-white"
           : "bg-primary hover:bg-primary-dark text-white",
+      }
+    : {
+        icon: topic.discarded ? "restore" : "delete",
+        iconBg: topic.discarded ? "bg-emerald-100" : "bg-red-100",
+        iconColor: topic.discarded ? "text-emerald-600" : "text-red-600",
+        title: topic.discarded ? "Khôi phục chủ đề" : "Loại bỏ chủ đề",
+        badge: topic.discarded ? "Đã loại bỏ" : null,
+        badgeColor: "bg-red-100 text-red-700 border border-red-200",
+        description: topic.discarded
+          ? "Hành động này sẽ khôi phục lại chủ đề này để bạn có thể ghim lên trang chủ hoặc cập nhật tri thức."
+          : "Hành động này sẽ đánh dấu loại bỏ chủ đề này. Các nút Cập nhật tri thức và Ghim trang chủ sẽ bị vô hiệu hóa.",
+        confirmLabel: topic.discarded ? "Khôi phục" : "Xác nhận loại bỏ",
+        confirmStyle: topic.discarded
+          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+          : "bg-red-600 hover:bg-red-700 text-white",
       };
 
   return (
@@ -165,9 +180,14 @@ type TopicDetailPanelProps = {
   trendView: TrendView;
   isPinning: boolean;
   isUpdatingKnowledge: boolean;
+  isDiscarding: boolean;
   onTrendViewChange: (value: TrendView) => void;
   onPinTopic: () => void;
   onUpdateKnowledge: () => void;
+  onDiscardTopic: () => void;
+  linkedDocs?: any[];
+  isConfirmed?: boolean;
+  onOpenKnowledgeDrawer: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -541,18 +561,24 @@ export function TopicDetailPanel({
   trendView,
   isPinning,
   isUpdatingKnowledge,
+  isDiscarding,
   onTrendViewChange,
   onPinTopic,
   onUpdateKnowledge,
+  onDiscardTopic,
+  linkedDocs = [],
+  isConfirmed = false,
+  onOpenKnowledgeDrawer,
 }: TopicDetailPanelProps) {
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
-    type: "pin" | "knowledge" | null;
+    type: "pin" | "knowledge" | "discard" | null;
   }>({ open: false, type: null });
 
   const openPinConfirm = () => setConfirmModal({ open: true, type: "pin" });
   const openKnowledgeConfirm = () => setConfirmModal({ open: true, type: "knowledge" });
+  const openDiscardConfirm = () => setConfirmModal({ open: true, type: "discard" });
   const closeConfirm = () => setConfirmModal({ open: false, type: null });
 
   const handleConfirm = () => {
@@ -560,6 +586,8 @@ export function TopicDetailPanel({
       onPinTopic();
     } else if (confirmModal.type === "knowledge") {
       onUpdateKnowledge();
+    } else if (confirmModal.type === "discard") {
+      onDiscardTopic();
     }
     closeConfirm();
   };
@@ -611,11 +639,31 @@ export function TopicDetailPanel({
                     {/* <span className="border border-border-color bg-slate-100 px-2 py-0.5 font-sans text-[14px] uppercase tracking-widest text-slate-500">
                       Mã chủ đề: {selectedTopic.topic_id}
                     </span> */}
-                    {selectedTopic.knowledge_updated && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-pink-600">
-                        <span className="material-symbols-outlined text-[14px]">history_edu</span>
-                        Đã cập nhật tri thức
+                    {selectedTopic.discarded && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-slate-600">
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                        Đã loại bỏ
                       </span>
+                    )}
+                    {!selectedTopic.discarded && (
+                      <>
+                        {isConfirmed ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-emerald-600 animate-in fade-in zoom-in-95 duration-200">
+                            <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                            Đã xử lý
+                          </span>
+                        ) : linkedDocs.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-blue-600 animate-in fade-in zoom-in-95 duration-200">
+                            <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                            Đang xử lý
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-500/10 px-2 py-0.5 text-[14px] font-bold uppercase tracking-wider text-amber-600 animate-in fade-in zoom-in-95 duration-200">
+                            <span className="material-symbols-outlined text-[14px]">hourglass_empty</span>
+                            Chờ xử lý
+                          </span>
+                        )}
+                      </>
                     )}
                     {selectedTopic.pinned && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-500/10 px-2 py-0.5 text-[16px] font-bold uppercase tracking-wider text-red-600">
@@ -634,14 +682,14 @@ export function TopicDetailPanel({
                   >
                     <span className="material-symbols-outlined text-xl">share</span>
                   </button> */}
-                  <button
+                  {/* <button
                     type="button"
                     className="rounded-sm border border-border-color p-2 text-slate-500 transition-colors hover:bg-white"
                     title="Tải xuống CSV"
                     onClick={handleDownload}
                   >
                     <span className="material-symbols-outlined text-xl">download</span>
-                  </button>
+                  </button> */}
                   {/* <button
                     type="button"
                     className="rounded-sm border border-border-color p-2 text-slate-500 transition-colors hover:bg-white"
@@ -841,7 +889,7 @@ export function TopicDetailPanel({
           <button
             type="button"
             onClick={openPinConfirm}
-            disabled={isPinning || isLoading || !selectedTopic}
+            disabled={isPinning || isLoading || !selectedTopic || selectedTopic.discarded}
             className="inline-flex items-center gap-2 rounded-sm border-2 border-slate-300 bg-slate-100 px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-slate-500 shadow-sm transition-colors cursor-not-allowed"
             title="Đã ghim trang chủ — bấm để bỏ ghim"
           >
@@ -856,9 +904,9 @@ export function TopicDetailPanel({
           <button
             type="button"
             onClick={openPinConfirm}
-            disabled={isPinning || isLoading || !selectedTopic}
+            disabled={isPinning || isLoading || !selectedTopic || selectedTopic.discarded}
             className="inline-flex items-center gap-2 rounded-sm border-2 border-primary bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-primary shadow-sm transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            title="Ghim bài viết lên trang chủ"
+            title={selectedTopic?.discarded ? "Không thể ghim chủ đề đã loại bỏ" : "Ghim bài viết lên trang chủ"}
           >
             {isPinning && (
               <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
@@ -868,33 +916,59 @@ export function TopicDetailPanel({
         )}
 
         {/* Knowledge update button */}
-        {selectedTopic?.knowledge_updated ? (
+        <button
+          type="button"
+          onClick={onOpenKnowledgeDrawer}
+          disabled={isLoading || !selectedTopic || selectedTopic.discarded}
+          className={`inline-flex items-center gap-2 rounded-sm px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+            isConfirmed 
+              ? "bg-emerald-700 hover:bg-emerald-800" 
+              : linkedDocs.length > 0 
+                ? "bg-primary hover:bg-primary-dark font-semibold" 
+                : "bg-primary hover:bg-primary-dark"
+          }`}
+          title={selectedTopic?.discarded ? "Không thể cập nhật tri thức chủ đề đã loại bỏ" : "Nhấp để đính kèm tài liệu minh chứng & cập nhật tri thức"}
+        >
+          {isConfirmed ? (
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+          ) : linkedDocs.length > 0 ? (
+            <span className="material-symbols-outlined animate-spin text-sm">sync</span>
+          ) : (
+            <span className="material-symbols-outlined text-sm">history_edu</span>
+          )}
+          {isConfirmed ? "Đã xử lý" : linkedDocs.length > 0 ? "Đang xử lý" : "Cập nhật tri thức"}
+        </button>
+
+        {/* Discard / Restore button */}
+        {selectedTopic?.discarded ? (
           <button
             type="button"
-            onClick={openKnowledgeConfirm}
-            disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
-            className="inline-flex items-center gap-2 rounded-sm bg-slate-200 px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-slate-500 shadow-sm transition-colors cursor-not-allowed"
-            title="Đã cập nhật tri thức — bấm để bỏ đánh dấu"
+            onClick={openDiscardConfirm}
+            disabled={isDiscarding || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm border-2 border-emerald-500 bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-emerald-600 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Khôi phục chủ đề"
           >
-            {isUpdatingKnowledge ? (
+            {isDiscarding ? (
               <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
             ) : (
-              <span className="material-symbols-outlined text-sm">check_circle</span>
+              <span className="material-symbols-outlined text-sm">restore</span>
             )}
-            Đã cập nhật tri thức
+            Khôi phục
           </button>
         ) : (
           <button
             type="button"
-            onClick={openKnowledgeConfirm}
-            disabled={isUpdatingKnowledge || isLoading || !selectedTopic}
-            className="inline-flex items-center gap-2 rounded-sm bg-primary px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-white shadow-lg transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-            title="Đánh dấu đã cập nhật tri thức"
+            onClick={openDiscardConfirm}
+            disabled={isDiscarding || isLoading || !selectedTopic}
+            className="inline-flex items-center gap-2 rounded-sm border-2 border-red-500 bg-white px-6 py-2.5 text-sm font-bold uppercase tracking-widest text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Loại bỏ chủ đề"
           >
-            {isUpdatingKnowledge && (
+            {isDiscarding ? (
               <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-sm">delete</span>
             )}
-            Cập nhật tri thức
+            Loại bỏ
           </button>
         )}
       </div>
@@ -904,7 +978,7 @@ export function TopicDetailPanel({
         open={confirmModal.open}
         type={confirmModal.type}
         topic={selectedTopic}
-        isLoading={isPinning || isUpdatingKnowledge}
+        isLoading={isPinning || isUpdatingKnowledge || isDiscarding}
         onConfirm={handleConfirm}
         onCancel={closeConfirm}
       />

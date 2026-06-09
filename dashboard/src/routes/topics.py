@@ -103,6 +103,9 @@ def _build_topic_list_item(
     pin = pins_map.get(topic_id, {})
     pinned = pin.get("pinned", False)
     knowledge_updated = pin.get("knowledge_updated", False)
+    discarded = pin.get("discarded", False)
+
+    evidence_document_ids = pin.get("evidence_document_ids", [])
 
     # Keywords from topic_keywords JSON
     kw_key = str(topic_id)
@@ -151,6 +154,8 @@ def _build_topic_list_item(
         status=_derive_status(result.created_at, pinned, knowledge_updated),
         pinned=pinned,
         knowledge_updated=knowledge_updated,
+        discarded=discarded,
+        evidence_document_ids=evidence_document_ids,
         featured_entity=featured_entity,
         featured_entity_rate=featured_entity_rate,
         confidence=confidence,
@@ -580,13 +585,15 @@ async def update_topic_pin(
     body: TopicPinRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TopicPinResponse:
-    """Mark a topic as pinned or knowledge-updated."""
+    """Mark a topic as pinned or knowledge-updated or discarded."""
     pin_state = await TopicResultRepository.upsert_pin(
         db,
         result_id=result_id,
         topic_id=topic_id,
         pinned=body.pinned,
         knowledge_updated=body.knowledge_updated,
+        discarded=body.discarded,
+        evidence_document_ids=body.evidence_document_ids,
     )
     await db.commit()
 
@@ -595,4 +602,6 @@ async def update_topic_pin(
         topic_id=topic_id,
         pinned=pin_state["pinned"],
         knowledge_updated=pin_state["knowledge_updated"],
+        discarded=pin_state.get("discarded", False),
+        evidence_document_ids=pin_state.get("evidence_document_ids", []),
     )

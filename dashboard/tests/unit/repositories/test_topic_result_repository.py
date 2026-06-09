@@ -91,17 +91,28 @@ async def test_pin_state_management(test_db_session):
         test_db_session, result.id, topic_id=0, pinned=True, knowledge_updated=False
     )
     assert state["pinned"] is True
+    assert state.get("discarded", False) is False
     await test_db_session.commit()
     
     # 2. Get pin state
     await test_db_session.refresh(result)
     res_state = await TopicResultRepository.get_pin_state(result, 0)
     assert res_state["pinned"] is True
+    assert res_state.get("discarded", False) is False
     
     # 3. Get all pin states
     all_states = await TopicResultRepository.get_all_pin_states(result)
     assert 0 in all_states
     assert all_states[0]["pinned"] is True
+    assert all_states[0].get("discarded", False) is False
+
+    # 4. Discard topic - should force pinned and knowledge_updated to False
+    state2 = await TopicResultRepository.upsert_pin(
+        test_db_session, result.id, topic_id=0, discarded=True
+    )
+    assert state2["discarded"] is True
+    assert state2["pinned"] is False
+    assert state2["knowledge_updated"] is False
 
 @pytest.mark.asyncio
 async def test_topic_result_repository_empty_cases(test_db_session):
