@@ -354,7 +354,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		<>
 			<div className="h-[calc(100vh-150px)] w-screen overflow-hidden">
 				{isReadOnly && (
-					<div className="mx-auto mt-3 w-full max-w-4xl rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+					<div className="mx-auto mt-3 w-full max-w-5xl rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
 						Đang xem lại hội thoại ở chế độ chỉ đọc.
 					</div>
 				)}
@@ -370,7 +370,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 					<ResizablePanel defaultSize={isDocumentPanelOpen ? 50 : 100}>
 						<div className="h-full flex flex-col bg-background">
 							<div className="flex-1 overflow-auto">
-								<div className="w-full max-w-4xl mx-auto py-4">
+								<div className="w-full max-w-5xl mx-auto py-4">
 									<ChatWindow
 										messages={messages}
 										error={error}
@@ -405,9 +405,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			</div>
 			{!isReadOnly && (
 				<div
-					className={`fixed bottom-0 bg-background px-4 pb-4 pt-6 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
+					className={`fixed bottom-0 bg-background px-4 pb-1 pt-6 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
 				>
-					<div className="mx-auto w-full max-w-4xl flex flex-col gap-2">
+					<div className="mx-auto w-full max-w-5xl flex flex-col gap-2">
 						<ChatInput
 							isLoading={isLoading}
 							onSubmitMessage={handleSendMessage}
@@ -428,7 +428,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							onShowRoute={() => setShowRouteModal(true)}
 							onShowLandmarks={() => setShowLandmarkModal(true)}
 						/>
-						<footer className="w-full text-center text-[10px] text-muted-foreground/60 mt-2 leading-relaxed">
+						<footer className="w-full text-center text-[7px] text-muted-foreground/60 leading-relaxed">
 							<p>Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp{"\u00a0"}dụng.</p>
 						</footer>
 					</div>
