@@ -21,6 +21,32 @@ interface LandmarkCarouselProps {
   mode?: 'location' | 'destination'; // 'location' = xác nhận vị trí hiện tại, 'destination' = chọn điểm đến
 }
 
+function formatLandmarkDescription(descStr: string): string {
+  if (!descStr) return '';
+  if (descStr.startsWith('{') && descStr.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(descStr);
+      const parts: string[] = [];
+      if (parsed.landmarks) {
+        parts.push(`Đặc điểm: ${parsed.landmarks}`);
+      }
+      if (parsed.colors) {
+        parts.push(`Màu sắc: ${parsed.colors}`);
+      }
+      if (parsed.proximity) {
+        parts.push(`Vị trí: ${parsed.proximity}`);
+      }
+      if (parsed.signs) {
+        parts.push(`Biển hiệu: ${parsed.signs}`);
+      }
+      return parts.join(' • ');
+    } catch {
+      return descStr;
+    }
+  }
+  return descStr;
+}
+
 export function LandmarkCarousel({ landmarks, onConfirm, onReportMissing, disabled = false, mode = 'location' }: LandmarkCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -55,12 +81,12 @@ export function LandmarkCarousel({ landmarks, onConfirm, onReportMissing, disabl
 
         <div className="absolute bottom-0 left-0 right-0 p-4 pointer-events-none">
           <div className="flex items-center gap-2 mb-1">
-            <MapPin className="w-3.5 h-3.5 text-primary fill-primary/20" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-primary/90">Landmark Found</span>
+            <MapPin className="w-3.5 h-3.5 text-white fill-white/20" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-white/90">Landmark Found</span>
           </div>
           <h4 className="text-white font-bold text-base leading-tight mb-1">{current.name}</h4>
           {current.description && (
-            <p className="text-white/70 text-xs line-clamp-2 leading-relaxed italic">"{current.description}"</p>
+            <p className="text-white/70 text-xs line-clamp-2 leading-relaxed italic">"{formatLandmarkDescription(current.description)}"</p>
           )}
         </div>
 

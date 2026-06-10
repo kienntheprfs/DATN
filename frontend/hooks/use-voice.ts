@@ -43,6 +43,7 @@ interface UseVoiceReturn {
   state: VoiceConnectionState;
   isListening: boolean;
   isSpeaking: boolean;
+  micLevel: number;
   isMuted: boolean;
   error: string | null;
   partialText: string;
@@ -74,6 +75,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [partialText, setPartialText] = useState<string>("");
   const [lastRunId, setLastRunId] = useState<string | null>(null);
@@ -85,6 +87,9 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number>(0);
   const pcIdRef = useRef<string | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
   const canSendCandidatesRef = useRef(false);
@@ -101,6 +106,13 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
   }, [threadIdProp]);
 
   const cleanup = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
     if (dcRef.current) {
       dcRef.current.close();
       dcRef.current = null;
@@ -123,6 +135,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     setIsListening(false);
     setIsSpeaking(false);
     setIsMuted(false);
+    setMicLevel(0);
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -322,6 +335,28 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
       const audioTrack = audioStream.getAudioTracks()[0];
       audioTrackRef.current = audioTrack;
 
+      // Audio analyser for mic level
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(audioStream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const readMicLevel = () => {
+        rafRef.current = requestAnimationFrame(readMicLevel);
+        analyser.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        setMicLevel(Math.min(rms * 3, 1));
+      };
+      readMicLevel();
+
       const iceServers: RTCIceServer[] = [
         { urls: "stun:stun.l.google.com:19302" },
       ];
@@ -505,6 +540,7 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     state,
     isListening,
     isSpeaking,
+    micLevel,
     isMuted,
     error,
     partialText,

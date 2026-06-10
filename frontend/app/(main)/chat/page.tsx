@@ -47,7 +47,6 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		updateLastBotMessage,
 		addVoiceToolCall,
 		updateVoiceToolResult,
-		clearVoiceTools,
 		stop,
 		isLoading,
 		isHistoryLoading,
@@ -273,8 +272,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		},
 		onTranscript: (text) => {
 			if (text.trim()) {
-				addUserMessage(text);
-				clearVoiceTools();
+				const capitalize = (s: string) =>
+					s.toLowerCase().replace(/(^\w|\.\s*\w)/g, (c) => c.toUpperCase());
+				addUserMessage(capitalize(text));
 				setIsDocumentPanelOpen(false);
 			}
 		},
@@ -318,7 +318,6 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		if (voice.state === "connected") {
 			addUserMessage(message);
 			voice.sendTextMessage(message);
-			clearVoiceTools();
 		} else {
 			sendMessage(message, queryMode);
 		}
@@ -378,7 +377,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 										isHistoryLoading={isHistoryLoading}
 										isTyping={isTyping}
 										isVoiceMode={voice.state === "connected"}
-										isListening={voice.isListening}
+									isListening={voice.isListening}
+									isSpeaking={voice.isSpeaking}
+									micLevel={voice.micLevel}
 										currentTools={currentTools}
 										partialText={voice.partialText}
 										threadId={threadId}

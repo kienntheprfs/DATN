@@ -16,7 +16,7 @@ interface LocationDropdownProps {
 export function LocationDropdown({
   value,
   onChange,
-  placeholder = 'Search location...',
+  placeholder = 'Tìm kiếm địa điểm...',
   icon = 'origin',
   onClear,
   buildingId,
@@ -137,7 +137,7 @@ export function LocationDropdown({
       return `Tầng ${loc.floor}`;
     }
     if (loc.map_id === 1) {
-      return 'Campus';
+      return 'Khuôn viên';
     }
     return '';
   };
@@ -199,7 +199,7 @@ export function LocationDropdown({
           {loading ? (
             <div className="px-4 py-3 text-gray-500 text-sm flex items-center gap-2">
               <span className="material-symbols-outlined animate-spin text-sm">sync</span>
-              Loading...
+              Đang tải...
             </div>
           ) : suggestions.length > 0 ? (
             <ul>
@@ -230,7 +230,7 @@ export function LocationDropdown({
             </ul>
           ) : (
             <div className="px-4 py-3 text-gray-500 text-sm">
-              No locations found
+              Không tìm thấy địa điểm
             </div>
           )}
         </div>

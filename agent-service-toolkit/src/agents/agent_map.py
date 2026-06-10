@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime
+import json
 from typing import Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.managed import RemainingSteps
@@ -12,6 +14,8 @@ from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 from agents.tool_map import map_tools
 from agents.tool_event import event_tools
 from core import get_model, settings
+
+logger = logging.getLogger(__name__)
 
 
 # Combine all tools
@@ -43,9 +47,9 @@ instructions = f"""
         1. Sử dụng GuessLocationByDescription nếuhọ có thể mô tả cảnh vật xung quanh (VD: "Tôi thấy cái biển báo...", "Gần thang máy...").
         2. Sử dụng GetLandmarkImages để hiện các ảnh thực tế nổi bật cho người dùng chọn nếu họ không mô tả được. Khi gọi GetLandmarkImages, KHÔNG liệt kê lại danh sách tên địa điểm và hình ảnh dưới dạng văn bản trong câu trả lời (vì giao diện sẽ tự động hiển thị các ảnh này). Chỉ trả lời bằng câu dẫn dắt ngắn gọn để người dùng lựa chọn.
     - Khi người dùng hỏi về sự kiện (ví dụ: "có sự kiện gì", "tìm hội thảo...", "sự kiện nào"), sử dụng SearchEvents hoặc GetUpcomingEvents
-    - Khi có nhiều địa điểm trùng tên, hỏi người dùng xác nhận. Nếu kết quả từ công cụ có chứa [ID: ...], hãy sử dụng tham số from_node_id hoặc to_node_id tương ứng khi gọi lại FindRoute để đảm bảo chính xác tuyệt đối và tránh hỏi lại nhiều lần.
+    - Khi công cụ FindRoute trả về trạng thái needs_confirmation, tool sẽ kèm theo message hướng dẫn. Hãy DÙNG message đó làm câu trả lời, KHÔNG thêm danh sách lựa chọn vào text. Nếu tool không kèm message, hãy tự viết câu ngắn gọn thông báo cho người dùng.
     - Nếu sự kiện có vị trí trên bản đồ, đề xuất chỉ đường đến đó
-    - Trong cuộc hội thoại, nếu người dùng hỏi lại về bản đồ chỉ đường hoặc hình ảnh địa điểm gợi ý mà công cụ đã được gọi trước đó trong lịch sử cuộc trò chuyện (do LLM cache kết quả), hãy gợi ý người dùng bấm vào nút "Xem lại bản đồ chỉ đường" hoặc "Xem lại hình ảnh gợi ý" ở ngay phía dưới ô nhập liệu để xem lại trực quan mà không cần gọi lại công cụ.
+    - Nếu người dùng hỏi lại về bản đồ chỉ đường hoặc hình ảnh địa điểm đã được hiển thị trước đó, hãy gọi lại công cụ tương ứng (FindRoute, GetLandmarkImages, GuessLocationByDescription) để lấy lại dữ liệu mới nhất và hiển thị lại. KHÔNG từ chối gọi công cụ vì lý do "đã hiển thị trước đó".
     - Trả lời bằng tiếng Việt, rõ ràng và thân thiện
     """
 
@@ -70,6 +74,25 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
     response = await model_runnable.ainvoke(state, config)
+
+    # Prevent infinite loop of tool calls when confirmation or user input is needed
+    if response.tool_calls:
+        last_msg = state["messages"][-1] if state["messages"] else None
+        if isinstance(last_msg, ToolMessage) and last_msg.name == "FindRoute":
+            try:
+                val = json.loads(last_msg.content)
+                if val.get("status") in ("needs_confirmation", "error"):
+                    logger.warning(
+                        "Detected tool retry loop on needs_confirmation/error. Forcing text response."
+                    )
+                    response.tool_calls = []
+                    if not response.content:
+                        response.content = val.get(
+                            "message",
+                            "Có lỗi xảy ra khi tìm đường. Bạn có thể cung cấp thêm chi tiết không?",
+                        )
+            except Exception as parse_err:
+                logger.error(f"Error checking tool loop: {parse_err}")
 
     # Run llama guard check here to avoid returning the message if it's unsafe
     llama_guard = LlamaGuard()

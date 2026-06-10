@@ -112,15 +112,18 @@ def create_edge(payload: EdgeIn, session: Session = Depends(get_session)):
 
 
 @router.get("", response_model=List[EdgeOut])
-def list_edges(map_id: int, session: Session = Depends(get_session)):
+def list_edges(map_id: Optional[int] = None, session: Session = Depends(get_session)):
     # Lấy các cạnh mà start_node HOẶC end_node nằm trên map_id này
     # Điều này quan trọng cho cạnh liên kết tầng (cross-floor)
-    stmt = (
-        select(Edge)
-        .join(Node, (Edge.start_node_id == Node.id) | (Edge.end_node_id == Node.id))
-        .where(Node.map_id == map_id)
-        .distinct()
-    )
+    if map_id is not None:
+        stmt = (
+            select(Edge)
+            .join(Node, (Edge.start_node_id == Node.id) | (Edge.end_node_id == Node.id))
+            .where(Node.map_id == map_id)
+            .distinct()
+        )
+    else:
+        stmt = select(Edge)
     return session.exec(stmt).all()
 
 

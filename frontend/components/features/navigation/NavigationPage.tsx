@@ -383,6 +383,7 @@ export default function NavigationPage() {
       toast.success('Đã cập nhật cache', {
         description: `${result.node_count} nodes đã được làm mới.`,
       });
+      await fetchAllMaps(true);
     } catch (err) {
       toast.error('Lỗi khi refresh cache');
     }
@@ -390,7 +391,7 @@ export default function NavigationPage() {
 
   const handleFindRoute = async () => {
     if (!startNodeId || !endNodeId) {
-      setError('Please select both start and destination');
+      setError('Vui lòng chọn điểm bắt đầu và điểm đến');
       return;
     }
 
@@ -735,7 +736,7 @@ export default function NavigationPage() {
             <MapIcon className="size-3.5 text-primary-foreground" />
           </div>
           <h2 className="text-foreground text-sm font-bold leading-tight truncate max-w-[200px] sm:max-w-none">
-            {currentMap?.name || 'Campus Pathfinding'}
+            {currentMap?.name || 'Tìm đường trong khuôn viên'}
           </h2>
         </div>
       </header>
@@ -753,7 +754,7 @@ export default function NavigationPage() {
                     setStartLocation(val);
                     setStartNodeId(nodeId);
                   }}
-                  placeholder="Start location..."
+                  placeholder="Điểm bắt đầu..."
                   icon="origin"
                 />
 
@@ -773,7 +774,7 @@ export default function NavigationPage() {
                     setEndLocation(val);
                     setEndNodeId(nodeId);
                   }}
-                  placeholder="Destination..."
+                  placeholder="Điểm đến..."
                   icon="destination"
                 />
               </div>
@@ -789,12 +790,12 @@ export default function NavigationPage() {
                 {loading ? (
                   <>
                     <RefreshCw className="size-4 animate-spin" />
-                    Finding route...
+                    Đang tìm đường...
                   </>
                 ) : (
                   <>
                     <Navigation className="size-4" />
-                    Find Route
+                    Tìm đường
                   </>
                 )}
               </Button>
@@ -806,7 +807,7 @@ export default function NavigationPage() {
                 data-testid="refresh-cache-btn"
               >
                 <RefreshCw className="size-4" />
-                Refresh Map Cache
+                Làm mới bộ nhớ đệm
               </Button>
 
               {error && (
@@ -894,7 +895,7 @@ export default function NavigationPage() {
               {!route && !loading && !error && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <span className="material-symbols-outlined text-muted-foreground text-6xl mb-4">directions</span>
-                  <p className="text-muted-foreground text-sm">Enter start and destination to find a route</p>
+                  <p className="text-muted-foreground text-sm">Nhập điểm bắt đầu và điểm đến để tìm đường</p>
                 </div>
               )}
             </div>
@@ -1080,17 +1081,17 @@ export default function NavigationPage() {
               <div className="absolute top-6 left-6 z-40 flex items-center gap-3 bg-card/90 backdrop-blur px-4 py-2 rounded-lg border border-border shadow-md">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-primary rounded-full"></div>
-                  <span className="text-xs text-muted-foreground">Route</span>
+                  <span className="text-xs text-muted-foreground">Đường đi</span>
                 </div>
                 <div className="w-px h-4 bg-border"></div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-muted-foreground rounded-full"></div>
-                  <span className="text-xs text-muted-foreground">Path</span>
+                  <span className="text-xs text-muted-foreground">Lối đi</span>
                 </div>
                 <div className="w-px h-4 bg-border"></div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                  <span className="text-xs text-muted-foreground">Stairs</span>
+                  <span className="text-xs text-muted-foreground">Cầu thang</span>
                 </div>
               </div>
             )}
@@ -1113,7 +1114,7 @@ export default function NavigationPage() {
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-muted-foreground">
                   <span className="material-symbols-outlined text-6xl mb-4">domain</span>
-                  <p>No buildings found. Please create a building first.</p>
+                  <p>Không tìm thấy tòa nhà. Vui lòng tạo tòa nhà trước.</p>
                 </div>
               </div>
             ) : (
@@ -1177,7 +1178,7 @@ export default function NavigationPage() {
                             {startMapId === currentMapId && (
                               <g transform={`translate(${route.path_coords[0][0]}, ${route.path_coords[0][1]})`}>
                                 <circle r="8" fill="#020260" stroke="white" strokeWidth="2" className="drop-shadow-md" />
-                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">START</text>
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">BẮT ĐẦU</text>
                               </g>
                             )}
 
@@ -1185,7 +1186,7 @@ export default function NavigationPage() {
                             {endMapId === currentMapId && (
                               <g transform={`translate(${route.path_coords[route.path_coords.length - 1][0]}, ${route.path_coords[route.path_coords.length - 1][1]})`}>
                                 <circle r="8" fill="#ef4444" stroke="white" strokeWidth="2" className="drop-shadow-md" />
-                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">END</text>
+                                <text y="-12" textAnchor="middle" className="text-[10px] font-bold fill-foreground">KẾT THÚC</text>
                               </g>
                             )}
                           </g>

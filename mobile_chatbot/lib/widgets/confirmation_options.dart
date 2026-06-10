@@ -26,6 +26,10 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
   bool _needsStart = false;
   bool _needsEnd = false;
 
+  String _cleanDisplayId(String text) {
+    return text.replaceAll(RegExp(r'\s*\[ID:\s*\d+\]', caseSensitive: false), '').trim();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -154,7 +158,7 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'ĐIỂM XUẤT PHÁT: "$_startName"',
+                      'ĐIỂM XUẤT PHÁT: "${_cleanDisplayId(_startName)}"',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
@@ -192,7 +196,7 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
                               : null,
                         ),
                         child: Text(
-                          opt,
+                          _cleanDisplayId(opt),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -220,7 +224,7 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'ĐIỂM ĐẾN: "$_endName"',
+                      'ĐIỂM ĐẾN: "${_cleanDisplayId(_endName)}"',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
@@ -258,7 +262,7 @@ class _ConfirmationOptionsDialogState extends State<ConfirmationOptionsDialog> {
                               : null,
                         ),
                         child: Text(
-                          opt,
+                          _cleanDisplayId(opt),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,

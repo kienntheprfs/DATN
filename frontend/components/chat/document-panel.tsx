@@ -22,6 +22,7 @@ interface Citation {
 type PreviewData = {
 	isPdf: boolean;
 	content: string;
+	pdfBase64?: string;
 	contentType?: string;
 };
 
@@ -72,12 +73,12 @@ const HighlightTextWithChunk = memo(({ text, chunks }: { text: string; chunks?: 
 		}
 	}, [text, chunks]);
 
-	const lowerChunks = useMemo(() => (chunks || []).map(c => c.toLowerCase().replace(/[\W_]+/g, '')), [chunks]);
+	const lowerChunks = useMemo(() => (chunks || []).map(c => c.toLowerCase().normalize('NFC').replace(/[^\w]/gu, '')), [chunks]);
 
 	return (
 		<>
 			{parts.map((part, i) => {
-				const normalizedPart = part.toLowerCase().replace(/[\W_]+/g, '');
+				const normalizedPart = part.toLowerCase().normalize('NFC').replace(/[^\w]/gu, '');
 				const isMatch = normalizedPart.length > 3 && lowerChunks.some(chunk => {
 					return normalizedPart.includes(chunk) || chunk.includes(normalizedPart);
 				});
@@ -103,7 +104,8 @@ const CitationItem = memo(({
 	isMarkdown,
 	allChunks,
 	onToggle, 
-	onOpenPdf 
+	onOpenPdf,
+	onRetry,
 }: { 
 	cite: Citation; 
 	isExpanded: boolean; 
@@ -115,13 +117,14 @@ const CitationItem = memo(({
 	allChunks: string[];
 	onToggle: () => void; 
 	onOpenPdf: (chunks: string[]) => void;
+	onRetry?: () => void;
 }) => {
 	const relevantChunks = useMemo(() => {
 		const rawContent = preview?.content || cite.text_preview || "";
 		if (!rawContent || allChunks.length === 0) return [];
 		
-		// Normalize both for comparison: lowercase and strip non-alphanumeric
-		const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[\W_]+/g, '');
+		// Normalize both for comparison: lowercase and strip non-alphanumeric (Unicode-aware)
+		const normalizeForCompare = (s: string) => s.toLowerCase().normalize('NFC').replace(/[^\w]/gu, '');
 		
 		const normalizedDoc = normalizeForCompare(rawContent);
 		return allChunks.filter(chunk => {
@@ -160,23 +163,38 @@ const CitationItem = memo(({
 							Đang tải nội dung...
 						</div>
 					) : hasError ? (
-						<div className="flex items-center justify-between">
+						<div className="space-y-2">
 							<p className="text-sm text-muted-foreground">Không thể tải nội dung</p>
-							{cite.s3_url && cite.s3_url !== "#" && (
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={(e) => {
-										e.stopPropagation();
-										window.open(cite.s3_url, "_blank");
-									}}
-								>
-									<ExternalLink className="size-4 mr-1" />
-									Xem chi tiết
-								</Button>
-							)}
+							<div className="flex items-center gap-2">
+								{onRetry && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={(e) => {
+											e.stopPropagation();
+											onRetry();
+										}}
+									>
+										<ExternalLink className="size-4 mr-1" />
+										Tải lại
+									</Button>
+								)}
+								{cite.s3_url && cite.s3_url !== "#" && (
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={(e) => {
+											e.stopPropagation();
+											window.open(cite.s3_url, "_blank");
+										}}
+									>
+										<ExternalLink className="size-4 mr-1" />
+										Mở trong tab mới
+									</Button>
+								)}
+							</div>
 						</div>
-					) : preview?.isPdf ? (
+					) : preview?.isPdf && preview?.pdfBase64 ? (
 						<div className="flex items-center justify-between p-3 bg-red-50 rounded border border-red-200">
 							<div>
 								<p className="text-sm font-medium text-red-800">Tài liệu PDF</p>
@@ -295,7 +313,8 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 			if (isPdfFile(cite)) {
 				if (previews[key]) {
 					// Already loaded, open now
-					openPdfWithHighlights(cite, previews[key].content);
+					const p = previews[key];
+					openPdfWithHighlights(cite, p.pdfBase64 || p.content, p.content);
 				} else {
 					// Not loaded, fetch and then open
 					fetchPreview(cite, true);
@@ -307,18 +326,34 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 		setExpandedCitations(newExpanded);
 	};
 
-	const openPdfWithHighlights = (cite: Citation, pdfContent: string) => {
-		const rawContent = pdfContent || cite.text_preview || "";
-		const normalizeForCompare = (s: string) => s.toLowerCase().replace(/[\W_]+/g, '');
+	const openPdfWithHighlights = (cite: Citation, pdfData: string, textContent?: string) => {
+		const rawContent = textContent || cite.text_preview || "";
+		const normalizeForCompare = (s: string) => s.toLowerCase().normalize('NFC').replace(/[^\w]/gu, '');
 		const normalizedDoc = normalizeForCompare(rawContent);
 		
-		const relevantChunks = allChunks.filter(chunk => {
+		console.log(`[PDF] openPdfWithHighlights: ${cite.file_name}, allChunks: ${allChunks.length}, textContent length: ${rawContent.length}`);
+
+		// Try to match chunks against document text
+		const matchedChunks = allChunks.filter(chunk => {
 			const normalizedChunk = normalizeForCompare(chunk);
-			return normalizedChunk.length > 5 && normalizedDoc.includes(normalizedChunk);
+			const match = normalizedChunk.length > 5 && normalizedDoc.includes(normalizedChunk);
+			if (!match && normalizedChunk.length > 5) {
+				console.log(`[PDF] Chunk NOT matched in doc text: "${normalizedChunk.substring(0, 80)}..."`);
+			}
+			return match;
 		});
 
+		// Fallback: if no chunks match extracted text, still use all chunks
+		// PDF text layer matching is more lenient than extracted text matching
+		const relevantChunks = matchedChunks.length > 0 ? matchedChunks : allChunks;
+
+		console.log(`[PDF] relevantChunks: ${relevantChunks.length} (matched: ${matchedChunks.length}, total: ${allChunks.length})`);
+		if (relevantChunks.length > 0) {
+			console.log(`[PDF] First chunk: "${relevantChunks[0].substring(0, 80)}..."`);
+		}
+
 		setPdfModal({
-			pdfData: pdfContent,
+			pdfData,
 			fileName: cite.file_name,
 			highlightText: relevantChunks,
 		});
@@ -344,8 +379,8 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 			if (data.error) throw new Error(data.error);
 			setPreviews((prev) => ({ ...prev, [key]: data }));
 			
-			if (autoOpenPdf && data.content) {
-				openPdfWithHighlights(cite, data.content);
+			if (autoOpenPdf) {
+				openPdfWithHighlights(cite, data.pdfBase64 || data.content, data.isPdf ? data.content : undefined);
 			}
 		} catch {
 			setErrorPreviews((prev) => new Set(prev).add(key));
@@ -394,11 +429,11 @@ export function DocumentPanel({ onClose, citations, toolChunks, routeData }: Doc
 								isMarkdown={isMarkdownFile(cite)}
 								allChunks={allChunks}
 								onToggle={() => toggleCitation(cite)}
-								onOpenPdf={(chunks) => setPdfModal({
-									pdfData: previews[cite.file_name].content,
-									fileName: cite.file_name,
-									highlightText: chunks,
-								})}
+								onOpenPdf={(chunks) => {
+									const p = previews[cite.file_name];
+									if (p) openPdfWithHighlights(cite, p.pdfBase64 || p.content, p.content);
+								}}
+								onRetry={() => fetchPreview(cite)}
 							/>
 						))}
 					</div>

@@ -414,7 +414,8 @@ class _VoiceHomePageState extends State<VoiceHomePage> with WidgetsBindingObserv
                           ),
                         ),
                       ),
-                      if (voice.status == VoiceStatus.connected) const _TypingIndicator(),
+                      if (voice.status == VoiceStatus.connected)
+                        _VoiceWaveform(micLevel: voice.micLevel),
                     ],
                   ),
                   const Spacer(),
@@ -748,68 +749,47 @@ class _HeaderAction extends StatelessWidget {
   }
 }
 
-class _TypingIndicator extends StatefulWidget {
-  const _TypingIndicator();
+class _VoiceWaveform extends StatelessWidget {
+  const _VoiceWaveform({required this.micLevel});
+  final double micLevel;
 
-  @override
-  State<_TypingIndicator> createState() => _TypingIndicatorState();
-}
-
-class _TypingIndicatorState extends State<_TypingIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  static const List<double> _factors = [
+    0.3, 0.7, 0.5, 1.0, 0.8,
+    0.9, 0.4, 0.6, 0.2, 0.7,
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.only(left: 10),
       child: SizedBox(
-        width: 28,
-        height: 16,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(3, (i) {
-                final delay = i * 0.2;
-                final t = (_controller.value - delay).clamp(0.0, 1.0);
-                final wave = (1 - (t * 2 - 1).abs()) * 1.0;
-                final offset = 2.0 + (wave * 6.0);
-                return Transform.translate(
-                  offset: Offset(0, -offset),
-                  child: Container(
-                    width: 5,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppConstants.primaryColor.withOpacity(0.4 + wave * 0.6),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                );
-              }),
+        height: 24,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(10, (i) {
+            final active = micLevel > 0.01;
+            final height = active
+                ? (4.0 + (micLevel * 20.0 * _factors[i])).clamp(4.0, 24.0)
+                : 4.0;
+            return Container(
+              width: 3,
+              height: height,
+              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+              decoration: BoxDecoration(
+                color: active
+                    ? AppConstants.primaryColor
+                    : Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(10),
+              ),
             );
-          },
+          }),
         ),
       ),
     );
   }
 }
+
 
 class _SmallAction extends StatelessWidget {
   const _SmallAction({

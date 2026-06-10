@@ -129,7 +129,7 @@ export function EditorCanvas({
     if (activeTool === 'add-node') {
       const newNode = {
         map_id: currentMap.id,
-        name: 'New Node',
+        name: 'Node mới',
         x: virtualMouse.x,
         y: virtualMouse.y,
         type: 'path' as const,

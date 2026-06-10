@@ -1,7 +1,7 @@
 import math
 import json
 import os
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -131,6 +131,9 @@ class RouteResponse(BaseModel):
     path_node_ids: List[int]  # Danh sách node IDs theo thứ tự đường đi
     total_distance_m: float
     instructions: List[Instruction]
+    is_multi_floor: bool = False
+    route_maps: Optional[List[Any]] = None
+    floor_count: Optional[int] = None
 
 
 # --- MATH & GEO HELPERS ---
@@ -210,10 +213,20 @@ def build_graph(session: Session) -> Tuple[nx.Graph, Dict]:
     # Create map_id -> floor_level lookup
     map_floor = {m.id: m.floor_level for m in all_maps}
 
+    # Batch load all aliases to avoid N+1 query issue (connecting to Azure is slow)
+    all_aliases = session.exec(select(Alias)).all()
+    node_to_alias = {}
+    for a in all_aliases:
+        if a.node_id not in node_to_alias:
+            node_to_alias[a.node_id] = a.name
+
     for n in nodes:
         G.add_node(n.id)
         node_pos[n.id] = (n.x, n.y)
-        G.nodes[n.id]["name"] = get_node_name(session, n.id)
+        alias_name = node_to_alias.get(n.id)
+        if not alias_name and n.name and n.name.lower() != "new node":
+            alias_name = n.name
+        G.nodes[n.id]["name"] = alias_name
         G.nodes[n.id]["map_id"] = n.map_id
         G.nodes[n.id]["floor"] = map_floor.get(n.map_id)
         G.nodes[n.id]["type"] = n.type
@@ -404,14 +417,24 @@ def generate_human_instructions(
                 if turn == "straight" and dist_m == 0.0 and not node_name:
                     continue
 
-                dist_prefix = f"Đi {dist_m}m, " if dist_m > 0 else ""
-                loc = f"đến {node_name}" if node_name else ""
+                if dist_m > 0:
+                    if node_name:
+                        text_prefix = f"Đi {dist_m}m đến {node_name}"
+                    else:
+                        text_prefix = f"Đi {dist_m}m"
+                else:
+                    if node_name:
+                        text_prefix = f"Đến {node_name}"
+                    else:
+                        text_prefix = ""
+
+                separator = ". " if text_prefix else ""
                 
-                if turn == "left": text, action = f"{dist_prefix}{loc}. Rẽ trái", "turn_left"
-                elif turn == "right": text, action = f"{dist_prefix}{loc}. Rẽ phải", "turn_right"
-                elif turn == "slight_left": text, action = f"{dist_prefix}{loc}. Đi chếch trái", "slight_left"
-                elif turn == "slight_right": text, action = f"{dist_prefix}{loc}. Đi chếch phải", "slight_right"
-                else: text, action = f"{dist_prefix}{loc}. Đi thẳng", "straight"
+                if turn == "left": text, action = f"{text_prefix}{separator}Rẽ trái", "turn_left"
+                elif turn == "right": text, action = f"{text_prefix}{separator}Rẽ phải", "turn_right"
+                elif turn == "slight_left": text, action = f"{text_prefix}{separator}Đi chếch trái", "slight_left"
+                elif turn == "slight_right": text, action = f"{text_prefix}{separator}Đi chếch phải", "slight_right"
+                else: text, action = f"{text_prefix}{separator}Đi thẳng", "straight"
 
                 # Clean up leading dots or spaces
                 text = text.replace("..", ".").replace(". .", ".").strip(". ")
@@ -512,12 +535,53 @@ def find_route(
     # 3. Tạo hướng dẫn chi tiết
     instrs, total_dist_m = generate_human_instructions(G, path_nodes, node_pos, map_scales)
 
+    # 4. Xác định thông tin các tầng/bản đồ đi qua
+    path_node_set = set(path_nodes)
+    path_nodes_entities = session.exec(select(Node).where(Node.id.in_(path_nodes))).all()
+    node_by_id = {n.id: n for n in path_nodes_entities}
+    
+    maps_in_route = set()
+    for node_id in path_nodes:
+        n = node_by_id.get(node_id)
+        if n and n.map_id:
+            maps_in_route.add(n.map_id)
+            
+    is_multi_floor = len(maps_in_route) > 1
+    
+    route_maps = []
+    for m_id in sorted(maps_in_route):
+        m_entity = session.get(Map, m_id)
+        if not m_entity:
+            continue
+            
+        map_nodes = [n for n in path_nodes_entities if n.map_id == m_id]
+        map_node_ids = {n.id for n in map_nodes}
+        
+        map_edges = []
+        if map_node_ids:
+            map_edges = session.exec(
+                select(Edge)
+                .where(
+                    (Edge.start_node_id.in_(map_node_ids)) &
+                    (Edge.end_node_id.in_(map_node_ids))
+                )
+            ).all()
+            
+        route_maps.append({
+            "map": m_entity,
+            "nodes": map_nodes,
+            "edges": map_edges
+        })
+
     return RouteResponse(
         map_id=start_node.map_id,
         path_coords=build_full_polyline(G, path_nodes, node_pos),
         path_node_ids=path_nodes,
         total_distance_m=round(total_dist_m, 2),
         instructions=instrs,
+        is_multi_floor=is_multi_floor,
+        route_maps=route_maps,
+        floor_count=len(maps_in_route) if is_multi_floor else None
     )
 
 

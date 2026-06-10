@@ -411,7 +411,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 			status: "executing",
 			content: null,
 		};
-		setCurrentTools((prev) => [...prev, newTool]);
+		setCurrentTools([newTool]);
 	}, []);
 
 	const updateVoiceToolResult = useCallback((toolCallId: string, content: string) => {

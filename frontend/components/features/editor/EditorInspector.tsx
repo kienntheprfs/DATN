@@ -279,7 +279,7 @@ export function EditorInspector({
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
           <div className="absolute bottom-3 left-4">
             <span className="bg-primary/10 text-primary text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border border-primary/20">
-              Active Context
+              Bản đồ hiện tại
             </span>
             <h2 className="text-sm font-black mt-1 text-foreground/80 uppercase tracking-tight">{currentMap.name}</h2>
           </div>
@@ -395,7 +395,7 @@ function InspectorHeader({
               isNode ? 'bg-primary/5 text-primary border-primary/20' : 'bg-muted text-muted-foreground border-border'
             }`}
           >
-            {isNode ? 'Node' : 'Edge'}
+            {isNode ? 'Điểm' : 'Đường nối'}
           </span>
           <span className="text-[10px] font-mono text-muted-foreground">#{id}</span>
         </div>
@@ -495,8 +495,8 @@ function NodeForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="path">Điểm trung gian (Path)</SelectItem>
-                <SelectItem value="room">Phòng chức năng (Room)</SelectItem>
+                <SelectItem value="path">Điểm trung gian</SelectItem>
+                <SelectItem value="room">Phòng chức năng</SelectItem>
                 <SelectItem value="stairs">Cầu thang bộ</SelectItem>
                 <SelectItem value="elevator">Thang máy</SelectItem>
                 <SelectItem value="entrance">Cổng ra vào / Sảnh</SelectItem>
@@ -533,7 +533,7 @@ function NodeForm({
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!isEditing && (
                           <Badge variant="outline" className="h-4 px-1 text-[7px] font-black uppercase tracking-tighter opacity-50">
-                            View
+                            Xem
                           </Badge>
                         )}
                         {count > 0 && (
@@ -734,7 +734,7 @@ function NodeForm({
             <span className="material-symbols-outlined text-primary text-base">corporate_fare</span>
             <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Định danh Tòa nhà</h3>
           </div>
-          {hasBuilding && <Badge variant="outline" className="h-4 border-primary/30 text-primary bg-primary/5 text-[8px] font-black uppercase tracking-tighter">Connected</Badge>}
+          {hasBuilding && <Badge variant="outline" className="h-4 border-primary/30 text-primary bg-primary/5 text-[8px] font-black uppercase tracking-tighter">Đã kết nối</Badge>}
         </div>
 
         <div className="flex gap-2">
@@ -895,9 +895,9 @@ function EdgeForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="walk">Đi bộ (Walk)</SelectItem>
-              <SelectItem value="stairs">Thang bộ (Stairs)</SelectItem>
-              <SelectItem value="elevator">Thang máy (Elevator)</SelectItem>
+              <SelectItem value="walk">Đi bộ</SelectItem>
+              <SelectItem value="stairs">Thang bộ</SelectItem>
+              <SelectItem value="elevator">Thang máy</SelectItem>
             </SelectContent>
           </Select>
         </div>

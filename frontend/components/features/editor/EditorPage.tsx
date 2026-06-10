@@ -37,9 +37,9 @@ const NODE_COLORS: Record<string, string> = {
 };
 
 const TOOLS = [
-  { id: 'select' as ToolType, label: 'Select Tool', icon: 'near_me', description: 'Chọn và di chuyển đối tượng' },
-  { id: 'add-node' as ToolType, label: 'Add Node', icon: 'add_circle', description: 'Thêm điểm mới vào bản đồ' },
-  { id: 'add-edge' as ToolType, label: 'Add Edge', icon: 'conversion_path', description: 'Nối hai điểm với nhau' },
+  { id: 'select' as ToolType, label: 'Chọn', icon: 'near_me', description: 'Chọn và di chuyển đối tượng' },
+  { id: 'add-node' as ToolType, label: 'Thêm điểm', icon: 'add_circle', description: 'Thêm điểm mới vào bản đồ' },
+  { id: 'add-edge' as ToolType, label: 'Nối đường', icon: 'conversion_path', description: 'Nối hai điểm với nhau' },
 ];
 
 export default function EditorPage() {
@@ -337,7 +337,7 @@ export default function EditorPage() {
       const tempId = Date.now();
       const newNodePayload = {
         map_id: currentMap.id,
-        name: 'New Node',
+        name: 'Node mới',
         x: virtualMouse.x,
         y: virtualMouse.y,
         type: 'path' as const
@@ -557,7 +557,7 @@ export default function EditorPage() {
       <div className="flex-1 flex overflow-hidden relative">
         <aside className="w-64 h-full border-r border-border bg-card flex flex-col p-4 gap-6 shadow-sm z-10">
           <div className="flex flex-col gap-2">
-            <h1 className="text-muted-foreground text-xs font-black uppercase tracking-widest mb-2 opacity-50">Editor Tools</h1>
+            <h1 className="text-muted-foreground text-xs font-black uppercase tracking-widest mb-2 opacity-50">Công cụ vẽ</h1>
 
             <div className="flex flex-col gap-2">
               {TOOLS.map((tool) => {
@@ -581,7 +581,7 @@ export default function EditorPage() {
                     <div>
                       <p className="text-sm font-black uppercase tracking-tight">{tool.label}</p>
                       <p className={`text-[10px] font-bold uppercase tracking-tight ${isActive ? 'text-primary-foreground/60' : 'text-muted-foreground/60'}`}>
-                        {isActive ? 'Current active' : 'Click to activate'}
+                        {isActive ? 'Đang kích hoạt' : 'Chọn để kích hoạt'}
                       </p>
                     </div>
                     {isActive && (
@@ -624,7 +624,7 @@ export default function EditorPage() {
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <div className="flex justify-between items-end px-1">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">m/px ratio</label>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Tỉ lệ m/px</label>
                 </div>
                 <div className="flex gap-2">
                   <Input

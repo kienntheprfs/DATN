@@ -39,7 +39,7 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 @router.post("/upload", status_code=202)
 async def upload_document(
     file: UploadFile = File(...),
-    storage_id: int = Form(2),
+    storage_id: int = Form(1),
     db: AsyncSession = Depends(get_db),
     auto_generate_faq: bool = Form(False),
     is_formal_doc: bool = Form(False),

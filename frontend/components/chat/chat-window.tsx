@@ -13,6 +13,11 @@ import { RatingButtons } from "./RatingButtons";
 import { MiniNavigation } from "./MapPreview";
 import { LandmarkCarousel } from "./LandmarkCarousel";
 
+function cleanDisplayId(text: string): string {
+	if (!text) return text;
+	return text.replace(/\s*\[ID:\s*\d+\]/gi, "").trim();
+}
+
 interface ToolCall {
 	id: string;
 	name: string;
@@ -56,6 +61,8 @@ interface ChatWindowProps {
 	isTyping?: boolean;
 	isVoiceMode?: boolean;
 	isListening?: boolean;
+	isSpeaking?: boolean;
+	micLevel?: number;
 	currentTools?: ToolCall[];
 	partialText?: string;
 	threadId?: string;
@@ -68,21 +75,54 @@ interface ChatWindowProps {
 	onCitationClick?: (citation: { file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string }) => void;
 }
 
-function VoiceLoadingIndicator({ isListening }: { isListening: boolean }) {
+function VoiceLoadingIndicator({ isListening, isSpeaking, micLevel = 0 }: { isListening: boolean; isSpeaking: boolean; micLevel?: number }) {
+	const isActive = isListening || isSpeaking;
+	const waveColors = [
+		"from-pink-500 to-rose-400",
+		"from-purple-500 to-violet-400",
+		"from-blue-500 to-cyan-400",
+		"from-emerald-500 to-teal-400",
+		"from-yellow-500 to-orange-400",
+		"from-orange-500 to-red-400",
+		"from-cyan-500 to-blue-400",
+		"from-violet-500 to-purple-400",
+		"from-teal-500 to-emerald-400",
+		"from-rose-500 to-pink-400",
+	];
+	const barMultipliers = [0.3, 0.7, 0.5, 1.0, 0.6, 0.9, 0.4, 0.8, 0.35, 0.75];
+	const maxBarHeight = 28; // pixels
 	return (
-		<div className="flex items-center gap-3 px-4 py-3 bg-primary/10 rounded-lg border border-primary/20">
-			<div className="relative">
-				<Bot className="size-5 text-primary" />
-				<span className="absolute -top-0.5 -right-0.5 size-2 bg-green-500 rounded-full animate-pulse" />
+		<div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-primary/20 bg-background">
+			<div className="flex items-center gap-3">
+				<div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/60 animate-pulse shadow-lg shadow-primary/30">
+					<Bot className="size-5 text-white" />
+					<span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+				</div>
+				<div>
+					<span className="text-xs font-bold text-primary tracking-wide block">Trợ lý giọng nói</span>
+					<span className="text-xs text-muted-foreground">
+						{isActive ? "Đang nói..." : "Đang lắng nghe..."}
+					</span>
+				</div>
 			</div>
-			<div className="flex items-center gap-1">
-				{[0, 1, 2].map((i) => (
-					<span
-						key={i}
-						className="size-1.5 rounded-full bg-primary animate-bounce"
-						style={{ animationDelay: `${i * 100}ms` }}
-					/>
-				))}
+			{/* Animated sound wave */}
+			<div className="flex items-center gap-1 h-7">
+				{[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => {
+					const height = isActive
+						? Math.max(4, maxBarHeight * micLevel * barMultipliers[i])
+						: 4;
+					return (
+						<span
+							key={i}
+							className={`w-[4px] rounded-full transition-[height] duration-75 ${
+								isActive
+									? `bg-gradient-to-t ${waveColors[i]} shadow-lg shadow-primary/20`
+									: "bg-gradient-to-t from-muted-foreground/20 to-muted-foreground/40"
+							}`}
+							style={{ height: `${height}px` }}
+						/>
+					);
+				})}
 			</div>
 		</div>
 	);
@@ -110,27 +150,23 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 	const needsStart = data.start_options && data.start_options.length > 1;
 	const needsEnd = data.end_options && data.end_options.length > 1;
 	
-	const [selectedStart, setSelectedStart] = useState<string | null>(needsStart ? null : data.start_name || null);
-	const [selectedEnd, setSelectedEnd] = useState<string | null>(needsEnd ? null : data.end_name || null);
+	const [selectedStart, setSelectedStart] = useState<string | null>(() => {
+		if (needsStart) return null;
+		if (data.start_options?.length === 1) return data.start_options[0];
+		return data.start_name || null;
+	});
+	const [selectedEnd, setSelectedEnd] = useState<string | null>(() => {
+		if (needsEnd) return null;
+		if (data.end_options?.length === 1) return data.end_options[0];
+		return data.end_name || null;
+	});
 
 	const handleConfirm = () => {
-		if (needsStart && needsEnd) {
-			onSelect(`Tôi muốn đi từ ${selectedStart} đến ${selectedEnd}`);
-		} else if (needsStart) {
-			onSelect(`Chọn điểm bắt đầu là ${selectedStart}`);
-		} else if (needsEnd) {
-			onSelect(`Chọn điểm đến là ${selectedEnd}`);
-		}
+		onSelect(`Tôi muốn đi từ ${selectedStart} đến ${selectedEnd}`);
 	};
 
 	const handleReportMissing = () => {
-		if (needsStart && needsEnd) {
-			onSelect(`Không tìm thấy điểm bắt đầu hoặc điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
-		} else if (needsStart) {
-			onSelect(`Không tìm thấy điểm bắt đầu phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
-		} else if (needsEnd) {
-			onSelect(`Không tìm thấy điểm đến phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
-		}
+		onSelect(`Không tìm thấy địa điểm phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
 	};
 
 	const canConfirm = (!needsStart || selectedStart) && (!needsEnd || selectedEnd);
@@ -152,7 +188,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					<div className="space-y-2.5">
 						<div className="flex items-center gap-2">
 							<div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-							<div className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Điểm xuất phát: "{data.start_name}"</div>
+							<div className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Điểm xuất phát: "{cleanDisplayId(data.start_name)}"</div>
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{data.start_options?.map((opt) => (
@@ -163,7 +199,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 									className={`text-xs rounded-xl h-9 px-4 transition-all ${selectedStart === opt ? "shadow-lg shadow-primary/20 scale-105" : "hover:bg-primary/5"}`}
 									onClick={() => setSelectedStart(opt)}
 								>
-									{opt}
+									{cleanDisplayId(opt)}
 								</Button>
 							))}
 						</div>
@@ -174,7 +210,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					<div className="space-y-2.5">
 						<div className="flex items-center gap-2">
 							<div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-							<div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Điểm đến: "{data.end_name}"</div>
+							<div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Điểm đến: "{cleanDisplayId(data.end_name)}"</div>
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{data.end_options?.map((opt) => (
@@ -185,7 +221,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 									className={`text-xs rounded-xl h-9 px-4 transition-all ${selectedEnd === opt ? "shadow-lg shadow-primary/20 scale-105" : "hover:bg-primary/5"}`}
 									onClick={() => setSelectedEnd(opt)}
 								>
-									{opt}
+									{cleanDisplayId(opt)}
 								</Button>
 							))}
 						</div>
@@ -487,7 +523,7 @@ function RouteMessage({ routeData }: { routeData: RouteData }) {
 					<Navigation className="w-4 h-4 text-primary" />
 					<div>
 						<span className="text-sm font-medium">
-							{routeData.start_name} → {routeData.end_name}
+							{cleanDisplayId(routeData.start_name)} → {cleanDisplayId(routeData.end_name)}
 						</span>
 						<span className="text-xs text-muted-foreground ml-2">
 							~{estimatedMinutes} phút • {Math.round(routeData.total_distance_m)}m
@@ -545,6 +581,8 @@ export function ChatWindow({
 	isTyping, 
 	isVoiceMode, 
 	isListening, 
+	isSpeaking,
+	micLevel,
 	currentTools = [], 
 	partialText, 
 	threadId, 
@@ -863,7 +901,7 @@ export function ChatWindow({
 									<div className="p-5 text-base rounded-none transition-all duration-200 bg-transparent leading-relaxed tracking-wide">
 										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
 											<Markdown remarkPlugins={[remarkGfm]}>
-												{combinedContent}
+												{cleanDisplayId(combinedContent)}
 											</Markdown>
 										</div>
 									</div>
@@ -982,7 +1020,7 @@ export function ChatWindow({
 							</div>
 						</div>
 						<div className="flex-1 max-w-[85%]">
-							<VoiceLoadingIndicator isListening={true} />
+							<VoiceLoadingIndicator isListening={true} isSpeaking={!!isSpeaking} micLevel={micLevel} />
 						</div>
 					</div>
 				)}

@@ -166,31 +166,13 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      fetchAllMaps: async () => {
+      fetchAllMaps: async (force = false) => {
         const state = get();
-        if (state.allMaps.length > 0 || state.isLoadingMaps) return;
+        if (!force && (state.allMaps.length > 0 || state.isLoadingMaps)) return;
 
         set({ isLoadingMaps: true });
         try {
-          const maps = await wayfindingMapApi.getAllMaps();
-          
-          // Process in small batches to avoid 429 Too Many Requests
-          const data = [];
-          const BATCH_SIZE = 3;
-          
-          for (let i = 0; i < maps.length; i += BATCH_SIZE) {
-            const batch = maps.slice(i, i + BATCH_SIZE);
-            const batchResults = await Promise.all(
-              batch.map(m => wayfindingMapApi.getMapWithData(m.id))
-            );
-            data.push(...batchResults);
-            
-            // Add a tiny delay between batches if there are more
-            if (i + BATCH_SIZE < maps.length) {
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-          }
-          
+          const data = await wayfindingMapApi.getAllMapsWithData();
           set({ allMaps: data, isLoadingMaps: false });
         } catch (error) {
           console.error("Lỗi khi tải bản đồ:", error);

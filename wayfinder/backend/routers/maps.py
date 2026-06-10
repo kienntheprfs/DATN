@@ -1,8 +1,10 @@
 import os
 import shutil
 from datetime import datetime
+from collections import defaultdict
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from backend.core.db import engine, get_session
@@ -18,8 +20,6 @@ router = APIRouter()
 DATA_DIR = "data"
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
 
 
 # =========================================================================
@@ -103,6 +103,92 @@ def get_campus_maps(session: Session = Depends(get_session)):
     return maps
 
 
+# =========================================================================
+# GET ALL MAPS WITH NODES & EDGES (consolidated, saves ~3*N frontend requests)
+# =========================================================================
+class _MapOut(BaseModel):
+    id: int
+    name: str
+    image_url: str
+    floor_level: Optional[int] = None
+    scale_ratio: float
+    building_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class _NodeOut(BaseModel):
+    id: int
+    map_id: int
+    name: str
+    x: float
+    y: float
+    type: str
+    building_id: Optional[int] = None
+    description: Optional[str] = None
+    real_image_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class _EdgeOut(BaseModel):
+    id: int
+    start_node_id: int
+    end_node_id: int
+    type: str
+    polyline: Optional[List[List[float]]] = None
+    weight: float
+    bidirectional: bool
+
+    class Config:
+        from_attributes = True
+
+
+class _MapWithDataOut(BaseModel):
+    map: _MapOut
+    nodes: List[_NodeOut]
+    edges: List[_EdgeOut]
+
+
+@router.get("/with-data", response_model=List[_MapWithDataOut])
+def get_all_maps_with_data(session: Session = Depends(get_session)):
+    maps = session.exec(
+        select(Map).order_by(Map.building_id.nullsfirst(), Map.floor_level)
+    ).all()
+
+    all_nodes = session.exec(select(Node)).all()
+    all_edges = session.exec(select(Edge)).all()
+
+    # Build node_id -> map_id lookup for edge grouping
+    node_to_map = {n.id: n.map_id for n in all_nodes}
+
+    # Group nodes by map_id
+    nodes_by_map: dict[int, list[Node]] = defaultdict(list)
+    for n in all_nodes:
+        nodes_by_map[n.map_id].append(n)
+
+    # Group edges by map (cross-floor edges belong to both maps)
+    edges_by_map: dict[int, list[Edge]] = defaultdict(list)
+    for e in all_edges:
+        start_map = node_to_map.get(e.start_node_id)
+        end_map = node_to_map.get(e.end_node_id)
+        if start_map:
+            edges_by_map[start_map].append(e)
+        if end_map is not None and end_map != start_map:
+            edges_by_map[end_map].append(e)
+
+    return [
+        _MapWithDataOut(
+            map=m,
+            nodes=nodes_by_map.get(m.id, []),
+            edges=edges_by_map.get(m.id, []),
+        )
+        for m in maps
+    ]
+
+
 @router.patch("/{map_id}", response_model=Map)
 def update_map(map_id: int, payload: Map, session: Session = Depends(get_session)):
     n = session.get(Map, map_id)
@@ -111,23 +197,27 @@ def update_map(map_id: int, payload: Map, session: Session = Depends(get_session
 
     # Cập nhật các field từ payload (chỉ những field không None)
     update_data = payload.model_dump(exclude_unset=True)
-    
+
     # Kiểm tra xem có đổi scale_ratio không
     old_scale = n.scale_ratio
     new_scale = update_data.get("scale_ratio")
-    
+
     for field, value in update_data.items():
         setattr(n, field, value)
 
     session.add(n)
-    
+
     # Nếu scale thay đổi, tính lại tất cả weight của các edge thuộc map này
     if new_scale is not None and new_scale != old_scale:
         # Lấy tất cả các node thuộc map này
         # Sau đó lấy tất cả các edge nối từ các node đó
-        statement = select(Edge).join(Node, Edge.start_node_id == Node.id).where(Node.map_id == map_id)
+        statement = (
+            select(Edge)
+            .join(Node, Edge.start_node_id == Node.id)
+            .where(Node.map_id == map_id)
+        )
         edges = session.exec(statement).all()
-        
+
         for edge in edges:
             edge.weight = calculate_edge_weight(edge.polyline, edge.type, new_scale)
             session.add(edge)
@@ -201,14 +291,21 @@ def delete_map(map_id: int, session: Session = Depends(get_session)):
     if node_ids:
         # Xóa Aliases của các node này
         session.exec(sql_delete(Alias).where(Alias.node_id.in_(node_ids)))
-        
+
         # Xóa Edges nối tới hoặc từ các node này
-        session.exec(sql_delete(Edge).where((Edge.start_node_id.in_(node_ids)) | (Edge.end_node_id.in_(node_ids))))
-        
+        session.exec(
+            sql_delete(Edge).where(
+                (Edge.start_node_id.in_(node_ids)) | (Edge.end_node_id.in_(node_ids))
+            )
+        )
+
         # Xóa Nodes
         session.exec(sql_delete(Node).where(Node.map_id == map_id))
 
     # Xóa Map
     session.delete(m)
     session.commit()
-    return {"message": "Đã xóa map và toàn bộ dữ liệu liên quan thành công", "id": map_id}
+    return {
+        "message": "Đã xóa map và toàn bộ dữ liệu liên quan thành công",
+        "id": map_id,
+    }

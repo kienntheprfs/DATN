@@ -235,7 +235,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
             isOpen={true}
             onClose={onClose}
             title="Quản lý Hạ tầng & Bản đồ"
-            description="Tổ chức các tòa nhà và upload bản đồ cho từng tầng."
+            description="Tổ chức các tòa nhà và tải lên bản đồ cho từng tầng."
             size="full"
         >
             <div className="flex h-[calc(90vh-140px)] -mx-6 -my-6 overflow-hidden">
@@ -338,7 +338,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
                                                             </div>
                                                             {count > 0 && (
                                                                 <Badge variant="secondary" className="h-5 px-1.5 text-[9px] font-black bg-primary/10 text-primary border-none">
-                                                                    {count} Cues
+                                                                    {count} Dấu hiệu
                                                                 </Badge>
                                                             )}
                                                         </Button>
@@ -474,7 +474,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
  
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-3">
-                                                <Badge className="bg-primary text-white border-none text-[9px] font-black uppercase h-4 px-2 tracking-widest">Active ID: #{selectedBuilding.id}</Badge>
+                                                <Badge className="bg-primary text-white border-none text-[9px] font-black uppercase h-4 px-2 tracking-widest">ID: #{selectedBuilding.id}</Badge>
                                             </div>
                                             <h2 className="text-3xl font-black text-foreground tracking-tight leading-none uppercase">{selectedBuilding.name}</h2>
                                             <div className="flex items-center gap-2">
@@ -613,7 +613,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
                                             <div key={floor.id} className="group flex bg-white border border-border/40 rounded-xl overflow-hidden hover:border-primary/30 transition-all">
                                                 <div className="w-[140px] p-4 flex flex-col items-center justify-center border-r border-border/20 bg-muted/5 shrink-0">
                                                     <div className="size-16 bg-primary text-white rounded-lg flex flex-col items-center justify-center shadow-md">
-                                                        <span className="text-[8px] font-black uppercase opacity-60 tracking-widest">Level</span>
+                                                        <span className="text-[8px] font-black uppercase opacity-60 tracking-widest">Tầng</span>
                                                         <span className="text-2xl font-black leading-none">{floor.floor_level}</span>
                                                     </div>
                                                     <div className="mt-3 text-[9px] font-mono font-black text-muted-foreground/60">ID: {floor.id}</div>
@@ -626,7 +626,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
                                                             <div className="flex items-center gap-3">
                                                                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 text-green-700 rounded border border-green-100">
                                                                     <div className="size-1 rounded-full bg-green-500 animate-pulse" />
-                                                                    <span className="text-[8px] font-black uppercase tracking-widest">Operational</span>
+                                                                    <span className="text-[8px] font-black uppercase tracking-widest">Đang hoạt động</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground opacity-60">
                                                                     <span className="material-symbols-outlined text-xs">straighten</span>
@@ -667,7 +667,7 @@ export const BuildingModal = ({ initialBuildingId, onClose, onSuccess }: Buildin
                             <div className="size-24 bg-muted/40 rounded-2xl flex items-center justify-center mb-6">
                                 <span className="material-symbols-outlined text-5xl text-muted-foreground/20">architecture</span>
                             </div>
-                            <h4 className="text-xl font-black text-foreground/40 mb-1 uppercase tracking-[0.2em]">Infrastructure Management</h4>
+                            <h4 className="text-xl font-black text-foreground/40 mb-1 uppercase tracking-[0.2em]">Quản lý Hạ tầng</h4>
                             <p className="text-[10px] text-muted-foreground/50 max-w-xs font-bold uppercase tracking-widest">
                                 Chọn một tòa nhà từ danh sách bên trái để quản lý sơ đồ không gian.
                             </p>

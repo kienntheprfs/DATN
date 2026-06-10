@@ -28,9 +28,21 @@ export async function POST(request: NextRequest) {
 		if (isPdf) {
 			const arrayBuffer = await response.arrayBuffer();
 			const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+			let textContent = "";
+			try {
+				const { PDFParse } = await import("pdf-parse");
+				const pdfDoc = new PDFParse(Buffer.from(arrayBuffer));
+				const result = await pdfDoc.getText();
+				textContent = result.text || "";
+			} catch (e) {
+				console.error("PDF text extraction failed:", e);
+			}
+
 			return NextResponse.json({ 
 				isPdf: true, 
-				content: base64,
+				content: textContent,
+				pdfBase64: base64,
 				contentType: "application/pdf",
 			});
 		}

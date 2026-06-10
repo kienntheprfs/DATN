@@ -14,6 +14,14 @@ String _parseMarkdown(String text) {
   return text.replaceAll(RegExp(r'\*\*|__|\*|_|`|#'), '').trim();
 }
 
+String _capitalize(String text) {
+  final lower = text.toLowerCase();
+  return lower.replaceAllMapped(RegExp(r'(^\w|\.\s*\w)'), (m) {
+    final ch = m[0];
+    return ch == null ? '' : ch.toUpperCase();
+  });
+}
+
 // Chuyển đổi chuỗi sang dạng không dấu, viết thường để so sánh mờ (fuzzy match)
 String _normalizeForComparison(String text) {
   var str = text.toLowerCase();
@@ -40,10 +48,12 @@ class VoiceController extends ChangeNotifier {
   final Set<String> seen = {};
   VoiceStatus status = VoiceStatus.idle;
   final String _guestUserId = 'guest-${_uuid().substring(0, 8)}';
-
+ 
   String get guestUserId => _guestUserId;
   bool isSpeaking = false;
   bool isMuted = false;
+  double micLevel = 0.0;
+  Timer? _levelTimer;
   String? threadId;
   String? runId;
   String? pcId;
@@ -144,6 +154,7 @@ class VoiceController extends ChangeNotifier {
       }
       pendingIce.clear();
       status = VoiceStatus.connected;
+      _startLevelMonitor();
       notifyListeners();
     } catch (e) {
       debugPrint('Voice connection error: $e');
@@ -197,6 +208,38 @@ class VoiceController extends ChangeNotifier {
     });
   }
 
+  void _startLevelMonitor() {
+    _stopLevelMonitor();
+    _levelTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
+      if (peer == null || !isSpeaking) {
+        micLevel = 0.0;
+        notifyListeners();
+        return;
+      }
+      try {
+        final reports = await peer!.getStats();
+        double maxLevel = 0.0;
+        for (final report in reports) {
+          final type = report.type;
+          if (type == 'outbound-rtp' || type == 'inbound-rtp') {
+            final level = (report.values['audioLevel'] as num?)?.toDouble() ?? 0.0;
+            if (level > maxLevel) maxLevel = level;
+          }
+        }
+        micLevel = (maxLevel * 3).clamp(0.0, 1.0);
+      } catch (_) {
+        micLevel = isSpeaking ? 0.5 : 0.0;
+      }
+      notifyListeners();
+    });
+  }
+
+  void _stopLevelMonitor() {
+    _levelTimer?.cancel();
+    _levelTimer = null;
+    micLevel = 0.0;
+  }
+
   void _startNoResponseTimer() {
     _noResponseTimeout?.cancel();
     _noResponseTimeout = Timer(_noResponseDuration, () {
@@ -227,7 +270,7 @@ class VoiceController extends ChangeNotifier {
             currentTranscript = '';
             transcriptHistory.clear(); // Clear history when switching to user
           }
-          currentTranscript = data!['text'].toString();
+          currentTranscript = _capitalize(data!['text'].toString());
           
           _lastSpeakingEvent = DateTime.now();
           if (!isSpeaking) {
@@ -578,6 +621,7 @@ class VoiceController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    _stopLevelMonitor();
     _cancelNoResponseTimer();
     try {
       await dataChannel?.close();

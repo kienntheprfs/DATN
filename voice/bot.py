@@ -102,6 +102,9 @@ def clean_markdown_for_tts(text: str) -> str:
     if not text:
         return text
 
+    # Strip [ID: ...] tags
+    text = re.sub(r"\[ID:\s*\d+\]", "", text, flags=re.IGNORECASE)
+
     # 1. Bỏ các đoạn code block dài (TTS đọc code rất tệ và mất thời gian)
     text = re.sub(r"```[\s\S]*?```", "", text)
     # Bỏ inline code (chỉ bỏ dấu backtick, giữ lại text bên trong)
