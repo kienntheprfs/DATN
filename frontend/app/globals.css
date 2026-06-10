@@ -241,3 +241,86 @@
 	background-size: cover;
 	background-position: center;
 }
+
+/* Custom Prose Styling for Markdown */
+.prose {
+	color: inherit;
+}
+.prose p {
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+	line-height: 1.625;
+}
+.prose p:first-child {
+	margin-top: 0;
+}
+.prose p:last-child {
+	margin-bottom: 0;
+}
+.prose ul {
+	list-style-type: disc !important;
+	padding-left: 1.5rem !important;
+	margin-top: 0.5rem !important;
+	margin-bottom: 0.5rem !important;
+}
+.prose ol {
+	list-style-type: decimal !important;
+	padding-left: 1.5rem !important;
+	margin-top: 0.5rem !important;
+	margin-bottom: 0.5rem !important;
+}
+.prose li {
+	display: list-item !important;
+	margin-top: 0.25rem !important;
+	margin-bottom: 0.25rem !important;
+	padding-left: 0.125rem !important;
+}
+.prose h1 {
+	font-size: 1.5rem;
+	font-weight: 700;
+	margin-top: 1.5rem;
+	margin-bottom: 0.75rem;
+}
+.prose h2 {
+	font-size: 1.25rem;
+	font-weight: 700;
+	margin-top: 1.25rem;
+	margin-bottom: 0.5rem;
+}
+.prose h3 {
+	font-size: 1.125rem;
+	font-weight: 600;
+	margin-top: 1rem;
+	margin-bottom: 0.5rem;
+}
+.prose strong {
+	font-weight: 600;
+}
+.prose blockquote {
+	border-left-width: 4px;
+	border-left-color: var(--border);
+	padding-left: 1rem;
+	font-style: italic;
+	margin: 1rem 0;
+}
+.prose code {
+	background-color: var(--muted);
+	padding: 0.2rem 0.4rem;
+	border-radius: 0.25rem;
+	font-size: 0.875em;
+	font-family: var(--font-mono);
+}
+.prose pre {
+	background-color: var(--muted);
+	padding: 1rem;
+	border-radius: 0.5rem;
+	overflow-x: auto;
+	margin: 1rem 0;
+}
+.prose pre code {
+	background-color: transparent;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
+}
+

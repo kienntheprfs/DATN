@@ -147,6 +147,17 @@ export const knowledgeService = {
     const response = await apiClient.get<KnowledgeAdminDocumentItem>(`/kb/documents/${documentId}`);
     return response.data;
   },
+
+  async updateDocument(
+    documentId: number | string,
+    payload: {
+      title?: string;
+      meta_data?: Record<string, any>;
+    }
+  ): Promise<any> {
+    const response = await apiClient.patch(`/kb/documents/${documentId}`, payload);
+    return response.data;
+  },
 };
 
 export default knowledgeService;

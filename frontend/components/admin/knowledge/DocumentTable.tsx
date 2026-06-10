@@ -89,40 +89,42 @@ export function DocumentTable({ documents, isLoading, onDeleteDocument, deleting
               </thead>
               <tbody className="bg-white divide-y divide-border-color">
           {isLoading ? (
-            <tr className="animate-pulse dense-table-row">
-              <td className="px-6 whitespace-nowrap align-top">
-                <div className="h-5 bg-slate-200 rounded w-20"></div>
-              </td>
-              <td className="px-6 align-top">
-                <div className="h-5 bg-slate-200 rounded w-3/4 mb-2"></div>
-                <div className="h-3 bg-slate-100 rounded w-1/2"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap align-top">
-                <div className="h-4 bg-slate-200 rounded w-20"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap align-top">
-                <div className="h-4 bg-slate-200 rounded w-24"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap align-top">
-                <div className="h-5 bg-slate-200 rounded w-16"></div>
-              </td>
-              <td className="px-6 align-top">
-                <div className="flex gap-2">
-                  <div className="h-5 bg-slate-200 rounded w-12"></div>
+            Array.from({ length: 8 }).map((_, index) => (
+              <tr key={`table-skeleton-${index}`} className="animate-pulse dense-table-row">
+                <td className="px-6 whitespace-nowrap align-top">
+                  <div className="h-5 bg-slate-200 rounded w-20"></div>
+                </td>
+                <td className="px-6 align-top">
+                  <div className="h-5 bg-slate-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-slate-100 rounded w-1/2"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap align-top">
+                  <div className="h-4 bg-slate-200 rounded w-20"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap align-top">
+                  <div className="h-4 bg-slate-200 rounded w-24"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap align-top">
                   <div className="h-5 bg-slate-200 rounded w-16"></div>
-                </div>
-              </td>
-              <td className="px-6 whitespace-nowrap align-top">
-                <div className="h-5 bg-slate-200 rounded w-16"></div>
-              </td>
-              <td className="px-6 whitespace-nowrap text-right align-top">
-                <div className="inline-flex items-center justify-end gap-2">
-                  <div className="h-5 w-5 rounded bg-slate-200"></div>
-                  <div className="h-5 w-5 rounded bg-slate-200"></div>
-                  <div className="h-5 w-5 rounded bg-slate-200"></div>
-                </div>
-              </td>
-            </tr>
+                </td>
+                <td className="px-6 align-top">
+                  <div className="flex gap-2">
+                    <div className="h-5 bg-slate-200 rounded w-12"></div>
+                    <div className="h-5 bg-slate-200 rounded w-16"></div>
+                  </div>
+                </td>
+                <td className="px-6 whitespace-nowrap align-top">
+                  <div className="h-5 bg-slate-200 rounded w-16"></div>
+                </td>
+                <td className="px-6 whitespace-nowrap text-right align-top">
+                  <div className="inline-flex items-center justify-end gap-2">
+                    <div className="h-5 w-5 rounded bg-slate-200"></div>
+                    <div className="h-5 w-5 rounded bg-slate-200"></div>
+                    <div className="h-5 w-5 rounded bg-slate-200"></div>
+                  </div>
+                </td>
+              </tr>
+            ))
           ) : documents.length === 0 ? (
             <tr>
               <td colSpan={8} className="px-6 py-8 text-center text-text-secondary">

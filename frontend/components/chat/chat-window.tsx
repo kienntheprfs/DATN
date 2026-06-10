@@ -809,7 +809,7 @@ export function ChatWindow({
 			role="log"
 			aria-live="polite"
 		>
-			<div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+			<div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
 				{isHistoryLoading && messages.length === 0 && (
 					<div className="flex gap-4 justify-start animate-in fade-in duration-300">
 						<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
@@ -844,7 +844,7 @@ export function ChatWindow({
 									<User className="size-6" />
 								</div> */}
 								<div className="group relative max-w-[85%]">
-									<div className="p-5 text-base rounded-none shadow-sm bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
+									<div className="p-5 text-base rounded-none bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
 										{group.messages.map(m => m.content).filter(Boolean).join(" ")}
 									</div>
 								</div>
@@ -898,7 +898,7 @@ export function ChatWindow({
 									</div>
 								)}
 								{combinedContent && (
-									<div className="p-5 text-base rounded-none shadow-sm transition-all duration-200 border bg-background border-border leading-relaxed tracking-wide">
+									<div className="p-5 text-base rounded-none transition-all duration-200 bg-transparent leading-relaxed tracking-wide">
 										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
 											<Markdown remarkPlugins={[remarkGfm]}>
 												{cleanDisplayId(combinedContent)}
