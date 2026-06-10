@@ -67,13 +67,35 @@ export function KnowledgeDataPanel({ filters, reloadSignal }: KnowledgeDataPanel
     mutationFn: async (doc: Document) => {
       await knowledgeService.deleteDocument(Number(doc.id), doc.isFormalDoc);
     },
-    onSuccess: () => {
-      toast.success("Đã xóa tài liệu thành công.");
-      queryClient.invalidateQueries({ queryKey: ["admin-knowledge-documents"] });
+    onMutate: async (doc) => {
+      await queryClient.cancelQueries({ queryKey: ["admin-knowledge-documents"] });
+      const previousQueries = queryClient.getQueriesData({ queryKey: ["admin-knowledge-documents"] });
+      queryClient.setQueriesData({ queryKey: ["admin-knowledge-documents"] }, (old: unknown) => {
+        if (!old || typeof old !== "object" || !("items" in old)) return old;
+        const data = old as { items: Array<{ id: number } & Record<string, unknown>> };
+        return {
+          ...data,
+          items: data.items.map((item) =>
+            item.id === Number(doc.id) ? { ...item, status: "delete_pending" } : item
+          ),
+        };
+      });
+      return { previousQueries };
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, _doc, context) => {
+      if (context?.previousQueries) {
+        for (const [key, data] of context.previousQueries) {
+          queryClient.setQueryData(key, data);
+        }
+      }
       const message = error instanceof Error ? error.message : "Không thể xóa tài liệu.";
       toast.error(message);
+    },
+    onSuccess: () => {
+      toast.success("Đã xóa tài liệu thành công.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-knowledge-documents"] });
     },
   });
 
@@ -95,6 +117,17 @@ export function KnowledgeDataPanel({ filters, reloadSignal }: KnowledgeDataPanel
               : false,
       }),
     placeholderData: keepPreviousData,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data || !("items" in data)) return false;
+      const needsPoll = (data as { items: Array<{ processing_status?: string | null; status?: string | null }> }).items.some(
+        (item) =>
+          item.processing_status === "pending" ||
+          item.processing_status === "processing" ||
+          item.status === "delete_pending"
+      );
+      return needsPoll ? 3000 : false;
+    },
   });
 
   const documents = useMemo(() => {
@@ -124,7 +157,7 @@ export function KnowledgeDataPanel({ filters, reloadSignal }: KnowledgeDataPanel
 
       <DocumentTable
         documents={documents}
-        isLoading={listQuery.isLoading || listQuery.isFetching}
+        isLoading={listQuery.isPending}
         deletingDocumentId={deleteMutation.variables?.id}
         onDeleteDocument={setDeleteCandidate}
       />

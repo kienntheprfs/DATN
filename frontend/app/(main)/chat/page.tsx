@@ -429,7 +429,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							onShowLandmarks={() => setShowLandmarkModal(true)}
 						/>
 						<footer className="w-full text-center text-[7px] text-muted-foreground/60 leading-relaxed">
-							<p>Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp{"\u00a0"}dụng.</p>
+							<p>AI có thể nhầm lẫn. Vui lòng kiểm tra lại văn bản gốc trước khi áp{"\u00a0"}dụng.</p>
 						</footer>
 					</div>
 				</div>

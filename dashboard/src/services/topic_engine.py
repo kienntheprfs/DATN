@@ -133,9 +133,11 @@ class VnCoreNLPSegmenter:
     """Wrapper mỏng cho py_vncorenlp - chỉ dùng annotator wseg."""
     def __init__(self, save_dir: str = VNCORENLP_DIR):
         global _VNCORENLP_INSTANCE
+        import jpype
+        if jpype.isJVMStarted() and not jpype.isThreadAttachedToJVM():
+            jpype.attachThreadToJVM()
         if _VNCORENLP_INSTANCE is None:
             import py_vncorenlp  # noqa: PLC0415
-            import jpype
             
             if not jpype.isJVMStarted():
                 print(f"[..] Dang khoi tao VnCoreNLP tu {save_dir} ...")
@@ -150,6 +152,9 @@ class VnCoreNLPSegmenter:
         self._model = _VNCORENLP_INSTANCE
 
     def segment(self, text: str) -> str:
+        import jpype
+        if jpype.isJVMStarted() and not jpype.isThreadAttachedToJVM():
+            jpype.attachThreadToJVM()
         sentences: list[str] = self._model.word_segment(text)
         return " ".join(sentences)
 
@@ -561,19 +566,25 @@ class FastTopicEngine:
 
         # 1. Preprocess
         print("\nDang segment bang VnCoreNLP ...")
-        segmenter = VnCoreNLPSegmenter(save_dir=VNCORENLP_DIR)
         stopwords_set = set(await load_stopwords(STOPWORD_FILE))
         
-        processed_docs = []
-        for doc in tqdm(docs, desc="Preprocessing"):
-            cleaned = clean_text_regex(doc)
-            if cleaned:
-                seg = segmenter.segment(cleaned)
-                filtered = remove_stopwords(seg, stopwords_set)
-                processed_docs.append(filtered)
-            else:
-                processed_docs.append("")
-                
+        def _run_preprocess(docs_list, sw_set):
+            import jpype
+            if jpype.isJVMStarted() and not jpype.isThreadAttachedToJVM():
+                jpype.attachThreadToJVM()
+            segmenter = VnCoreNLPSegmenter(save_dir=VNCORENLP_DIR)
+            processed = []
+            for doc in tqdm(docs_list, desc="Preprocessing"):
+                cleaned = clean_text_regex(doc)
+                if cleaned:
+                    seg = segmenter.segment(cleaned)
+                    filtered = remove_stopwords(seg, sw_set)
+                    processed.append(filtered)
+                else:
+                    processed.append("")
+            return processed
+
+        processed_docs = await asyncio.to_thread(_run_preprocess, docs, stopwords_set)
         self._processed_docs = processed_docs
         
         # 2. Embeddings
@@ -639,14 +650,18 @@ class FastTopicEngine:
 
         # 4. Huấn luyện BERTopic
         print("\nBat dau huan luyen BERTopic ...")
-        topics, probs = topic_model.fit_transform(processed_docs, embeddings)
+        def _fit_transform():
+            return topic_model.fit_transform(processed_docs, embeddings)
+        topics, probs = await asyncio.to_thread(_fit_transform)
 
         # 5. Reduce Outliers
         print("\nGiam thieu nhieu (Outlier Reduction) ...")
         try:
-            new_topics = topic_model.reduce_outliers(processed_docs, topics, strategy="embeddings", embeddings=embeddings)
-            topic_model.update_topics(processed_docs, topics=new_topics, vectorizer_model=vectorizer_model, ctfidf_model=ctfidf_model, representation_model=representation_model)
-            topics = new_topics
+            def _reduce_outliers():
+                new_topics = topic_model.reduce_outliers(processed_docs, topics, strategy="embeddings", embeddings=embeddings)
+                topic_model.update_topics(processed_docs, topics=new_topics, vectorizer_model=vectorizer_model, ctfidf_model=ctfidf_model, representation_model=representation_model)
+                return new_topics
+            topics = await asyncio.to_thread(_reduce_outliers)
         except Exception as e:
             print(f"  -> Bo qua giam nhieu do loi: {e}")
             

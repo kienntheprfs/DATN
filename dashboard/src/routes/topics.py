@@ -192,6 +192,7 @@ async def trigger_job(
             time_range=request.time_range,
             background_tasks=background_tasks,
             db_session_factory=AsyncSessionLocal,
+            topic_type=request.topic_type,
         )
     except JobConflictError as exc:
         raise HTTPException(
@@ -208,6 +209,7 @@ async def trigger_job(
         message=job.message,
         created_at=job.created_at,
         updated_at=job.updated_at,
+        topic_type=request.topic_type,
     )
 
 

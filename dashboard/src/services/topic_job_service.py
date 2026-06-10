@@ -27,11 +27,12 @@ async def _run_background_job(
     job_id: UUID,
     time_range: TimeRange,
     db_session_factory: Callable[[], AsyncSession],
+    topic_type: Optional[TopicType] = None,
 ) -> None:
-    """Background task that executes the full topic modeling pipeline.
+    """Background task that executes the topic modeling pipeline.
 
-    A single job runs BOTH input sources and creates one DashboardTopicResult
-    per TopicType.
+    A single job runs input sources (one or both depending on topic_type)
+    and creates DashboardTopicResult rows.
     """
     async with db_session_factory() as db:
         job: Optional[DashboardTopicPipelineJob] = await TopicJobRepository.get_by_id(
@@ -47,11 +48,16 @@ async def _run_background_job(
 
             from_ts, to_ts = parse_time_range(time_range)
 
-            # Build all input adapters
-            input_adapters = {
-                TopicType.MISSING_KNOWLEDGE: get_input_adapter(TopicType.MISSING_KNOWLEDGE),
-                TopicType.POPULAR_QUESTIONS: get_input_adapter(TopicType.POPULAR_QUESTIONS),
-            }
+            # Build input adapters based on requested topic_type
+            if topic_type is not None:
+                input_adapters = {
+                    topic_type: get_input_adapter(topic_type)
+                }
+            else:
+                input_adapters = {
+                    TopicType.MISSING_KNOWLEDGE: get_input_adapter(TopicType.MISSING_KNOWLEDGE),
+                    TopicType.POPULAR_QUESTIONS: get_input_adapter(TopicType.POPULAR_QUESTIONS),
+                }
 
             engine = FastTopicEngine(
                 embedding_model_name=settings.topic_embedding_model,
@@ -108,6 +114,7 @@ class TopicJobService:
         time_range: TimeRange,
         background_tasks,  # BackgroundTasks from fastapi
         db_session_factory: Callable[[], AsyncSession],
+        topic_type: Optional[TopicType] = None,
     ) -> tuple[DashboardTopicPipelineJob, bool]:
         """Attempt to create and enqueue a new job.
 
@@ -127,6 +134,7 @@ class TopicJobService:
                 job.id,
                 time_range,
                 db_session_factory,
+                topic_type,
             )
             logger.info("job %s enqueued", job.id)
 

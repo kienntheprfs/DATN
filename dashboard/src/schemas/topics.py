@@ -13,6 +13,7 @@ class JobTriggerRequest(BaseModel):
     """Payload for triggering a topic pipeline job."""
 
     time_range: TimeRange = TimeRange.DAYS_7
+    topic_type: Optional[TopicType] = None
 
 
 class JobTriggerResponse(BaseModel):
@@ -28,6 +29,7 @@ class JobTriggerResponse(BaseModel):
     message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    topic_type: Optional[TopicType] = None
 
 
 class JobDetailResponse(BaseModel):
@@ -45,6 +47,7 @@ class JobDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
+    topic_type: Optional[TopicType] = None
 
 
 class TopicResultSummary(BaseModel):

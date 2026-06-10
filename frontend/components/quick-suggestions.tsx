@@ -242,9 +242,9 @@ export default function QuickSuggestions() {
                         </span>
                       )}
                     </div>
-                    <h2 className="font-bold text-xs text-foreground mt-1 leading-snug">{item.title}</h2>
+                    <h2 className="font-bold text-sm sm:text-[15px] text-foreground mt-1 leading-snug">{item.title}</h2>
                     {item.summary && (
-                      <p className="text-xs text-foreground/85 leading-normal mt-0.5 whitespace-normal break-words">
+                      <p className="text-xs sm:text-sm text-foreground/85 leading-relaxed mt-0.5 whitespace-normal break-words">
                         {item.summary}
                       </p>
                     )}

@@ -1,26 +1,11 @@
 "use client";
 
 import React, { useDeferredValue, useMemo, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { KnowledgeDataPanel } from "@/components/admin/knowledge/KnowledgeDataPanel";
 import { KnowledgeFilters, SearchFilterPanel } from "@/components/admin/knowledge/SearchFilterPanel";
 import { UploadModal } from "@/components/admin/knowledge/UploadModal";
 
 export default function KnowledgePage() {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            refetchOnWindowFocus: false,
-            refetchOnReconnect: false,
-            refetchOnMount: false,
-            staleTime: 5 * 60 * 1000,
-            gcTime: 30 * 60 * 1000,
-          },
-        },
-      }),
-  );
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [reloadSignal, setReloadSignal] = useState(0);
 
@@ -36,8 +21,7 @@ export default function KnowledgePage() {
   const debouncedFilters = useDeferredValue(draftFilters);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="max-w-400 mx-auto w-full flex flex-col md:h-full">
+    <div className="max-w-400 mx-auto w-full flex flex-col md:h-full">
         <div className="flex flex-col gap-6 mb-6 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -63,7 +47,6 @@ export default function KnowledgePage() {
           onClose={() => setIsUploadModalOpen(false)}
           onUploaded={() => setReloadSignal((prev) => prev + 1)}
         />
-      </div>
-    </QueryClientProvider>
+    </div>
   );
 }

@@ -324,3 +324,31 @@
 	font-size: inherit;
 }
 
+/* Custom Close Button for Sonner Toasts */
+[data-sonner-toast] {
+	padding-right: 2.5rem !important;
+}
+
+[data-sonner-toast] [data-close-button] {
+	left: auto !important;
+	right: 12px !important;
+	top: 50% !important;
+	transform: translateY(-50%) !important;
+	border-radius: 6px !important;
+	background-color: var(--muted) !important;
+	border: 1px solid var(--border) !important;
+	color: var(--muted-foreground) !important;
+	transition: all 0.2s ease !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	width: 24px !important;
+	height: 24px !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+	background-color: var(--accent) !important;
+	color: var(--accent-foreground) !important;
+}
+
+
