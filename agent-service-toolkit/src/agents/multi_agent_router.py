@@ -19,13 +19,16 @@ logger = logging.getLogger(__name__)
 # STATE DEFINITION
 # ==============================================================================
 
+
 class AgentOutput(TypedDict):
     source: str
     result: str
 
+
 class Classification(TypedDict):
     source: Literal["knowledge_base_agent", "map_assistant"]
     query: str
+
 
 def merge_results(existing: list | None, new_val: list | None) -> list:
     """
@@ -40,17 +43,21 @@ def merge_results(existing: list | None, new_val: list | None) -> list:
         return new_val[1:]
     return existing + new_val
 
+
 class RouterState(MessagesState, total=False):
     classifications: list[Classification]
     results: Annotated[list[AgentOutput], merge_results]
+
 
 class WrapperState(TypedDict):
     messages: list
     query: str
 
+
 # ==============================================================================
 # SCHEMAS FOR STRUCTURED OUTPUT
 # ==============================================================================
+
 
 class ClassificationSchema(BaseModel):
     source: Literal["knowledge_base_agent", "map_assistant"] = Field(
@@ -60,11 +67,13 @@ class ClassificationSchema(BaseModel):
         description="Câu truy vấn tiếng Việt đã được viết lại đầy đủ ngữ cảnh, thay thế triệt để các đại từ (nó, ở đó...) bằng danh từ cụ thể từ lịch sử."
     )
 
+
 class ClassifierOutput(BaseModel):
     classifications: List[ClassificationSchema] = Field(
         default_factory=list,
-        description="Danh sách các Agent cần gọi. Có thể gọi 1 hoặc cả 2 agent cùng lúc nếu câu hỏi chứa nhiều ý (VD: vừa hỏi thời gian sự kiện, vừa hỏi đường đi)."
+        description="Danh sách các Agent cần gọi. Có thể gọi 1 hoặc cả 2 agent cùng lúc nếu câu hỏi chứa nhiều ý (VD: vừa hỏi thời gian sự kiện, vừa hỏi đường đi).",
     )
+
 
 # ==============================================================================
 # INSTRUCTIONS AND PROMPTS
@@ -132,6 +141,7 @@ Dưới đây là các câu trả lời thô được trả về từ các Agent
 # NODES AND EDGES
 # ==============================================================================
 
+
 async def classify_query(state: RouterState, config: RunnableConfig):
     """
     Classifies the user query into zero, one, or both sub-agents.
@@ -139,11 +149,9 @@ async def classify_query(state: RouterState, config: RunnableConfig):
     """
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_with_output = m.with_structured_output(ClassifierOutput)
-    
-    messages = [
-        SystemMessage(content=classification_instructions)
-    ] + state["messages"]
-    
+
+    messages = [SystemMessage(content=classification_instructions)] + state["messages"]
+
     # We want to skip streaming the classification model tokens to the client
     # So we add the "skip_stream" tag to the config.
     classifier_config = config.copy() if config else {}
@@ -153,103 +161,114 @@ async def classify_query(state: RouterState, config: RunnableConfig):
         classifier_config["tags"] = list(classifier_config["tags"])
     if "skip_stream" not in classifier_config["tags"]:
         classifier_config["tags"].append("skip_stream")
-    
+
     try:
         classifications = []
         try:
-            response: ClassifierOutput = await model_with_output.ainvoke(messages, classifier_config)
+            response: ClassifierOutput = await model_with_output.ainvoke(
+                messages, classifier_config
+            )
             if response and response.classifications:
                 for c in response.classifications:
-                    classifications.append({
-                        "source": c.source,
-                        "query": c.query
-                    })
+                    classifications.append({"source": c.source, "query": c.query})
         except Exception as structured_err:
-            logger.warning(f"Structured output failed: {structured_err}. Trying fallback raw invocation and manual parsing...")
+            logger.warning(
+                f"Structured output failed: {structured_err}. Trying fallback raw invocation and manual parsing..."
+            )
             fallback_messages = messages.copy()
             schema_json = json.dumps(ClassifierOutput.model_json_schema(), ensure_ascii=False)
-            fallback_messages.append(SystemMessage(content=f"Bắt buộc phản hồi theo định dạng JSON tuân thủ schema sau:\n{schema_json}"))
-            
+            fallback_messages.append(
+                SystemMessage(
+                    content=f"Bắt buộc phản hồi theo định dạng JSON tuân thủ schema sau:\n{schema_json}"
+                )
+            )
+
             raw_response = await m.ainvoke(fallback_messages, classifier_config)
             content = raw_response.content
-            
+
             # Clean content to find JSON block
-            first_brace = content.find('{')
-            last_brace = content.rfind('}')
+            first_brace = content.find("{")
+            last_brace = content.rfind("}")
             if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-                json_str = content[first_brace:last_brace + 1]
+                json_str = content[first_brace : last_brace + 1]
             else:
                 json_str = content
-                
+
             parsed = json.loads(json_str)
             if "classifications" in parsed:
                 for item in parsed["classifications"]:
                     if "source" in item and "query" in item:
-                        classifications.append({
-                            "source": item["source"],
-                            "query": item["query"]
-                        })
+                        classifications.append({"source": item["source"], "query": item["query"]})
         logger.info(f"Classifier decided: {classifications}")
-        
+
         # Heuristic correction for Vietnamese map/routing intent:
-        user_query_clean = state["messages"][-1].content.lower().strip() if state["messages"] else ""
-        
+        user_query_clean = (
+            state["messages"][-1].content.lower().strip() if state["messages"] else ""
+        )
+
         # 1. UI interactions (selecting start/destination nodes) are 100% map assistant
-        if "chọn điểm đến" in user_query_clean or "chọn vị trí" in user_query_clean or "[id:" in user_query_clean:
-            logger.info("Heuristic override: Direct map selection/ID interaction detected. Forcing map_assistant only.")
-            classifications = [{
-                "source": "map_assistant",
-                "query": state["messages"][-1].content
-            }]
+        if (
+            "chọn điểm đến" in user_query_clean
+            or "chọn vị trí" in user_query_clean
+            or "[id:" in user_query_clean
+        ):
+            logger.info(
+                "Heuristic override: Direct map selection/ID interaction detected. Forcing map_assistant only."
+            )
+            classifications = [{"source": "map_assistant", "query": state["messages"][-1].content}]
         else:
             # 2. General map keywords check
             map_keywords = [
-                "chỉ đường", "đi từ", "đến tòa", "tới tòa", "đi tới", "đi đến", "đường đi", 
-                "ở đâu", "bản đồ", "hội trường", "tòa nhà", "sơ đồ", "tìm đường", "định vị"
+                "chỉ đường",
+                "đi từ",
+                "đến tòa",
+                "tới tòa",
+                "đi tới",
+                "đi đến",
+                "đường đi",
+                "ở đâu",
+                "bản đồ",
+                "hội trường",
+                "tòa nhà",
+                "sơ đồ",
+                "tìm đường",
+                "định vị",
             ]
             has_map_keyword = any(kw in user_query_clean for kw in map_keywords)
             has_map_classification = any(c["source"] == "map_assistant" for c in classifications)
-            
+
             if has_map_keyword and not has_map_classification:
                 logger.info("Heuristic correction: Detected map keyword, appending map_assistant.")
                 fallback_query = state["messages"][-1].content
                 if classifications:
                     fallback_query = classifications[0]["query"]
-                classifications.append({
-                    "source": "map_assistant",
-                    "query": fallback_query
-                })
-        
+                classifications.append({"source": "map_assistant", "query": fallback_query})
+
         # Create a mock tool call for query classification so it shows up in the tool collapsible list
         tool_call_id = f"call_classify_{str(uuid.uuid4())[:8]}"
         tool_call = {
             "name": "QueryClassifier",
             "args": {"query": state["messages"][-1].content if state["messages"] else ""},
             "id": tool_call_id,
-            "type": "tool_call"
+            "type": "tool_call",
         }
-        ai_msg = AIMessage(
-            content="",
-            tool_calls=[tool_call]
-        )
+        ai_msg = AIMessage(content="", tool_calls=[tool_call])
         tool_msg = ToolMessage(
             content=json.dumps({"classifications": classifications}, ensure_ascii=False),
             name="QueryClassifier",
-            tool_call_id=tool_call_id
+            tool_call_id=tool_call_id,
         )
-        
+
         # We return a RESET marker to empty results from previous run
         return {
             "classifications": classifications,
             "results": ["__RESET__"],
-            "messages": [ai_msg, tool_msg]
+            "messages": [ai_msg, tool_msg],
         }
     except Exception as e:
         logger.error(f"Error during query classification: {e}", exc_info=True)
-        return {
-            "classifications": [],
-            "results": ["__RESET__"]
-        }
+        return {"classifications": [], "results": ["__RESET__"]}
+
 
 async def query_kb(state: WrapperState, config: RunnableConfig):
     """
@@ -260,33 +279,38 @@ async def query_kb(state: WrapperState, config: RunnableConfig):
     if messages and isinstance(messages[-1], HumanMessage):
         last_msg = messages[-1]
         messages[-1] = HumanMessage(
-            content=state["query"],
-            id=last_msg.id,
-            additional_kwargs=last_msg.additional_kwargs
+            content=state["query"], id=last_msg.id, additional_kwargs=last_msg.additional_kwargs
         )
-        
-    logger.info(f"Querying knowledge_base_agent with reformulated query: {state['query']}")
+
+    query_mode = (
+        config.get("configurable", {}).get("query_mode", "not_set") if config else "no_config"
+    )
+    logger.info(
+        f"Querying knowledge_base_agent with reformulated query: {state['query']} | query_mode={query_mode}"
+    )
     try:
-        response = await kb_agent.ainvoke({"messages": messages}, config)
+        # Gắn flag để KB agent biết query đã được router rewrite, skip deep_analyzer
+        kb_config = dict(config) if config else RunnableConfig()
+        if "configurable" not in kb_config:
+            kb_config["configurable"] = {}
+        else:
+            kb_config["configurable"] = dict(kb_config["configurable"])
+        kb_config["configurable"]["from_router"] = True
+        response = await kb_agent.ainvoke({"messages": messages}, kb_config)
         last_msg = response["messages"][-1]
-        new_messages = response["messages"][len(messages):]
+        new_messages = response["messages"][len(messages) :]
         return {
-            "results": [{
-                "source": "knowledge_base_agent",
-                "result": last_msg.content
-            }],
-            "messages": new_messages
+            "results": [{"source": "knowledge_base_agent", "result": last_msg.content}],
+            "messages": new_messages,
         }
     except Exception as e:
         logger.error(f"Error querying knowledge_base_agent: {e}", exc_info=True)
         err_msg = f"Có lỗi xảy ra khi truy vấn thông tin quy chế: {str(e)}"
         return {
-            "results": [{
-                "source": "knowledge_base_agent",
-                "result": err_msg
-            }],
-            "messages": [AIMessage(content=err_msg)]
+            "results": [{"source": "knowledge_base_agent", "result": err_msg}],
+            "messages": [AIMessage(content=err_msg)],
         }
+
 
 async def query_map(state: WrapperState, config: RunnableConfig):
     """
@@ -297,33 +321,26 @@ async def query_map(state: WrapperState, config: RunnableConfig):
     if messages and isinstance(messages[-1], HumanMessage):
         last_msg = messages[-1]
         messages[-1] = HumanMessage(
-            content=state["query"],
-            id=last_msg.id,
-            additional_kwargs=last_msg.additional_kwargs
+            content=state["query"], id=last_msg.id, additional_kwargs=last_msg.additional_kwargs
         )
-        
+
     logger.info(f"Querying map_assistant with reformulated query: {state['query']}")
     try:
         response = await map_assistant.ainvoke({"messages": messages}, config)
         last_msg = response["messages"][-1]
-        new_messages = response["messages"][len(messages):]
+        new_messages = response["messages"][len(messages) :]
         return {
-            "results": [{
-                "source": "map_assistant",
-                "result": last_msg.content
-            }],
-            "messages": new_messages
+            "results": [{"source": "map_assistant", "result": last_msg.content}],
+            "messages": new_messages,
         }
     except Exception as e:
         logger.error(f"Error querying map_assistant: {e}", exc_info=True)
         err_msg = f"Có lỗi xảy ra khi truy vấn bản đồ: {str(e)}"
         return {
-            "results": [{
-                "source": "map_assistant",
-                "result": err_msg
-            }],
-            "messages": [AIMessage(content=err_msg)]
+            "results": [{"source": "map_assistant", "result": err_msg}],
+            "messages": [AIMessage(content=err_msg)],
         }
+
 
 def route_to_agents(state: RouterState):
     """
@@ -334,21 +351,24 @@ def route_to_agents(state: RouterState):
         logger.info("No sub-agents required. Defaulting to knowledge_base_agent.")
         last_query = state["messages"][-1].content if state["messages"] else "Xin chào"
         return [Send("query_kb", {"messages": state["messages"], "query": last_query})]
-    
+
     sends = []
     for c in classifications:
         if c["source"] == "knowledge_base_agent":
             sends.append(Send("query_kb", {"messages": state["messages"], "query": c["query"]}))
         elif c["source"] == "map_assistant":
             sends.append(Send("query_map", {"messages": state["messages"], "query": c["query"]}))
-            
+
     if not sends:
-        logger.info("Classifications list was not empty but no valid target found. Defaulting to knowledge_base_agent.")
+        logger.info(
+            "Classifications list was not empty but no valid target found. Defaulting to knowledge_base_agent."
+        )
         last_query = state["messages"][-1].content if state["messages"] else "Xin chào"
         return [Send("query_kb", {"messages": state["messages"], "query": last_query})]
-        
+
     logger.info(f"Routing to: {[s.node for s in sends]}")
     return sends
+
 
 async def synthesize_results(state: RouterState, config: RunnableConfig):
     """
@@ -356,28 +376,29 @@ async def synthesize_results(state: RouterState, config: RunnableConfig):
     """
     results = state.get("results") or []
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    
+
     if not results:
         logger.info("No sub-agent results. Defaulting to knowledge_base_agent.")
         response = await kb_agent.ainvoke({"messages": state["messages"]}, config)
-        new_messages = response["messages"][len(state["messages"]):]
+        new_messages = response["messages"][len(state["messages"]) :]
         return {"messages": new_messages}
-        
+
     if len(results) == 1:
         logger.info("Single sub-agent result. Preserving original response.")
         # Sub-agent's messages (including final text and tool calls/responses)
         # have already been merged into state["messages"] during query_kb/query_map execution.
         # Returning {"messages": []} prevents duplicating the final AIMessage in the output.
         return {"messages": []}
-        
+
     logger.info(f"Synthesizing {len(results)} agent responses.")
     formatted_results = "\n\n".join([f"Agent [{r['source']}]:\n{r['result']}" for r in results])
     prompt = [
         SystemMessage(content=synthesis_instructions.format(formatted_results=formatted_results)),
     ] + state["messages"]
-    
+
     response = await m.ainvoke(prompt, config)
     return {"messages": [AIMessage(content=response.content)]}
+
 
 # ==============================================================================
 # GRAPH COMPILATION
@@ -398,11 +419,7 @@ workflow.set_entry_point("classify_query")
 workflow.add_conditional_edges(
     "classify_query",
     route_to_agents,
-    {
-        "query_kb": "query_kb",
-        "query_map": "query_map",
-        "synthesize_results": "synthesize_results"
-    }
+    {"query_kb": "query_kb", "query_map": "query_map", "synthesize_results": "synthesize_results"},
 )
 
 workflow.add_edge("query_kb", "synthesize_results")
