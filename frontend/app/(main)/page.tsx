@@ -5,7 +5,6 @@ import { BadgeCheckIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 // import SuggestionSection from "@/components/page.suggest";
-import QuickSuggestions from "@/components/quick-suggestions";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
 
 export default function Home() {
@@ -19,8 +18,8 @@ export default function Home() {
 
 	const handleSubmitAndRedirect = (message: string, queryMode?: QueryMode) => {
 		const threadId = crypto.randomUUID();
-		const params = new URLSearchParams({ 
-			thread_id: threadId, 
+		const params = new URLSearchParams({
+			thread_id: threadId,
 			message: message,
 		});
 		if (queryMode === "deep") {
@@ -31,7 +30,7 @@ export default function Home() {
 
 	return (
 		<div className="flex flex-col items-center justify-center w-full min-h-[85vh] px-4">
-			<div className="flex w-full max-w-3xl flex-col items-center gap-8">
+			<div className="flex w-full max-w-3xl flex-col items-center gap-14 sm:gap-20">
 				<div className="flex flex-col items-center gap-4 mt-3">
 					<Badge className="flex items-center gap-1.5 rounded-full bg-blue-100 px-4 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100">
 						<BadgeCheckIcon className="size-10 fill-accent" />
@@ -44,8 +43,6 @@ export default function Home() {
 				</div>
 
 				<div className="w-full flex flex-col gap-2">
-					<QuickSuggestions />
-
 					<ChatInput
 						voiceAgentId="chatbot"
 						onVoiceToggle={handleVoiceToggle}
@@ -55,12 +52,11 @@ export default function Home() {
 
 				{/* <SuggestionSection /> */}
 
-				<footer className="max-w-2xl text-sm text-center text-muted-foreground mb-3">
-					<p className="whitespace-nowrap">Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp dụng.</p>
-					<p>@ 2026 Nhóm đồ án HTK.</p>
+				<footer className="max-w-2xl text-xs text-center text-muted-foreground/80 mb-3 leading-relaxed">
+					<p>Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp{"\u00a0"}dụng.</p>
+					<p className="mt-1">@ 2026 Nhóm đồ án HTK.</p>
 				</footer>
 			</div>
 		</div>
 	);
 }
-

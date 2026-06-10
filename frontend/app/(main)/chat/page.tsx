@@ -9,7 +9,6 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { ChatInput, QueryMode } from "@/components/page.chatinput";
-import QuickSuggestions from "@/components/quick-suggestions";
 import { DocumentPanel } from "@/components/chat/document-panel";
 import { toast } from "sonner";
 import { getUserId, authService } from "@/services/auth-api";
@@ -74,7 +73,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 					if (parsed.type === "route" && parsed.status === "success") {
 						return parsed;
 					}
-				} catch {}
+				} catch { }
 			}
 		}
 		return null;
@@ -89,7 +88,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 					if (Array.isArray(parsed)) return parsed;
 					if (parsed.landmarks && Array.isArray(parsed.landmarks)) return parsed.landmarks;
 					if (parsed.results && Array.isArray(parsed.results) && m.toolName === "GuessLocationByDescription") return parsed.results;
-				} catch {}
+				} catch { }
 			}
 		}
 		return null;
@@ -97,7 +96,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 
 	const citations = useMemo(() => {
 		const allCitations: Array<{ file_name: string; s3_url: string; text_preview?: string; source_type: string; doc_id?: string; file_path?: string; is_faq?: boolean; faq_source?: string }> = [];
-		
+
 		// Find index of last user message
 		const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === "user");
 		const startIndex = lastUserMsgIndex === -1 ? 0 : messages.length - 1 - lastUserMsgIndex;
@@ -262,7 +261,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 		}
 	}, [urlMessage, urlQueryMode, model, agent, threadId, urlThreadId, router, isReadOnly]);
 
-	
+
 
 	const voice = useVoice({
 		agentId: agent || "chatbot",
@@ -353,7 +352,7 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 
 	return (
 		<>
-			<div className="h-[calc(100vh-100px)] w-screen overflow-hidden">
+			<div className="h-[calc(100vh-150px)] w-screen overflow-hidden">
 				{isReadOnly && (
 					<div className="mx-auto mt-3 w-full max-w-4xl rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
 						Đang xem lại hội thoại ở chế độ chỉ đọc.
@@ -406,10 +405,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 			</div>
 			{!isReadOnly && (
 				<div
-					className={`fixed bottom-0 bg-background p-4 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
+					className={`fixed bottom-0 bg-background px-4 pb-4 pt-6 transition-all duration-300 ${isMobile || state === "collapsed" ? "left-0" : "left-64"} right-0`}
 				>
 					<div className="mx-auto w-full max-w-4xl flex flex-col gap-2">
-						<QuickSuggestions />
 						<ChatInput
 							isLoading={isLoading}
 							onSubmitMessage={handleSendMessage}
@@ -430,6 +428,9 @@ function ChatContent({ onVoiceToggle, onConversationStart }: { onVoiceToggle: ()
 							onShowRoute={() => setShowRouteModal(true)}
 							onShowLandmarks={() => setShowLandmarkModal(true)}
 						/>
+						<footer className="w-full text-center text-[10px] text-muted-foreground/60 mt-2 leading-relaxed">
+							<p>Hệ thống sử dụng AI để hỗ trợ tra cứu. Vui lòng kiểm tra lại văn bản gốc trước khi áp{"\u00a0"}dụng.</p>
+						</footer>
 					</div>
 				</div>
 			)}

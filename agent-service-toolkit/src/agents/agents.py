@@ -34,39 +34,39 @@ class Agent:
 
 
 agents: dict[str, Agent] = {
-    "chatbot": Agent(description="A simple chatbot.", graph_like=chatbot),
-    "research-assistant": Agent(
-        description="A research assistant with web search and calculator.",
-        graph_like=research_assistant,
-    ),
+    # "chatbot": Agent(description="A simple chatbot.", graph_like=chatbot),
+    # "research-assistant": Agent(
+    #     description="A research assistant with web search and calculator.",
+    #     graph_like=research_assistant,
+    # ),
     "map-assistant": Agent(
         description="A map navigation assistant with route finding and location search capabilities.",
         graph_like=map_assistant,
     ),
-    "rag-assistant": Agent(
-        description="A RAG assistant with access to information in a database.",
-        graph_like=rag_assistant,
-    ),
-    "command-agent": Agent(description="A command agent.", graph_like=command_agent),
-    "bg-task-agent": Agent(description="A background task agent.", graph_like=bg_task_agent),
-    "langgraph-supervisor-agent": Agent(
-        description="A langgraph supervisor agent", graph_like=langgraph_supervisor_agent
-    ),
-    "langgraph-supervisor-hierarchy-agent": Agent(
-        description="A langgraph supervisor agent with a nested hierarchy of agents",
-        graph_like=langgraph_supervisor_hierarchy_agent,
-    ),
-    "interrupt-agent": Agent(
-        description="An agent the uses interrupts.", graph_like=interrupt_agent
-    ),
+    # "rag-assistant": Agent(
+    #     description="A RAG assistant with access to information in a database.",
+    #     graph_like=rag_assistant,
+    # ),
+    # "command-agent": Agent(description="A command agent.", graph_like=command_agent),
+    # "bg-task-agent": Agent(description="A background task agent.", graph_like=bg_task_agent),
+    # "langgraph-supervisor-agent": Agent(
+    #     description="A langgraph supervisor agent", graph_like=langgraph_supervisor_agent
+    # ),
+    # "langgraph-supervisor-hierarchy-agent": Agent(
+    #     description="A langgraph supervisor agent with a nested hierarchy of agents",
+    #     graph_like=langgraph_supervisor_hierarchy_agent,
+    # ),
+    # "interrupt-agent": Agent(
+    #     description="An agent the uses interrupts.", graph_like=interrupt_agent
+    # ),
     "knowledge-base-agent": Agent(
         description="A retrieval-augmented generation agent using Amazon Bedrock Knowledge Base",
         graph_like=kb_agent,
     ),
-    "github-mcp-agent": Agent(
-        description="A GitHub agent with MCP tools for repository management and development workflows.",
-        graph_like=github_mcp_agent,
-    ),
+    # "github-mcp-agent": Agent(
+    #     description="A GitHub agent with MCP tools for repository management and development workflows.",
+    #     graph_like=github_mcp_agent,
+    # ),
     "router-agent": Agent(
         description="A multi-agent router combining knowledge-base-agent and map-assistant for university queries.",
         graph_like=router_agent,

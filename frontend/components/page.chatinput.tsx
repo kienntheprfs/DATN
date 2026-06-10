@@ -11,6 +11,7 @@ import { InputGroupTextarea } from "@/components/ui/input-group";
 import { VoiceButton } from "@/components/voice-button";
 import { VoiceConnectionState } from "@/hooks/use-voice";
 import { authService } from "@/services/auth-api";
+import QuickSuggestions from "@/components/quick-suggestions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -154,8 +155,11 @@ export function ChatInput({
 
   return (
     <TooltipProvider>
-      <div className="flex w-full flex-col overflow-hidden border border-border bg-background shadow-md transition-all focus-within:ring-2 focus-within:ring-primary/50 rounded-none">
-        
+      <div className="flex w-full flex-col gap-3">
+        <QuickSuggestions />
+
+        <div className="flex w-full flex-col overflow-hidden border border-border bg-background shadow-md transition-all focus-within:ring-2 focus-within:ring-primary/50 rounded-none">
+
         <InputGroupTextarea 
           id="chat-textarea" 
           aria-label={isVoiceConnected ? "Nhập tin nhắn văn bản vào Voice Chat" : "Nhập câu hỏi hoặc yêu cầu tra cứu"}
@@ -169,7 +173,7 @@ export function ChatInput({
           <div className="flex items-center gap-1">
             {/* Agent Switcher Integrated */}
             {isOnline && (
-              <div className="flex items-center bg-muted/40 rounded-sm p-0.5 mr-1 border border-border/50 h-9">
+              <div className="flex items-center bg-muted/40 rounded-sm p-0.5 mr-1 border border-border/50 h-9 shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -181,7 +185,7 @@ export function ChatInput({
                     >
                       <Settings className="size-3.5 text-muted-foreground animate-hover-spin" />
                       <span className="text-muted-foreground font-normal">Agent:</span>
-                      <span className="max-w-[120px] truncate font-bold text-primary">
+                      <span className="max-w-[160px] truncate font-bold text-primary">
                         {agent === "router-agent" ? "Trợ lý thông minh" : (agent === "knowledge-base-agent" ? "Hỏi đáp quy chế" : (agent === "map-assistant" ? "Bản đồ & Chỉ đường" : agent))}
                       </span>
                     </Button>
@@ -301,12 +305,16 @@ export function ChatInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={isMuted ? "destructive" : "secondary"}
+                    variant="ghost"
                     size="icon"
-                    className="size-9 rounded-none"
+                    className={`size-11 rounded-none min-w-11 transition-colors duration-200 ${
+                      isMuted 
+                        ? "bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50" 
+                        : "bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50"
+                    }`}
                     onClick={onVoiceMute}
                   >
-                    {isMuted ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+                    {isMuted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{isMuted ? "Bật mic" : "Tắt mic"}</TooltipContent>
@@ -345,6 +353,7 @@ export function ChatInput({
               )}
             </Button>
           </div>
+        </div>
         </div>
       </div>
     </TooltipProvider>
