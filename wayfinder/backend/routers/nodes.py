@@ -221,17 +221,16 @@ def create_node(payload: NodeIn, session: Session = Depends(get_session)):
 
 
 @router.get("", response_model=List[NodeOut])
-def list_nodes(map_id: int, session: Session = Depends(get_session)):
-    stmt = (
-        select(Node)
-        .where(Node.map_id == map_id)
-        .options(
-            selectinload(Node.map).selectinload(Map.building),
-            selectinload(Node.building),
-            selectinload(Node.aliases),
-        )
-        .order_by(Node.id)
-    )
+def list_nodes(map_id: Optional[int] = None, session: Session = Depends(get_session)):
+    stmt = select(Node)
+    if map_id is not None:
+        stmt = stmt.where(Node.map_id == map_id)
+    
+    stmt = stmt.options(
+        selectinload(Node.map).selectinload(Map.building),
+        selectinload(Node.building),
+        selectinload(Node.aliases),
+    ).order_by(Node.id)
     nodes = session.exec(stmt).all()
     
     results = []

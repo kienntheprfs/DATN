@@ -1,5 +1,6 @@
 from typing import Optional, Any
 import json
+import re
 
 import requests
 from langchain_core.tools import tool
@@ -163,7 +164,18 @@ def find_route_func(
     from_lower = from_location.lower().strip() if from_location else ""
     to_lower = to_location.lower().strip() if to_location else ""
 
-    if from_location and any(p in from_lower for p in generic_patterns):
+    def is_generic_location(loc_clean: str) -> bool:
+        if not loc_clean:
+            return False
+        # 'hội trường' is a specific hall, not a generic campus reference
+        if "hội trường" in loc_clean:
+            return False
+        for p in generic_patterns:
+            if re.search(rf"\b{re.escape(p)}\b", loc_clean):
+                return True
+        return False
+
+    if from_location and is_generic_location(from_lower):
         return json.dumps(
             {
                 "type": "route",
@@ -174,7 +186,7 @@ def find_route_func(
                 "end_name": to_location,
             }
         )
-    if to_location and any(p in to_lower for p in generic_patterns):
+    if to_location and is_generic_location(to_lower):
         return json.dumps(
             {
                 "type": "route",
@@ -429,67 +441,9 @@ def find_route_func(
         route_response.raise_for_status()
         result = route_response.json()
 
-        # Check if route spans multiple floors
-        path_node_ids = result.get("path_node_ids", [])
-
-        # Get all maps involved in the route
-        all_maps_response = requests.get(f"{WAYFINDER_API}/api/maps", timeout=10)
-        all_maps = all_maps_response.json() if all_maps_response.status_code == 200 else []
-
-        # Get node info to determine which map each node belongs to
-        maps_in_route = set()
-        nodes_in_route = []
-
-        for node_id in path_node_ids:
-            node_response = requests.get(f"{WAYFINDER_API}/api/nodes/{node_id}", timeout=10)
-            if node_response.status_code == 200:
-                node_data = node_response.json()
-                if node_data.get("map_id"):
-                    maps_in_route.add(node_data["map_id"])
-                nodes_in_route.append(node_data)
-
-        is_multi_floor = len(maps_in_route) > 1
-
-        # Get only nodes/edges on the path (not all)
-        route_maps = []
-        path_node_set = set(path_node_ids)
-
-        for map_id in sorted(maps_in_route):
-            map_response = requests.get(f"{WAYFINDER_API}/api/maps/{map_id}", timeout=10)
-            if map_response.status_code != 200:
-                continue
-            map_info = map_response.json()
-
-            # Get nodes on this map that are in our path
-            nodes_response = requests.get(
-                f"{WAYFINDER_API}/api/nodes", params={"map_id": map_id}, timeout=10
-            )
-            all_nodes = nodes_response.json() if nodes_response.status_code == 200 else []
-            path_nodes = [n for n in all_nodes if n.get("id") in path_node_set]
-
-            # Get edges that connect path nodes on this map
-            path_node_ids_set = set(n["id"] for n in path_nodes)
-            edges_response = requests.get(
-                f"{WAYFINDER_API}/api/edges", params={"map_id": map_id}, timeout=10
-            )
-            all_edges = edges_response.json() if edges_response.status_code == 200 else []
-            path_edges = [
-                e
-                for e in all_edges
-                if e.get("start_node_id") in path_node_ids_set
-                and e.get("end_node_id") in path_node_ids_set
-            ]
-
-            route_maps.append({"map": map_info, "nodes": path_nodes, "edges": path_edges})
-
-        # Get primary map info
-        map_id = result.get("map_id", 1)
-        map_response = requests.get(f"{WAYFINDER_API}/api/maps/{map_id}", timeout=10)
-        map_data = (
-            map_response.json()
-            if map_response.status_code == 200
-            else {"id": map_id, "name": "Bản đồ", "image_url": "", "scale_ratio": 1.0}
-        )
+        # Extract primary map from route_maps (first segment)
+        route_maps = result.get("route_maps") or []
+        primary_map = route_maps[0]["map"] if route_maps else {"id": result.get("map_id", 1), "name": "Bản đồ", "image_url": "", "scale_ratio": 1.0}
 
         # Return structured JSON for frontend rendering
         response_data = {
@@ -497,17 +451,15 @@ def find_route_func(
             "status": "success",
             "start_name": start_display,
             "end_name": end_display,
-            "map": map_data,
+            "map": primary_map,
             "path_coords": result.get("path_coords", []),
-            "path_node_ids": path_node_ids,
+            "path_node_ids": result.get("path_node_ids", []),
             "total_distance_m": result.get("total_distance_m", 0),
             "instructions": result.get("instructions", []),
-            "is_multi_floor": is_multi_floor,
+            "is_multi_floor": result.get("is_multi_floor", False),
+            "route_maps": route_maps,
+            "floor_count": result.get("floor_count"),
         }
-
-        if is_multi_floor:
-            response_data["route_maps"] = route_maps
-            response_data["floor_count"] = len(maps_in_route)
 
         return json.dumps(response_data)
 

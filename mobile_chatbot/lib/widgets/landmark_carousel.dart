@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/chat_models.dart';
 import '../utils/constants.dart';
@@ -21,6 +22,32 @@ class LandmarkCarouselDialog extends StatefulWidget {
 class _LandmarkCarouselDialogState extends State<LandmarkCarouselDialog> {
   final PageController _pageController = PageController();
   int _currentIndex = 0;
+
+  String _formatDescription(String descStr) {
+    if (descStr.isEmpty) return '';
+    if (descStr.startsWith('{') && descStr.endsWith('}')) {
+      try {
+        final parsed = jsonDecode(descStr) as Map<String, dynamic>;
+        final List<String> parts = [];
+        if (parsed['landmarks'] != null) {
+          parts.add('Đặc điểm: ${parsed['landmarks']}');
+        }
+        if (parsed['colors'] != null) {
+          parts.add('Màu sắc: ${parsed['colors']}');
+        }
+        if (parsed['proximity'] != null) {
+          parts.add('Vị trí: ${parsed['proximity']}');
+        }
+        if (parsed['signs'] != null) {
+          parts.add('Biển hiệu: ${parsed['signs']}');
+        }
+        return parts.join(' • ');
+      } catch (_) {
+        return descStr;
+      }
+    }
+    return descStr;
+  }
 
   @override
   void dispose() {
@@ -109,14 +136,14 @@ class _LandmarkCarouselDialogState extends State<LandmarkCarouselDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                             Row(
                               children: [
-                                Icon(Icons.location_on, color: AppConstants.primaryColor, size: 16),
+                                const Icon(Icons.location_on, color: Colors.white, size: 16),
                                 const SizedBox(width: 6),
                                 Text(
                                   current.type == 'building' ? 'LANDMARK' : 'ĐỊA ĐIỂM',
                                   style: TextStyle(
-                                    color: AppConstants.primaryColor.withOpacity(0.9),
+                                    color: Colors.white.withOpacity(0.9),
                                     fontSize: 10,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 1.5,
@@ -136,7 +163,7 @@ class _LandmarkCarouselDialogState extends State<LandmarkCarouselDialog> {
                             if (current.description.isNotEmpty) ...[
                               const SizedBox(height: 2),
                               Text(
-                                '"${current.description}"',
+                                '"${_formatDescription(current.description)}"',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

@@ -55,7 +55,7 @@ def search_events_func(
    📝 {desc_preview}"""
 
             if event.get("node_id"):
-                event_info += f"\n   🗺️ Có thể chỉ đường đến đây!"
+                event_info += f"\n   🗺️ Có thể chỉ đường đến đây! [ID: {event['node_id']}]"
 
             result_parts.append(event_info)
 
@@ -102,6 +102,8 @@ def get_upcoming_events_func(
                 time_str += f" lúc {event['start_time']}"
 
             event_info = f"{idx}. {event['name']} - {time_str} @ {location_str}"
+            if event.get("node_id"):
+                event_info += f" [ID: {event['node_id']}]"
             result_parts.append(event_info)
 
         return f"""📅 Các sự kiện sắp diễn ra:
@@ -148,7 +150,7 @@ def get_event_detail_func(
 📝 Mô tả: {event.get("description", "Không có mô tả")}"""
 
         if event.get("node_id"):
-            result += "\n\n🗺️ Sự kiện này có vị trí trên bản đồ. Bạn có thể hỏi 'chỉ đường đến đây' để được hướng dẫn."
+            result += f"\n\n🗺️ Sự kiện này có vị trí trên bản đồ. Bạn có thể hỏi 'chỉ đường đến đây' để được hướng dẫn. [ID: {event['node_id']}]"
 
         return result
 

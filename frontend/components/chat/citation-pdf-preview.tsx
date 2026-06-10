@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Loader2, ZoomIn, ZoomOut, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,60 @@ interface CitationPdfPreviewProps {
 	highlightText?: string[];
 }
 
+// Unicode-aware normalize: NFC normalization + preserves Vietnamese chars via /u flag
+function normalize(s: string): string {
+	return s.toLowerCase().normalize('NFC').replace(/[^\w]/gu, '');
+}
+
+// Apply yellow highlights to PDF text layer spans matching the given terms
+function applyHighlights(container: HTMLElement, terms: string[], signal?: { cancelled: boolean }) {
+	const textLayers = container.querySelectorAll('.react-pdf__Page__textContent, .textLayer');
+	console.log(`[PDF Highlight] Text layers found: ${textLayers.length}`);
+	if (!textLayers.length) return { count: 0, totalSpans: 0, reason: 'no_text_layers' };
+
+	// Split multi-word terms into individual words, keep only distinctive (longer) words
+	const termWords = [...new Set(
+		terms.flatMap(t =>
+			t.normalize('NFC').toLowerCase()
+				.split(/[\s,;:.!?()]+/)
+				.map(w => w.replace(/[^\w]/gu, ''))
+				.filter(w => w.length > 3)
+		)
+	)].sort((a, b) => b.length - a.length).slice(0, 30);
+
+	if (!termWords.length) return { count: 0, totalSpans: 0, reason: 'no_term_words' };
+
+	console.log(`[PDF Highlight] Terms: ${terms.length}, Words: ${termWords.length} (longest first)`, termWords);
+
+	let totalSpans = 0;
+	let highlighted = 0;
+
+	textLayers.forEach(layer => {
+		const spans = layer.querySelectorAll<HTMLElement>('span');
+		totalSpans += spans.length;
+		spans.forEach(span => {
+			if (signal?.cancelled) return;
+			if (span.hasAttribute('data-highlighted')) return;
+			const text = (span.textContent || '').normalize('NFC').toLowerCase().replace(/[^\w]/gu, '');
+			if (!text || text.length < 2) return;
+
+			// Exact word match only — avoids false positives from short substring matches
+			const isMatch = termWords.includes(text);
+
+			if (isMatch) {
+				span.setAttribute('data-highlighted', 'true');
+				span.style.backgroundColor = 'rgba(255, 230, 0, 0.45)';
+				span.style.borderBottom = '2px solid rgba(255, 200, 0, 0.8)';
+				span.style.borderRadius = '2px';
+				highlighted++;
+			}
+		});
+	});
+
+	console.log(`[PDF Highlight] Result: ${highlighted}/${totalSpans} spans, words:`, termWords);
+	return { count: highlighted, totalSpans, reason: 'ok' };
+}
+
 export function CitationPdfPreview({ pdfData, fileName, highlightText }: CitationPdfPreviewProps) {
 	const [numPages, setNumPages] = useState(0);
 	const [scale, setScale] = useState(1.0);
@@ -31,8 +85,10 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 	const [isLoading, setIsLoading] = useState(true);
 	const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
-	const [searchResults, setSearchResults] = useState<number>(0);
-	const [currentResult, setCurrentResult] = useState(0);
+	const [highlightReady, setHighlightReady] = useState(false);
+	const [highlightInfo, setHighlightInfo] = useState<string>("");
+	const highlightAttemptedRef = useRef(false);
+	const cancelHighlightRef = useRef(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -62,18 +118,11 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 			}
 		}
 		setupPdfJs();
-
-		return () => {
-			if (pdfBlobUrl) {
-				URL.revokeObjectURL(pdfBlobUrl);
-			}
-		};
 	}, []);
 
 	useEffect(() => {
 		if (pdfData) {
 			try {
-				// Ensure base64 is clean
 				const base64 = pdfData.replace(/^data:application\/pdf;base64,/, "");
 				const binaryString = atob(base64);
 				const bytes = new Uint8Array(binaryString.length);
@@ -82,7 +131,15 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 			}
 				const blob = new Blob([bytes], { type: "application/pdf" });
 				const url = URL.createObjectURL(blob);
-				setPdfBlobUrl(url);
+
+				setPdfBlobUrl((prev) => {
+					if (prev) URL.revokeObjectURL(prev);
+					return url;
+				});
+				setHighlightReady(false);
+				setHighlightInfo("");
+				highlightAttemptedRef.current = false;
+				cancelHighlightRef.current = false;
 
 				return () => URL.revokeObjectURL(url);
 			} catch (e) {
@@ -91,59 +148,110 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 		}
 	}, [pdfData]);
 
-	// Auto search when highlightText changes and PDF is loaded
-	useEffect(() => {
-		if (highlightText && highlightText.length > 0 && numPages > 0 && pdfBlobUrl) {
-			// Find meaningful fragments to search for
-			const searchTerms = highlightText.flatMap(t => {
-				// Split into lines and take the first few lines that have enough content
-				return t.split("\n")
-					.map(line => line.trim())
-					.filter(line => line.length > 20)
-					.slice(0, 3); // Take up to 3 long lines per chunk
-			}).filter(Boolean);
-			
-			if (searchTerms.length > 0) {
-				const firstTerm = searchTerms[0];
-				setSearchQuery(firstTerm);
-				
-				// Trigger search after a delay to let text layer render for all pages
-				const timer = setTimeout(() => {
-					if (containerRef.current) {
-						let found = false;
-						// Try to find any of the terms
-						for (const term of searchTerms) {
-							if ((window as any).find(term, false, false, true, false, true, false)) {
-								found = true;
-								setSearchQuery(term);
-								setSearchResults(1);
-								setCurrentResult(1);
-								break;
-							}
-						}
-					}
-				}, 2000);
-				return () => clearTimeout(timer);
-			}
-		}
-	}, [highlightText, numPages, pdfBlobUrl]);
-
 	const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
 		setNumPages(numPages);
+		setHighlightReady(false);
+		setHighlightInfo("");
+		highlightAttemptedRef.current = false;
+		cancelHighlightRef.current = false;
+	};
+
+	// Prepare terms from highlightText
+	const terms = useMemo(() => {
+		if (!highlightText?.length) {
+			console.log("[PDF Highlight] No highlightText provided");
+			return [];
+		}
+		console.log(`[PDF Highlight] Received ${highlightText.length} highlight chunks`);
+		const result = highlightText.flatMap(t =>
+			t.split('\n')
+				.map(l => l.trim())
+				.filter(l => l.length > 5)
+				.slice(0, 5)
+		).filter(Boolean);
+		console.log(`[PDF Highlight] Generated ${result.length} terms from chunks`);
+		return result;
+	}, [highlightText]);
+
+	const doHighlight = useCallback(() => {
+		if (!containerRef.current) return { count: 0, totalSpans: 0, reason: 'no_container' };
+		const sig = { cancelled: false };
+		cancelHighlightRef.current = false;
+		const result = applyHighlights(containerRef.current, terms, sig);
+		return result;
+	}, [terms]);
+
+	// Poll for text layers and apply highlights when all pages are ready
+	useEffect(() => {
+		if (!numPages || !pdfBlobUrl || highlightAttemptedRef.current) return;
+		if (!terms.length) {
+			setHighlightInfo("Không có từ khóa để tô");
+			setHighlightReady(true);
+			highlightAttemptedRef.current = true;
+			return;
+		}
+
+		let attempts = 0;
+		const maxAttempts = 60;
+		let cancelled = false;
+
+		const tryHighlight = () => {
+			if (cancelled || highlightAttemptedRef.current || !containerRef.current) return;
+			attempts++;
+
+			const textLayers = containerRef.current.querySelectorAll('.react-pdf__Page__textContent, .textLayer');
+			const layersWithSpans = Array.from(textLayers).filter(
+				layer => layer.querySelectorAll('span').length > 0
+			).length;
+
+			if (layersWithSpans >= numPages) {
+				const result = applyHighlights(containerRef.current!, terms);
+				if (result.count > 0) setSearchQuery(terms[0]);
+				setHighlightInfo(`${result.count} highlights / ${result.totalSpans} spans`);
+				setHighlightReady(true);
+				highlightAttemptedRef.current = true;
+				console.log(`[PDF Highlight] Done: ${result.count}/${result.totalSpans} spans on ${layersWithSpans} pages`);
+			} else if (attempts < maxAttempts) {
+				setTimeout(tryHighlight, 500);
+			} else {
+				setHighlightInfo(`Timeout: ${layersWithSpans}/${numPages} pages (${textLayers.length} layers)`);
+				setHighlightReady(true);
+				highlightAttemptedRef.current = true;
+			}
+		};
+
+		const timer = setTimeout(tryHighlight, 1000);
+		return () => { cancelled = true; clearTimeout(timer); };
+	}, [numPages, pdfBlobUrl, terms]);
+
+	// Scroll to first highlight when ready
+	useEffect(() => {
+		if (!highlightReady || !containerRef.current) return;
+
+		const firstHighlighted = containerRef.current.querySelector('[data-highlighted]');
+		if (firstHighlighted) {
+			firstHighlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}
+	}, [highlightReady]);
+
+	const handleManualHighlight = () => {
+		setHighlightReady(false);
+		setHighlightInfo("");
+		highlightAttemptedRef.current = false;
+		setTimeout(() => {
+			const result = doHighlight();
+			setHighlightInfo(`${result.count} highlights / ${result.totalSpans} spans`);
+			setHighlightReady(true);
+			highlightAttemptedRef.current = true;
+		}, 500);
 	};
 
 	const handleSearch = () => {
 		if (!searchQuery.trim() || !containerRef.current) return;
-		
-		const found = (window as any).find(searchQuery, false, false, true, false, true, false);
-		if (found) {
-			setCurrentResult((prev) => prev + 1);
-		} else {
-			// Reset to first if no more results
-			const foundFirst = (window as any).find(searchQuery, false, false, true, false, false, false);
-			if (foundFirst) {
-				setCurrentResult(1);
-			}
+		try {
+			containerRef.current.querySelector(searchQuery);
+		} catch {
+			// ignore invalid selector
 		}
 	};
 
@@ -157,31 +265,45 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 	}
 
 	return (
-		<div className="flex flex-col h-full" ref={containerRef}>
+		<div className="flex flex-col h-full min-h-0" ref={containerRef}>
 			<div className="flex items-center justify-between p-2 border-b bg-muted/30 shrink-0">
-				<div className="flex items-center gap-2">
-					<span className="text-xs text-muted-foreground truncate max-w-[200px]">{fileName}</span>
-					{searchResults > 0 && (
-						<span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-							{currentResult}/{searchResults}
+				<div className="flex items-center gap-2 min-w-0">
+					<span className="text-xs text-muted-foreground truncate max-w-[160px]">{fileName}</span>
+					{highlightReady && highlightInfo && (
+						<span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded shrink-0">
+							{highlightInfo}
+						</span>
+					)}
+					{highlightReady && !highlightInfo && (
+						<span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded shrink-0">
+							Sẵn sàng
 						</span>
 					)}
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-1 shrink-0">
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 px-1.5 text-xs"
+						onClick={handleManualHighlight}
+						title="Thử tô highlights lại"
+					>
+						Tô lại
+					</Button>
 					<div className="flex items-center">
 						<Input
-							placeholder="Tìm trong PDF..."
+							placeholder="Tìm..."
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
 							onKeyDown={(e) => {
 								if (e.key === "Enter") handleSearch();
 							}}
-							className="h-7 w-[150px] text-xs"
+							className="h-7 w-[100px] text-xs"
 						/>
 						<Button
 							variant="ghost"
 							size="sm"
-							className="h-7 px-2"
+							className="h-7 px-1.5"
 							onClick={handleSearch}
 						>
 							<Search className="size-3" />
@@ -190,17 +312,17 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-7 px-2"
+						className="h-7 px-1.5"
 						disabled={scale <= 0.4}
 						onClick={() => setScale((s) => Math.max(0.4, s - 0.1))}
 					>
 						<ZoomOut className="size-3" />
 					</Button>
-					<span className="text-xs min-w-[40px] text-center">{Math.round(scale * 100)}%</span>
+					<span className="text-xs min-w-[35px] text-center">{Math.round(scale * 100)}%</span>
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-7 px-2"
+						className="h-7 px-1.5"
 						disabled={scale >= 2}
 						onClick={() => setScale((s) => Math.min(2, s + 0.1))}
 					>
@@ -208,13 +330,13 @@ export function CitationPdfPreview({ pdfData, fileName, highlightText }: Citatio
 					</Button>
 				</div>
 			</div>
-			<div className="flex-1 overflow-auto bg-gray-100 p-2">
+			<div className="flex-1 overflow-y-auto bg-gray-100 p-2">
 				<PdfDocument
 					file={pdfBlobUrl}
 					onLoadSuccess={onDocumentLoadSuccess}
 				>
 					{Array.from({ length: numPages }, (_, i) => (
-						<div key={i} className="mb-6 flex justify-center w-full">
+						<div key={`${i}-${scale}`} className="mb-6 flex justify-center w-full">
 							<div className="shadow-2xl border bg-white rounded-md overflow-hidden ring-1 ring-black/5">
 								<PdfPage
 									pageNumber={i + 1}

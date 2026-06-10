@@ -129,7 +129,6 @@ export const knowledgeService = {
   async uploadDocument(payload: UploadKnowledgeDocumentPayload): Promise<UploadKnowledgeDocumentResponse> {
     const formData = new FormData();
     formData.append("file", payload.file);
-    formData.append("storage_id", String(payload.storageId ?? 2));
     formData.append("auto_generate_faq", String(payload.autoGenerateFaq ?? false));
     formData.append("is_formal_doc", String(payload.isFormalDoc));
     if (payload.metaData) {

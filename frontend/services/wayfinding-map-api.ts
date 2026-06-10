@@ -27,4 +27,12 @@ export const wayfindingMapApi = {
     const res = await apiClient.get<MapData[]>("/wayfinder/api/maps");
     return res.data.map(m => ({ ...m, image_url: getFullImageUrl(m.image_url) }));
   },
+
+  getAllMapsWithData: async (): Promise<MapWithData[]> => {
+    const res = await apiClient.get<MapWithData[]>("/wayfinder/api/maps/with-data");
+    return res.data.map(item => ({
+      ...item,
+      map: { ...item.map, image_url: getFullImageUrl(item.map.image_url) },
+    }));
+  },
 };

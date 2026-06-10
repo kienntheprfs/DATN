@@ -26,5 +26,5 @@ export interface AppState {
   refreshHistory: () => Promise<void>;
   deleteHistoryItem: (threadId: string) => Promise<void>;
   updateHistoryItemTitle: (threadId: string, newTitle: string) => Promise<void>;
-  fetchAllMaps: () => Promise<void>;
+  fetchAllMaps: (force?: boolean) => Promise<void>;
 }

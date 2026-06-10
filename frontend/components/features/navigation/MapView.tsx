@@ -241,17 +241,17 @@ export function MapView({
       <div className="absolute top-4 left-4 flex items-center gap-3 bg-background/90 px-3 py-2 rounded-lg border shadow-sm text-xs">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-blue-600 rounded-full" />
-          <span>Route</span>
+          <span>Đường đi</span>
         </div>
         <div className="w-px h-3 bg-border" />
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-gray-400 rounded-full" />
-          <span>Path</span>
+          <span>Lối đi</span>
         </div>
         <div className="w-px h-3 bg-border" />
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-amber-500 rounded-full" />
-          <span>Stairs</span>
+          <span>Cầu thang</span>
         </div>
       </div>
     </div>

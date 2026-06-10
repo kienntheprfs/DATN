@@ -80,6 +80,7 @@ Nhiệm vụ của bạn là phân tích tin nhắn mới nhất của người 
    - CUNG CẤP VỊ TRÍ HIỆN TẠI: Nhận diện vị trí qua mô tả cảnh quan xung quanh của người dùng.
    - HÌNH ẢNH & BÁO LỖI: Yêu cầu xem hình ảnh trường, hoặc báo lỗi bản đồ/chỉ đường sai.
    - TOÀN BỘ VỀ SỰ KIỆN: Hỏi bất kỳ thông tin nào về sự kiện, hội thảo (thời gian, địa điểm, nội dung sơ bộ, ban tổ chức, cách đi đến đó).
+   - TƯƠNG TÁC BẢN ĐỒ/ĐỊA ĐIỂM: Nếu tin nhắn bắt đầu bằng 'Chọn điểm đến', 'Chọn vị trí xuất phát' hoặc chứa mã định danh địa điểm như '[ID: ...]', bạn BẮT BUỘC chọn 'map_assistant'.
 
 2. `knowledge_base_agent` (Chuyên gia Tuyển sinh & Quy chế học vụ):
    Chỉ định tuyến vào đây khi người dùng hỏi các thông tin thuộc các nhóm văn bản quy phạm sau:
@@ -154,15 +155,70 @@ async def classify_query(state: RouterState, config: RunnableConfig):
         classifier_config["tags"].append("skip_stream")
     
     try:
-        response: ClassifierOutput = await model_with_output.ainvoke(messages, classifier_config)
         classifications = []
-        if response and response.classifications:
-            for c in response.classifications:
-                classifications.append({
-                    "source": c.source,
-                    "query": c.query
-                })
+        try:
+            response: ClassifierOutput = await model_with_output.ainvoke(messages, classifier_config)
+            if response and response.classifications:
+                for c in response.classifications:
+                    classifications.append({
+                        "source": c.source,
+                        "query": c.query
+                    })
+        except Exception as structured_err:
+            logger.warning(f"Structured output failed: {structured_err}. Trying fallback raw invocation and manual parsing...")
+            fallback_messages = messages.copy()
+            schema_json = json.dumps(ClassifierOutput.model_json_schema(), ensure_ascii=False)
+            fallback_messages.append(SystemMessage(content=f"Bắt buộc phản hồi theo định dạng JSON tuân thủ schema sau:\n{schema_json}"))
+            
+            raw_response = await m.ainvoke(fallback_messages, classifier_config)
+            content = raw_response.content
+            
+            # Clean content to find JSON block
+            first_brace = content.find('{')
+            last_brace = content.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                json_str = content[first_brace:last_brace + 1]
+            else:
+                json_str = content
+                
+            parsed = json.loads(json_str)
+            if "classifications" in parsed:
+                for item in parsed["classifications"]:
+                    if "source" in item and "query" in item:
+                        classifications.append({
+                            "source": item["source"],
+                            "query": item["query"]
+                        })
         logger.info(f"Classifier decided: {classifications}")
+        
+        # Heuristic correction for Vietnamese map/routing intent:
+        user_query_clean = state["messages"][-1].content.lower().strip() if state["messages"] else ""
+        
+        # 1. UI interactions (selecting start/destination nodes) are 100% map assistant
+        if "chọn điểm đến" in user_query_clean or "chọn vị trí" in user_query_clean or "[id:" in user_query_clean:
+            logger.info("Heuristic override: Direct map selection/ID interaction detected. Forcing map_assistant only.")
+            classifications = [{
+                "source": "map_assistant",
+                "query": state["messages"][-1].content
+            }]
+        else:
+            # 2. General map keywords check
+            map_keywords = [
+                "chỉ đường", "đi từ", "đến tòa", "tới tòa", "đi tới", "đi đến", "đường đi", 
+                "ở đâu", "bản đồ", "hội trường", "tòa nhà", "sơ đồ", "tìm đường", "định vị"
+            ]
+            has_map_keyword = any(kw in user_query_clean for kw in map_keywords)
+            has_map_classification = any(c["source"] == "map_assistant" for c in classifications)
+            
+            if has_map_keyword and not has_map_classification:
+                logger.info("Heuristic correction: Detected map keyword, appending map_assistant.")
+                fallback_query = state["messages"][-1].content
+                if classifications:
+                    fallback_query = classifications[0]["query"]
+                classifications.append({
+                    "source": "map_assistant",
+                    "query": fallback_query
+                })
         
         # Create a mock tool call for query classification so it shows up in the tool collapsible list
         tool_call_id = f"call_classify_{str(uuid.uuid4())[:8]}"

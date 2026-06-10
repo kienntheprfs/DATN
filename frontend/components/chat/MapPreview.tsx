@@ -38,42 +38,109 @@ interface MiniNavProps {
 
 function MapSkeleton() {
   return (
-    <div className="flex flex-col border border-border/50 rounded-2xl overflow-hidden bg-card/30 backdrop-blur-sm shadow-xl max-w-full animate-pulse">
-      <div className="p-5 bg-muted/20 border-b border-border/30">
+    <div className="flex flex-col border border-border/60 rounded-2xl overflow-hidden bg-card/40 backdrop-blur-md shadow-2xl max-w-full relative">
+      {/* Glossy top-highlight border */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-primary/35 to-transparent z-10" />
+
+      {/* Header Skeleton */}
+      <div className="p-5 bg-gradient-to-br from-primary/5 via-muted/10 to-transparent border-b border-border/40 relative">
         <div className="flex items-center justify-between">
-          <div className="space-y-3">
-            <div className="h-3 w-20 bg-primary/10 rounded-full" />
-            <div className="h-5 w-48 bg-primary/20 rounded-lg" />
+          <div className="space-y-2.5 flex-1 mr-4">
+            {/* Tiny tag skeleton */}
+            <div className="h-3.5 w-24 bg-primary/10 rounded-full animate-pulse flex items-center justify-start px-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/45 animate-ping mr-1.5" />
+              <div className="h-1.5 w-10 bg-primary/20 rounded-full" />
+            </div>
+            {/* Title skeleton with shimmer */}
+            <div className="h-5 w-2/3 bg-gradient-to-r from-muted/50 via-muted/80 to-muted/50 rounded-lg animate-pulse" />
           </div>
-          <div className="h-9 w-24 bg-primary/20 rounded-full shadow-inner" />
+          {/* Button skeleton */}
+          <div className="h-8 w-24 bg-muted/40 rounded-full border border-border/40 animate-pulse flex items-center justify-center">
+            <div className="h-2 w-12 bg-muted-foreground/20 rounded-full" />
+          </div>
         </div>
       </div>
-      <div className="h-[350px] bg-muted/10 flex items-center justify-center relative overflow-hidden">
-        <div className="relative z-10">
-          <Navigation2 className="w-12 h-12 text-primary/30" />
-        </div>
+
+      {/* Map Viewport Skeleton */}
+      <div className="h-[350px] bg-slate-950/20 flex flex-col items-center justify-center relative overflow-hidden border-b border-border/30">
         
-        {/* Animated decorative grid lines */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '20%' }} />
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '40%' }} />
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '60%' }} />
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" style={{ top: '80%' }} />
-          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '25%' }} />
-          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '50%' }} />
-          <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary to-transparent" style={{ left: '75%' }} />
+        {/* Modern Radar & Compass Loader */}
+        <div className="relative z-10 flex flex-col items-center justify-center">
+          {/* Rotating Compass Ring */}
+          <div className="absolute w-28 h-28 rounded-full border border-primary/20 border-dashed animate-[spin_12s_linear_infinite]" />
+          
+          {/* Pulsing Radar Ring 1 */}
+          <div className="absolute w-24 h-24 rounded-full border border-primary/15 animate-ping opacity-60" />
+          
+          {/* Pulsing Radar Ring 2 */}
+          <div className="absolute w-16 h-16 rounded-full bg-primary/5 border border-primary/20 animate-pulse flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Navigation2 className="w-5 h-5 text-primary animate-[bounce_1.5s_infinite]" />
+            </div>
+          </div>
         </div>
 
-        {/* Decorative path simulation */}
-        <div className="absolute top-1/4 left-1/4 w-32 h-1.5 bg-primary/15 rounded-full rotate-45 blur-[1px]" />
-        <div className="absolute top-1/2 left-1/3 w-24 h-1.5 bg-primary/15 rounded-full -rotate-12 blur-[1px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-40 h-1.5 bg-primary/10 rounded-full rotate-[160deg] blur-[1px]" />
+        {/* Pathfinder Simulation SVG */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20" xmlns="http://www.w3.org/2000/svg">
+          {/* Mock Path */}
+          <path
+            d="M 100 280 Q 200 150 400 200 T 700 80"
+            fill="none"
+            stroke="url(#pathGradient)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray="8 8"
+            className="animate-[dash_20s_linear_infinite]"
+          />
+          {/* Start Point */}
+          <circle cx="100" cy="280" r="5" fill="#3b82f6" className="animate-pulse" />
+          {/* End Point */}
+          <circle cx="700" cy="80" r="5" fill="#3b82f6" className="animate-pulse" />
+          
+          <defs>
+            <linearGradient id="pathGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#3b82f6" />
+              <stop offset="100%" stopColor="#60a5fa" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        {/* Grid Background Overlay */}
+        <div className="absolute inset-0 opacity-5 pointer-events-none bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px]" />
+
+        {/* Loading text helper */}
+        <span className="absolute bottom-6 text-[11px] font-semibold text-muted-foreground/60 tracking-wider uppercase flex items-center gap-1.5 z-10 bg-background/40 backdrop-blur-sm px-3 py-1 rounded-full border border-border/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-ping" />
+          Đang lập lộ trình tối ưu...
+        </span>
       </div>
-      <div className="p-5 bg-background/50 border-t border-border/30 space-y-3">
-        <div className="h-3 w-24 bg-muted/30 rounded-full" />
-        <div className="h-4 w-full bg-muted/20 rounded-lg" />
-        <div className="h-4 w-3/4 bg-muted/20 rounded-lg" />
+
+      {/* Footer Step Skeleton */}
+      <div className="p-5 bg-card/60 backdrop-blur-md space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2 flex-1">
+            {/* Step label skeleton */}
+            <div className="h-3 w-16 bg-muted/40 rounded-full animate-pulse" />
+            {/* Step instruction text skeleton */}
+            <div className="h-4.5 w-11/12 bg-gradient-to-r from-muted/50 via-muted/70 to-muted/50 rounded-lg animate-pulse" />
+            <div className="h-4 w-3/4 bg-gradient-to-r from-muted/30 via-muted/50 to-muted/30 rounded-lg animate-pulse" />
+          </div>
+          {/* Navigation buttons skeletons */}
+          <div className="flex gap-1 shrink-0">
+            <div className="w-9 h-9 rounded-full bg-muted/40 border border-border/40 animate-pulse" />
+            <div className="w-9 h-9 rounded-full bg-muted/40 border border-border/40 animate-pulse" />
+          </div>
+        </div>
       </div>
+      
+      {/* CSS Animation definitions added in-line */}
+      <style jsx global>{`
+        @keyframes dash {
+          to {
+            stroke-dashoffset: -1000;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -42,7 +42,7 @@ function StatusBadge() {
 		return (
 			<div className="flex items-center gap-1.5 px-2 py-1 bg-surface-bg border border-border-color rounded-sm">
 				<Loader2 className="w-3 h-3 animate-spin text-text-secondary" />
-				<span className="text-xs font-mono text-text-secondary">Loading...</span>
+				<span className="text-xs font-mono text-text-secondary">Đang tải...</span>
 			</div>
 		);
 	}
@@ -51,7 +51,7 @@ function StatusBadge() {
 		<div className="flex items-center gap-1.5 px-2 py-1 bg-surface-bg border border-border-color rounded-sm">
 			<span className={`w-2 h-2 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`} />
 			<span className="text-xs font-mono text-text-secondary uppercase">
-				{isOnline ? "Active" : "Inactive"}
+				{isOnline ? "Hoạt động" : "Không hoạt động"}
 			</span>
 		</div>
 	);
