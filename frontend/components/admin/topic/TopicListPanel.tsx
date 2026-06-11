@@ -169,16 +169,16 @@ export function TopicListPanel({
               >
                 <div className="mb-0.5 flex items-start justify-between gap-3">
                   <h3
-                    className="flex-1 text-[13px] font-bold leading-tight text-slate-900"
+                    className="flex-1 text-2xl font-bold leading-tight text-slate-900"
                     title={topic.title}
                   >
                     {topic.title}
                   </h3>
-                  <span className="topic-queries shrink-0 font-sans text-[11px] font-bold uppercase text-slate-400">
+                  <span className="topic-queries shrink-0 font-sans text-2xl font-bold uppercase text-slate-400">
                     {formatQueries(topic.queries)}
                   </span>
                 </div>
-                <div className="topic-summary mb-2 line-clamp-1 text-[11.5px] text-slate-500">
+                <div className="topic-summary mb-2 line-clamp-1 text-xl text-slate-500">
                   {topic.summary}
                 </div>
                 <div className="flex items-center justify-between gap-2">
