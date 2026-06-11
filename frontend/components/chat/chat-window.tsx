@@ -679,7 +679,7 @@ export function ChatWindow({
 		}
 
 		return groups;
-	}, [visibleMessages, currentTools]);
+	}, [visibleMessages]);
 
 	const confirmationData = useMemo(() => {
 		const parseConfirmation = (content: string) => {
@@ -745,6 +745,9 @@ export function ChatWindow({
 		return null;
 	}, [groupedMessages, currentTools]);
 
+	const [landmarkConfirmed, setLandmarkConfirmed] = useState(false);
+	const [confirmationConfirmed, setConfirmationConfirmed] = useState(false);
+
 	const landmarkData = useMemo(() => {
 		const parseLandmarks = (content: string) => {
 			try {
@@ -778,6 +781,33 @@ export function ChatWindow({
 		}
 		return null;
 	}, [groupedMessages, currentTools]);
+
+	const prevUserMsgCountRef = useRef<number | null>(null);
+	const prevLandmarkDataRef = useRef(landmarkData);
+	const prevConfirmationDataRef = useRef(confirmationData);
+
+	useEffect(() => {
+		if (!prevLandmarkDataRef.current && landmarkData) {
+			setLandmarkConfirmed(false);
+		}
+		prevLandmarkDataRef.current = landmarkData;
+	}, [landmarkData]);
+
+	useEffect(() => {
+		if (!prevConfirmationDataRef.current && confirmationData) {
+			setConfirmationConfirmed(false);
+		}
+		prevConfirmationDataRef.current = confirmationData;
+	}, [confirmationData]);
+
+	useEffect(() => {
+		const userMsgCount = messages.filter(m => m.role === 'user').length;
+		if (prevUserMsgCountRef.current !== null && userMsgCount > prevUserMsgCountRef.current) {
+			setLandmarkConfirmed(true);
+			setConfirmationConfirmed(true);
+		}
+		prevUserMsgCountRef.current = userMsgCount;
+	}, [messages]);
 	
 	useEffect(() => {
 		if (routeDataForDisplay || confirmationData || landmarkData || isStreaming) {
@@ -945,7 +975,7 @@ export function ChatWindow({
 				</div>
 			)}
 
-			{confirmationData && (
+			{confirmationData && !confirmationConfirmed && (
 				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 						<Bot className="size-6" />
@@ -954,6 +984,7 @@ export function ChatWindow({
 						<ConfirmationOptions 
 							data={confirmationData} 
 							onSelect={(option) => {
+								setConfirmationConfirmed(true);
 								if (sendMessage) {
 									sendMessage(option);
 								}
@@ -963,7 +994,7 @@ export function ChatWindow({
 				</div>
 			)}
 
-			{landmarkData && (
+			{landmarkData && !landmarkConfirmed && (
 				<div className="flex gap-4 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
 					<div className="flex size-10 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-none shadow-sm">
 						<Bot className="size-6" />
@@ -973,11 +1004,13 @@ export function ChatWindow({
 							landmarks={landmarkData} 
 							disabled={false}
 							onConfirm={(landmark) => {
+								setLandmarkConfirmed(true);
 								if (sendMessage) {
 									sendMessage(`Tôi đang ở ${landmark.name}`);
 								}
 							}}
 							onReportMissing={() => {
+								setLandmarkConfirmed(true);
 								if (sendMessage) {
 									sendMessage(`Không có địa điểm nào phù hợp trong danh sách. Vui lòng báo cáo vấn đề này để quản trị viên kiểm tra.`);
 								}
