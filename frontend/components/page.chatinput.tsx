@@ -186,6 +186,7 @@ export function ChatInput({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          className="text-base md:text-base placeholder:text-base md:placeholder:text-base"
         />
 
         <div className="flex items-center justify-between bg-muted/20 px-3 pb-3 pt-1">

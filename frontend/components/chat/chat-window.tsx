@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, User, Square, ChevronDown, Loader2, Navigation2, CheckCircle2, AlertTriangle, Navigation } from "lucide-react";
+import { Bot, User, Square, ChevronDown, Loader2, Navigation2, CheckCircle2, AlertTriangle, Navigation, Copy, Check } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { ChatMessage } from "@/services/agent";
 import { Button } from "@/components/ui/button";
 import { MapData, MapNode, Instruction } from "@/types";
@@ -12,6 +15,16 @@ import { useRouter } from "next/navigation";
 import { RatingButtons } from "./RatingButtons";
 import { MiniNavigation } from "./MapPreview";
 import { LandmarkCarousel } from "./LandmarkCarousel";
+
+function preprocessLaTeX(text: string): string {
+	if (!text) return "";
+	return text
+		.replace(/\\\[/g, "\n$$\n")
+		.replace(/\\\]/g, "\n$$\n")
+		.replace(/\\\(/g, "$")
+		.replace(/\\\)/g, "$")
+		.replace(/(^|\n)\s*\$\s*(\n|$)/g, "$1$$$$$2");
+}
 
 function cleanDisplayId(text: string): string {
 	if (!text) return text;
@@ -146,6 +159,36 @@ function ThinkingIndicator() {
 	);
 }
 
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch (err) {
+			console.error("Failed to copy text: ", err);
+		}
+	};
+
+	return (
+		<Button
+			variant="ghost"
+			size="icon"
+			className="size-8 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors shrink-0"
+			onClick={handleCopy}
+			title="Sao chép câu trả lời"
+		>
+			{copied ? (
+				<Check className="size-4 text-green-500" />
+			) : (
+				<Copy className="size-4" />
+			)}
+		</Button>
+	);
+}
+
 function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (opt: string) => void }) {
 	const needsStart = data.start_options && data.start_options.length > 1;
 	const needsEnd = data.end_options && data.end_options.length > 1;
@@ -188,7 +231,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					<div className="space-y-2.5">
 						<div className="flex items-center gap-2">
 							<div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-							<div className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Điểm xuất phát: "{cleanDisplayId(data.start_name)}"</div>
+							<div className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Điểm xuất phát: &quot;{cleanDisplayId(data.start_name)}&quot;</div>
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{data.start_options?.map((opt) => (
@@ -210,7 +253,7 @@ function ConfirmationOptions({ data, onSelect }: { data: RouteData; onSelect: (o
 					<div className="space-y-2.5">
 						<div className="flex items-center gap-2">
 							<div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-							<div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Điểm đến: "{cleanDisplayId(data.end_name)}"</div>
+							<div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Điểm đến: &quot;{cleanDisplayId(data.end_name)}&quot;</div>
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{data.end_options?.map((opt) => (
@@ -306,7 +349,7 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 									{parsedContent?.classifications && Array.isArray(parsedContent.classifications) && (
 										<div className="space-y-2 py-1">
 											<div className="font-semibold text-blue-800 mb-1">Định tuyến cuộc hội thoại:</div>
-											{(parsedContent.classifications as any[]).map((c, i) => (
+											{(parsedContent.classifications as Array<{ source: string; query?: string }>).map((c, i) => (
 												<div key={i} className="pl-3 border-l-2 border-blue-400 space-y-1">
 													<div className="flex items-center gap-1.5">
 														<span className="font-medium text-blue-700">Agent:</span>
@@ -317,7 +360,7 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 													{c.query && (
 														<div>
 															<span className="font-medium text-blue-700">Truy vấn:</span>{" "}
-															<span className="text-gray-700 italic">"{c.query}"</span>
+															<span className="text-gray-700 italic">&quot;{c.query}&quot;</span>
 														</div>
 													)}
 												</div>
@@ -361,8 +404,8 @@ function HistoryToolCollapsible({ name, content }: { name: string; content: stri
 								</>
 							) : hasMarkdown ? (
 								<div className="prose prose-xs dark:prose-invert max-w-none">
-									<Markdown remarkPlugins={[remarkGfm]}>
-										{content}
+									<Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+										{preprocessLaTeX(content)}
 									</Markdown>
 								</div>
 							) : (
@@ -443,7 +486,7 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 									{parsedContent?.classifications && Array.isArray(parsedContent.classifications) && (
 										<div className="space-y-2 py-1">
 											<div className="font-semibold text-blue-800 mb-1">Định tuyến cuộc hội thoại:</div>
-											{(parsedContent.classifications as any[]).map((c, i) => (
+											{(parsedContent.classifications as Array<{ source: string; query?: string }>).map((c, i) => (
 												<div key={i} className="pl-3 border-l-2 border-blue-400 space-y-1">
 													<div className="flex items-center gap-1.5">
 														<span className="font-medium text-blue-700">Agent:</span>
@@ -454,7 +497,7 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 													{c.query && (
 														<div>
 															<span className="font-medium text-blue-700">Truy vấn:</span>{" "}
-															<span className="text-gray-700 italic">"{c.query}"</span>
+															<span className="text-gray-700 italic">&quot;{c.query}&quot;</span>
 														</div>
 													)}
 												</div>
@@ -487,8 +530,8 @@ function ToolCollapsible({ tool }: { tool: ToolCall }) {
 								</>
 							) : hasMarkdown ? (
 								<div className="prose prose-xs dark:prose-invert max-w-none">
-									<Markdown remarkPlugins={[remarkGfm]}>
-										{tool.content}
+									<Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+										{preprocessLaTeX(tool.content)}
 									</Markdown>
 								</div>
 							) : (
@@ -545,10 +588,10 @@ interface GroupedMessages {
 	messages: ChatMessage[];
 	toolMessages?: ChatMessage[];
 	routeData?: RouteData;
-	landmarkData?: any[];
+	landmarkData?: Array<{ name?: string; title?: string }>;
 }
 
-function cleanLandmarkText(text: string, landmarks: any[] | null | undefined): string {
+function cleanLandmarkText(text: string, landmarks: Array<{ name?: string; title?: string }> | null | undefined): string {
 	if (!text || !landmarks || landmarks.length === 0) return text;
 	
 	let cleaned = text;
@@ -874,8 +917,12 @@ export function ChatWindow({
 									<User className="size-6" />
 								</div> */}
 								<div className="group relative max-w-[85%]">
-									<div className="p-5 text-base rounded-none bg-muted text-foreground leading-relaxed tracking-wide whitespace-pre-wrap">
-										{group.messages.map(m => m.content).filter(Boolean).join(" ")}
+									<div className="p-5 text-base rounded-none bg-muted text-foreground leading-relaxed tracking-wide">
+										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
+											<Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+												{preprocessLaTeX(group.messages.map(m => m.content).filter(Boolean).join(" "))}
+											</Markdown>
+										</div>
 									</div>
 								</div>
 							</div>
@@ -930,19 +977,22 @@ export function ChatWindow({
 								{combinedContent && (
 									<div className="p-5 text-base rounded-none transition-all duration-200 bg-transparent leading-relaxed tracking-wide">
 										<div className="prose prose-base dark:prose-invert max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:decoration-blue-400 [&_a]:hover:decoration-blue-600 [&_a]:font-medium">
-											<Markdown remarkPlugins={[remarkGfm]}>
-												{cleanDisplayId(combinedContent)}
+											<Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+												{preprocessLaTeX(cleanDisplayId(combinedContent))}
 											</Markdown>
 										</div>
 									</div>
 								)}
-								{showRating && (
-									<div className="flex items-center gap-1 pl-2">
-										<RatingButtons
-											runId={ratingId || ""}
-											threadId={threadId}
-											agentId={agentId}
-										/>
+								{combinedContent && (
+									<div className="flex items-center gap-2 pl-2">
+										{showRating && (
+											<RatingButtons
+												runId={ratingId || ""}
+												threadId={threadId}
+												agentId={agentId}
+											/>
+										)}
+										<CopyButton text={cleanDisplayId(combinedContent)} />
 									</div>
 								)}
 								{citations && citations.length > 0 && (
