@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Loader2, Mic, MicOff, Sparkles, FileText, MessageSquare, Navigation, Settings, Map, Image } from "lucide-react";
 import { useAgent } from "@/contexts/agent-context";
@@ -77,6 +77,24 @@ export function ChatInput({
   const [queryMode, setQueryMode] = useState<QueryMode>("normal");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { agent, setAgent, agents, isOnline } = useAgent();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // Reset height to calculate scrollHeight properly
+    textarea.style.height = "auto";
+    const scrollHeight = textarea.scrollHeight;
+
+    if (scrollHeight > 200) {
+      textarea.style.height = "200px";
+      textarea.style.overflowY = "auto";
+    } else {
+      textarea.style.height = `${scrollHeight}px`;
+      textarea.style.overflowY = "hidden";
+    }
+  }, [message]);
 
   useEffect(() => {
     const authenticated = authService.isAuthenticated();
@@ -161,6 +179,7 @@ export function ChatInput({
         <div className="flex w-full flex-col overflow-hidden border border-border bg-background shadow-md transition-all focus-within:ring-2 focus-within:ring-primary/50 rounded-none">
 
         <InputGroupTextarea 
+          ref={textareaRef}
           id="chat-textarea" 
           aria-label={isVoiceConnected ? "Nhập tin nhắn văn bản vào Voice Chat" : "Nhập câu hỏi hoặc yêu cầu tra cứu"}
           placeholder={isVoiceConnected ? "Gửi tin nhắn văn bản vào cuộc trò chuyện Voice..." : "Nhập câu hỏi hoặc yêu cầu tra cứu..." }

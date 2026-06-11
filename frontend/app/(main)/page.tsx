@@ -30,7 +30,7 @@ export default function Home() {
 
 	return (
 		<div className="flex flex-col items-center justify-between w-full flex-1 px-4 py-6">
-			<div className="flex w-full max-w-3xl flex-col justify-center flex-1 gap-14 sm:gap-20">
+			<div className="flex w-full max-w-3xl flex-col justify-start pt-10 sm:pt-[10vh] flex-1 gap-8 sm:gap-12">
 				<div className="flex flex-col items-center gap-4">
 					<Badge className="flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
 						<BadgeCheckIcon className="size-10 fill-accent" />
@@ -42,7 +42,7 @@ export default function Home() {
 					</p>
 				</div>
 
-				<div className="w-full flex flex-col gap-2 mt-6 sm:mt-10">
+				<div className="w-full flex flex-col gap-2 mt-2 sm:mt-4">
 					<ChatInput
 						voiceAgentId="chatbot"
 						onVoiceToggle={handleVoiceToggle}

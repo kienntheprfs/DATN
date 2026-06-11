@@ -11,8 +11,11 @@ type TopicListPanelProps = {
   topics: TopicListItem[];
   selectedTopicKey: string | null;
   currentJob: JobDetailResponse | null;
+  selectedResultId: string | null;
+  onClearResultId: () => void;
   onTopicSelect: (key: string) => void;
   onOpenPipelineModal: () => void;
+  onOpenHistoryDrawer: () => void;
   onRetry: () => void;
 };
 
@@ -22,8 +25,11 @@ export function TopicListPanel({
   topics,
   selectedTopicKey,
   currentJob,
+  selectedResultId,
+  onClearResultId,
   onTopicSelect,
   onOpenPipelineModal,
+  onOpenHistoryDrawer,
   onRetry,
 }: TopicListPanelProps) {
   const [search, setSearch] = useState("");
@@ -56,25 +62,25 @@ export function TopicListPanel({
     currentJob?.status === "pending" || currentJob?.status === "running";
 
   return (
-    <section className="flex min-h-0 flex-col border-b border-border-color bg-white xl:border-b-0 xl:border-r">
+    <section className="topic-list-panel flex min-h-0 flex-col border-b border-border-color bg-white xl:border-b-0 xl:border-r font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-color bg-slate-50 px-4 py-4">
-        <h2 className="font-heading text-[14px] font-bold uppercase tracking-widest text-slate-600">
+      <div className="flex items-center justify-between border-b border-border-color bg-slate-50 px-4 py-3">
+        <h2 className="font-heading text-[12px] font-bold uppercase tracking-widest text-slate-600">
           Danh sách Chủ đề
         </h2>
-        <span className="font-sans text-[12px] font-medium text-slate-400">
+        <span className="font-sans text-[11px] font-medium text-slate-400">
           {filtered.length} Chủ đề
         </span>
       </div>
 
       {/* Filters */}
-      <div className="custom-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-border-color bg-white px-4 py-2">
+      <div className="custom-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-border-color bg-white px-4 py-1.5">
         {FILTERS.map((filter) => (
           <button
             key={filter.key}
             type="button"
             onClick={() => handleFilterChange(filter.key)}
-            className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${
+            className={`filter-btn whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
               activeFilter === filter.key
                 ? "bg-primary text-white shadow-sm"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -87,19 +93,35 @@ export function TopicListPanel({
       </div>
 
       {/* Search */}
-      <div className="border-b border-border-color bg-white px-4 py-3">
+      <div className="border-b border-border-color bg-white px-4 py-2">
         <div className="relative">
-          <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-400">
+          <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
             search
           </span>
           <input
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Tìm chủ đề..."
-            className="w-full rounded-sm border border-border-color bg-slate-50 py-2.5 pl-11 pr-4 text-base text-slate-700 transition-all outline-none focus:border-primary"
+            className="w-full rounded-sm border border-border-color bg-slate-50 py-1.5 pl-10 pr-4 text-[13px] text-slate-700 transition-all outline-none focus:border-primary"
           />
         </div>
       </div>
+
+      {/* Warning banner for viewing past runs */}
+      {selectedResultId && (
+        <div className="warning-banner bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs font-semibold text-amber-700 animate-in fade-in slide-in-from-top-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="material-symbols-outlined text-sm shrink-0">warning</span>
+            <span className="truncate">Đang xem kết quả từ lần chạy cũ</span>
+          </div>
+          <button
+            onClick={onClearResultId}
+            className="text-primary hover:underline shrink-0 ml-2 font-bold cursor-pointer"
+          >
+            Xem mới nhất
+          </button>
+        </div>
+      )}
 
       {/* List — no pagination, show all */}
       <div className="custom-scrollbar flex-1 overflow-y-auto">
@@ -134,30 +156,29 @@ export function TopicListPanel({
           filtered.map((topic) => {
             const key = `${topic.topic_type}:${topic.topic_id}`;
             const isActive = key === selectedTopicKey;
-            const isMissing = topic.topic_type === "missing_knowledge";
             return (
               <button
                 key={`${topic.topic_type}-${topic.topic_id}`}
                 type="button"
                 onClick={() => onTopicSelect(key)}
-                className={`group w-full border-b border-border-color p-4 text-left transition-colors ${
+                className={`group w-full border-b border-border-color py-6 px-3 text-left transition-colors ${
                   isActive
                     ? "border-l-5 border-l-primary bg-blue-100/50"
                     : "hover:bg-slate-50"
                 }`}
               >
-                <div className="mb-1 flex items-start justify-between gap-3">
+                <div className="mb-0.5 flex items-start justify-between gap-3">
                   <h3
-                    className="flex-1 max-w-[50%] truncate text-base font-bold leading-tight text-slate-900"
+                    className="flex-1 text-[13px] font-bold leading-tight text-slate-900"
                     title={topic.title}
                   >
                     {topic.title}
                   </h3>
-                  <span className="shrink-0 font-sans text-[12px] font-bold uppercase text-slate-400">
+                  <span className="topic-queries shrink-0 font-sans text-[11px] font-bold uppercase text-slate-400">
                     {formatQueries(topic.queries)}
                   </span>
                 </div>
-                <div className="mb-3 line-clamp-1 text-[13px] text-slate-500">
+                <div className="topic-summary mb-2 line-clamp-1 text-[11.5px] text-slate-500">
                   {topic.summary}
                 </div>
                 <div className="flex items-center justify-between gap-2">
@@ -170,18 +191,8 @@ export function TopicListPanel({
                       linkedDocsCount={(topic as any).linkedDocsCount}
                       isConfirmed={(topic as any).isConfirmed}
                     />
-                    {/* Topic type badge */}
-                    {/* <span
-                      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                        isMissing
-                          ? "border border-orange-200 bg-orange-50 text-orange-600"
-                          : "border border-blue-200 bg-blue-50 text-blue-600"
-                      }`}
-                    >
-                      {isMissing ? "Tri thức" : "Phổ biến"}
-                    </span> */}
                   </div>
-                  <span className="text-[12px] text-slate-400">{topic.sync_ago}</span>
+                  <span className="sync-ago text-[12px] text-slate-400">{topic.sync_ago}</span>
                 </div>
               </button>
             );
@@ -204,22 +215,34 @@ export function TopicListPanel({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={onOpenPipelineModal}
-            disabled={isJobActive}
-            className="relative inline-flex w-auto items-center justify-center gap-2 overflow-hidden rounded-sm px-5 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-all duration-200 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 100%), hsl(240, 96%, 19%)",
-              boxShadow:
-                "0 4px 12px rgba(3, 3, 145, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-            }}
-            title={isJobActive ? "Pipeline đang chạy" : "Khởi chạy thuật toán phân loại chủ đề"}
-          >
-            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-            Phân loại chủ đề
-          </button>
+          <div className="flex w-full gap-2">
+            <button
+              type="button"
+              onClick={onOpenPipelineModal}
+              disabled={isJobActive}
+              className="footer-btn flex-1 relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-sm px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-all duration-200 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 100%), hsl(240, 96%, 19%)",
+                boxShadow:
+                  "0 4px 12px rgba(3, 3, 145, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
+              }}
+              title={isJobActive ? "Pipeline đang chạy" : "Khởi chạy thuật toán phân loại chủ đề"}
+            >
+              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+              Phân loại
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenHistoryDrawer}
+              className="footer-btn flex-1 inline-flex items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-slate-700 shadow-sm hover:bg-slate-50 transition-colors cursor-pointer"
+              title="Xem lịch sử chạy pipeline"
+            >
+              <span className="material-symbols-outlined text-[18px]">history</span>
+              Lịch sử
+            </button>
+          </div>
         </div>
       </div>
     </section>

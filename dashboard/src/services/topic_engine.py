@@ -16,6 +16,12 @@ Pipeline:
 
 import io
 import os
+# Giới hạn số lượng thread của các thư viện tính toán để tránh nghẽn CPU và nghẽn Event Loop của Uvicorn/FastAPI
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import re
 import csv
 import sys
@@ -89,6 +95,49 @@ def is_fuzzy_match(text: str, keyword: str) -> bool:
     if k_clean in t_clean:
         return True
     return strip_accents(k_clean) in strip_accents(t_clean)
+
+def is_valid_keyword(keyword: str) -> bool:
+    """Kiểm tra từ khóa có hợp lệ và đủ nghĩa không."""
+    kw = keyword.strip().lower()
+    if not kw:
+        return False
+    # Loại bỏ các từ quá chung chung hoặc từ đơn vô nghĩa
+    if kw in {
+        'ngành', 'học', 'chương', 'trình', 'chương trình', 'nganh', 'hoc', 'chuong', 'trinh', 'chuong trinh',
+        'khoa', 'trường', 'truong', 'sv', 'sinh viên', 'sinh vien', 'hcmut', 'bách khoa', 'bach khoa',
+        'đại học', 'dai hoc', 'đh', 'dh', 'môn', 'mon', 'lớp', 'lop'
+    }:
+        return False
+    # Loại bỏ các từ khóa chỉ có 1 từ mà lại quá ngắn
+    if len(kw) <= 2:
+        return False
+    return True
+
+def calculate_hybrid_keyword_score(
+    keyword: str,
+    docs: list[str],
+    sim_scores: np.ndarray = None,
+    alpha: float = 0.5
+) -> float:
+    """Tính điểm cho từ khóa:
+    - Nếu xuất hiện trực tiếp trong văn bản (LexicalFreq > 0): Trả về chính xác LexicalFreq.
+    - Nếu không xuất hiện trực tiếp: Trả về MeanSimilarity * 0.5 để giữ điểm khác 0 nhưng không gây hiểu lầm.
+    """
+    # 1. Tần suất xuất hiện thực tế (Lexical Frequency)
+    matches = sum(1 for doc in docs if is_fuzzy_match(doc, keyword))
+    lexical_freq = matches / len(docs) if docs else 0.0
+    
+    if lexical_freq > 0:
+        return round(lexical_freq, 4)
+    
+    # 2. Độ tương đồng ngữ nghĩa trung bình (Mean Similarity)
+    if sim_scores is not None and sim_scores.size > 0:
+        mean_sim = float(np.mean(sim_scores))
+        mean_sim = max(0.0, min(1.0, mean_sim))
+    else:
+        mean_sim = 0.0
+        
+    return round(mean_sim * 0.5, 4)
 
 async def load_stopwords(path: Path) -> list[str]:
     def _load_sync():
@@ -289,8 +338,10 @@ async def refine_topics_with_llm(
             "Bạn là chuyên gia phân tích dữ liệu giáo dục và hỗ trợ sinh viên ĐH Bách Khoa HCM.\n"
             "Nhiệm vụ: Với mỗi topic, hãy thực hiện 2 việc sau:\n"
             "1. Gán 1 nhãn (label) chi tiết, mang tính mô tả cụ thể (dài khoảng 7-15 từ, ví dụ: 'Quy định và thủ tục đăng ký luận văn').\n"
-            "2. Trích xuất CHÍNH XÁC tất cả các từ khóa (keywords). Tuyệt đối không được bỏ sót phần keywords (không bao giờ được trả về mảng rỗng).\n"
-            "Các từ khóa phải trích xuất từ dữ liệu thực tế, rõ nghĩa, loại bỏ từ lặp lại hoặc vô nghĩa.\n\n"
+            "2. Trích xuất các từ khóa (keywords) tiêu biểu nhất cho chủ đề đó:\n"
+            "   - Mỗi từ khóa phải cực kỳ súc tích, ngắn gọn (chỉ từ 2 đến 5 từ, ví dụ: 'học phí', 'điểm chuẩn 2025', 'chỉ tiêu xét tuyển'). Tuyệt đối KHÔNG trích xuất cả câu dài hay đoạn văn.\n"
+            "   - Không được trùng lặp hoặc lặp lại ý nghĩa giữa các từ khóa trong cùng một chủ đề.\n"
+            "   - Loại bỏ các từ quá chung chung hoặc lặp đi lặp lại vô nghĩa (như 'hcmut', 'đại học bách khoa', 'tp hcm', 'thông báo', 'lịch thu', 'ngành', 'học', 'chương trình'). Tuyệt đối không được bỏ sót phần keywords (trả về từ 5-10 từ khóa súc tích).\n\n"
             "Chỉ trả về JSON theo đúng định dạng sau, không giải thích gì thêm:\n"
             "{\n"
             '  "topics": [\n'
@@ -319,7 +370,7 @@ async def refine_topics_with_llm(
             refined_labels = {}
             refined_keywords = {-1: topic_words.get(-1, [])}
             for item in data.get("topics", []):
-                t_id = item["topic_id"]
+                t_id = int(item["topic_id"])
                 refined_labels[t_id] = item["label"]
                 
                 # Tính toán tần suất Semantic (>= 85%) cho từng từ khóa do LLM gợi ý
@@ -338,17 +389,16 @@ async def refine_topics_with_llm(
                     sim_matrix = cosine_similarity(kw_embeddings, t_embeddings)
                     
                     for idx, k in enumerate(suggested_keywords):
-                        # Tính % số câu có độ tương đồng >= 0.8
-                        count = np.sum(sim_matrix[idx] >= 0.8)
-                        score = round(float(count) / len(indices), 4)
+                        score = calculate_hybrid_keyword_score(k, t_docs, sim_scores=sim_matrix[idx], alpha=0.5)
                         kw_list.append((k, score))
                 else:
                     # Fallback nếu thiếu embedding
                     for k in suggested_keywords:
-                        kw_list.append((k, 0.0))
+                        score = calculate_hybrid_keyword_score(k, t_docs, sim_scores=None, alpha=0.5)
+                        kw_list.append((k, score))
                 
-                # Sắp xếp theo tần suất giảm dần và lọc từ khóa rỗng
-                kw_list = [item for item in kw_list if item[0].strip()]
+                # Sắp xếp theo tần suất giảm dần và lọc từ khóa không hợp lệ/rỗng
+                kw_list = [item for item in kw_list if is_valid_keyword(item[0])]
                 kw_list.sort(key=lambda x: x[1], reverse=True)
                 refined_keywords[t_id] = kw_list
             
@@ -357,6 +407,7 @@ async def refine_topics_with_llm(
                     refined_labels[t] = f"Topic {t}"
                     # Tính toán lại tần suất Semantic cho fallback
                     indices = [i for i, top in enumerate(topics) if top == t]
+                    t_docs = [docs[i] for i in indices]
                     orig_kws = [k for k, _ in topic_words.get(t, [])]
                     
                     kw_list = []
@@ -365,15 +416,15 @@ async def refine_topics_with_llm(
                         t_embeddings = all_embeddings[indices]
                         sim_matrix = cosine_similarity(kw_embeddings, t_embeddings)
                         for idx, k in enumerate(orig_kws):
-                            count = np.sum(sim_matrix[idx] >= 0.85)
-                            score = round(float(count) / len(indices), 4)
+                            score = calculate_hybrid_keyword_score(k, t_docs, sim_scores=sim_matrix[idx], alpha=0.5)
                             kw_list.append((k, score))
                     else:
                         for k in orig_kws:
-                            kw_list.append((k, 0.0))
+                            score = calculate_hybrid_keyword_score(k, t_docs, sim_scores=None, alpha=0.5)
+                            kw_list.append((k, score))
                             
-                    # Sắp xếp và lọc từ khóa rỗng
-                    kw_list = [item for item in kw_list if item[0].strip()]
+                    # Sắp xếp và lọc từ khóa không hợp lệ/rỗng
+                    kw_list = [item for item in kw_list if is_valid_keyword(item[0])]
                     kw_list.sort(key=lambda x: x[1], reverse=True)
                     refined_keywords[t] = kw_list
                     
@@ -614,8 +665,8 @@ class FastTopicEngine:
         from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance
         from bertopic.vectorizers import ClassTfidfTransformer
 
-        umap_model = UMAP(n_neighbors=n_neighbors, n_components=5, min_dist=0.0, metric='cosine', random_state=42)
-        hdbscan_model = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+        umap_model = UMAP(n_neighbors=n_neighbors, n_components=5, min_dist=0.0, metric='cosine', random_state=42, n_jobs=1)
+        hdbscan_model = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples, metric='euclidean', cluster_selection_method='eom', prediction_data=True, core_dist_n_jobs=1)
         
         stopwords_list = await load_stopwords(STOPWORD_FILE)
         vectorizer_model = CountVectorizer(stop_words=stopwords_list, ngram_range=(1, 1), token_pattern=r"(?u)\b\w+\b")
@@ -685,6 +736,7 @@ class FastTopicEngine:
             # Tính toán % tần suất Semantic (>= 85%)
             indices = [i for i, top in enumerate(topics) if top == t]
             
+            t_docs = [docs[i] for i in indices]
             freq_words = []
             if raw_kws and indices:
                 kw_embeddings = await self.embedder.encode(raw_kws)
@@ -692,15 +744,15 @@ class FastTopicEngine:
                 sim_matrix = cosine_similarity(kw_embeddings, t_embeddings)
                 
                 for idx, k in enumerate(raw_kws):
-                    count = np.sum(sim_matrix[idx] >= 0.85)
-                    freq = round(float(count) / len(indices), 4)
+                    freq = calculate_hybrid_keyword_score(k, t_docs, sim_scores=sim_matrix[idx], alpha=0.5)
                     freq_words.append((k, freq))
             else:
                 for k in raw_kws:
-                    freq_words.append((k, 0.0))
+                    freq = calculate_hybrid_keyword_score(k, t_docs, sim_scores=None, alpha=0.5)
+                    freq_words.append((k, freq))
             
-            # Sắp xếp lại theo tần suất xuất hiện và lọc rỗng
-            freq_words = [item for item in freq_words if item[0].strip()]
+            # Sắp xếp lại theo tần suất xuất hiện và lọc từ khóa không hợp lệ/rỗng
+            freq_words = [item for item in freq_words if is_valid_keyword(item[0])]
             freq_words.sort(key=lambda x: x[1], reverse=True)
             top_words_per_topic[t] = freq_words
 
@@ -746,7 +798,7 @@ class FastTopicEngine:
             if topic_id == -1:
                 print(f"  Outliers (-1): {topic_counts[-1]} docs")
                 continue
-            top5 = ", ".join(w for w, _ in top_words_per_topic_refined[topic_id][:5])
+            top5 = ", ".join(w for w, _ in top_words_per_topic_refined.get(topic_id, [])[:5])
             label = topic_labels.get(topic_id, f"Topic {topic_id}")
             print(f"  Topic {topic_id:2d} ({topic_counts[topic_id]:3d} docs) | Label: {label}")
             print(f"    Keywords: {top5}")

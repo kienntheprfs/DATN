@@ -116,7 +116,7 @@ export function PinnedPostDrawer({
   return (
     <>
       <div
-        className={`absolute right-0 top-0 bottom-0 z-40 flex flex-col border-l border-border-color bg-white shadow-2xl transition-all duration-300 ease-in-out ${
+        className={`topic-drawer-container absolute right-0 top-0 bottom-0 z-40 flex flex-col border-l border-border-color bg-white shadow-2xl transition-all duration-300 ease-in-out font-sans ${
           isOpen ? "translate-x-0 w-full sm:w-[480px]" : "translate-x-full pointer-events-none w-0"
         }`}
       >

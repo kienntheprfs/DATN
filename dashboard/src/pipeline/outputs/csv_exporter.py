@@ -56,6 +56,8 @@ class CSVExporter:
             )
             created_at = datetime.utcnow().isoformat()
             for doc, topic_id in zip(documents, topics):
+                if topic_id == -1:
+                    continue
                 writer.writerow(
                     [
                         doc,

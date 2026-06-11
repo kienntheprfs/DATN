@@ -17,6 +17,7 @@ interface KnowledgeDrawerProps {
   onUnlinkDoc: (docId: number) => void;
   isConfirmed: boolean;
   onConfirm: () => void;
+  onUnconfirm: () => void;
 }
 
 export function KnowledgeDrawer({
@@ -28,6 +29,7 @@ export function KnowledgeDrawer({
   onUnlinkDoc,
   isConfirmed,
   onConfirm,
+  onUnconfirm,
 }: KnowledgeDrawerProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -122,7 +124,7 @@ export function KnowledgeDrawer({
   return (
     <>
       <div
-        className={`absolute right-0 top-0 bottom-0 z-40 flex flex-col border-l border-border-color bg-white shadow-2xl transition-all duration-300 ease-in-out ${
+        className={`topic-drawer-container absolute right-0 top-0 bottom-0 z-40 flex flex-col border-l border-border-color bg-white shadow-2xl transition-all duration-300 ease-in-out font-sans ${
           isOpen ? "translate-x-0 w-full sm:w-[480px]" : "translate-x-full pointer-events-none w-0"
         }`}
       >
@@ -361,30 +363,36 @@ export function KnowledgeDrawer({
         </div>
 
         {/* Footer Actions */}
-        <div className="border-t border-border-color bg-slate-50 px-6 py-4 flex gap-3 shrink-0">
+        <div className="border-t border-border-color bg-slate-50 px-6 py-4 flex gap-3 shrink-0 font-sans">
           <button
             onClick={onClose}
-            className="flex-1 rounded-sm border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+            className="flex-1 rounded-sm border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors cursor-pointer"
           >
             Đóng
           </button>
           
-          <button
-            disabled={linkedDocIds.length === 0 || isConfirmed}
-            onClick={onConfirm}
-            className={`flex-[2] flex items-center justify-center gap-2 rounded-sm py-2 text-sm font-bold text-white shadow-md transition-colors ${
-              isConfirmed
-                ? "bg-emerald-700 cursor-not-allowed"
-                : linkedDocIds.length === 0
+          {isConfirmed ? (
+            <button
+              onClick={onUnconfirm}
+              className="flex-1 rounded-sm border border-red-300 bg-red-50 py-2 text-sm font-bold text-red-600 shadow-sm hover:bg-red-100 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[18px]">bookmark_remove</span>
+              Bỏ cập nhật tri thức
+            </button>
+          ) : (
+            <button
+              disabled={linkedDocIds.length === 0}
+              onClick={onConfirm}
+              className={`flex-[2] flex items-center justify-center gap-2 rounded-sm py-2 text-sm font-bold text-white shadow-md transition-colors cursor-pointer ${
+                linkedDocIds.length === 0
                   ? "bg-slate-300 cursor-not-allowed"
                   : "bg-primary hover:bg-blue-800"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              {isConfirmed ? "check" : "task_alt"}
-            </span>
-            {isConfirmed ? "Đã cập nhật tri thức" : "Xác nhận cập nhật tri thức"}
-          </button>
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">task_alt</span>
+              Xác nhận cập nhật tri thức
+            </button>
+          )}
         </div>
       </div>
 

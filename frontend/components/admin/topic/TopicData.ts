@@ -7,7 +7,7 @@ import type { PipelineRange, TopicFilter, TopicStatus } from "./TopicTypes";
 export const FILTERS: { key: TopicFilter; label: string }[] = [
   { key: "all", label: "Tất cả" },
   { key: "popular", label: "Câu hỏi phổ biến" },
-  { key: "missing-knowledge", label: "Tri thức thiếu" },
+  { key: "missing-knowledge", label: "Thiếu Tri thức" },
 ];
 
 // ---------------------------------------------------------------------------

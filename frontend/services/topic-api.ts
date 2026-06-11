@@ -189,25 +189,48 @@ export const topicService = {
     return res.data;
   },
 
+  /** List pipeline jobs with optional status filter and limit. */
+  async listJobs(params?: { status?: string; limit?: number }): Promise<JobDetailResponse[]> {
+    const res = await apiClient.get<JobDetailResponse[]>(`${BASE}/jobs`, { params });
+    return res.data;
+  },
+
   /** Get a specific job by ID. */
   async getJob(jobId: string): Promise<JobDetailResponse> {
     const res = await apiClient.get<JobDetailResponse>(`${BASE}/jobs/${jobId}`);
     return res.data;
   },
 
+  /** Get result mapping for a job by ID. */
+  async getJobResults(jobId: string): Promise<Record<string, string>> {
+    const res = await apiClient.get<Record<string, string>>(`${BASE}/jobs/${jobId}/results`);
+    return res.data;
+  },
+
+  /** Cancel a running/pending job. */
+  async cancelJob(jobId: string): Promise<JobDetailResponse> {
+    const res = await apiClient.delete<JobDetailResponse>(`${BASE}/jobs/${jobId}/cancel`);
+    return res.data;
+  },
+
+  /** Delete a job record. */
+  async deleteJob(jobId: string): Promise<void> {
+    await apiClient.delete(`${BASE}/jobs/${jobId}`);
+  },
+
   /**
    * Download the CSV export for a completed job.
    * Triggers a browser download without navigating away.
    */
-  async downloadJobCsv(jobId: string): Promise<void> {
-    const res = await apiClient.get<Blob>(`${BASE}/jobs/${jobId}/export/csv`, {
+  async downloadJobCsv(resultId: string): Promise<void> {
+    const res = await apiClient.get<Blob>(`${BASE}/results/${resultId}/export/csv`, {
       responseType: "blob",
     });
     const url = URL.createObjectURL(res.data);
     try {
       const link = document.createElement("a");
       link.href = url;
-      link.download = `topic_assignments_${jobId}.csv`;
+      link.download = `topic_assignments_${resultId}.csv`;
       link.rel = "noopener noreferrer";
       document.body.appendChild(link);
       link.click();
@@ -220,14 +243,14 @@ export const topicService = {
   // ---- Topic list ----------------------------------------------------------
 
   /**
-   * Get the enriched topic list for the latest result of a given topic_type.
+   * Get the enriched topic list for the latest or specific result of a given topic_type.
    * Each item is tagged with `topic_type` from the response envelope.
    * Returns an empty response when no result exists yet (404).
    */
-  async getTopicList(topicType: TopicType): Promise<TopicListResponse> {
+  async getTopicList(topicType: TopicType, resultId?: string): Promise<TopicListResponse> {
     try {
       const res = await apiClient.get<TopicListResponse>(`${BASE}/results/latest/list`, {
-        params: { topic_type: topicType },
+        params: { topic_type: topicType, result_id: resultId },
       });
       const data = res.data;
       // Tag every item with its topic_type so a merged list can filter client-side
@@ -260,6 +283,7 @@ export const topicService = {
     page?: number;
     page_size?: number;
     sort_by?: string;
+    result_id?: string;
   }): Promise<TopicQuestionsResponse> {
     const res = await apiClient.get<TopicQuestionsResponse>(
       `${BASE}/results/latest/questions`,
@@ -274,6 +298,7 @@ export const topicService = {
     topic_type: TopicType;
     topic_id: number;
     view: TrendView;
+    result_id?: string;
   }): Promise<TopicTrendResponse> {
     const res = await apiClient.get<TopicTrendResponse>(
       `${BASE}/results/latest/trends`,
@@ -287,6 +312,7 @@ export const topicService = {
   async getKeywords(params: {
     topic_type: TopicType;
     topic_id: number;
+    result_id?: string;
   }): Promise<TopicKeywordsResponse> {
     const res = await apiClient.get<TopicKeywordsResponse>(
       `${BASE}/results/latest/keywords`,

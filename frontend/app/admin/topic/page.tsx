@@ -10,6 +10,7 @@ import { TopicDetailPanel } from "@/components/admin/topic/TopicDetailPanel";
 import { TopicListPanel } from "@/components/admin/topic/TopicListPanel";
 import { KnowledgeDrawer } from "@/components/admin/topic/KnowledgeDrawer";
 import { PinnedPostDrawer } from "@/components/admin/topic/PinnedPostDrawer";
+import { JobHistoryDrawer } from "@/components/admin/topic/JobHistoryDrawer";
 import type { PipelineRange, TrendView } from "@/components/admin/topic/TopicTypes";
 import topicService from "@/services/topic-api";
 import type { TopicListItem } from "@/services/topic-api";
@@ -39,6 +40,8 @@ export function TopicPageContent() {
   const [trendView, setTrendView] = useState<TrendView>("day");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isPinnedDrawerOpen, setIsPinnedDrawerOpen] = useState(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [pipelineRange, setPipelineRange] = useState<PipelineRange>("1w");
@@ -53,8 +56,8 @@ export function TopicPageContent() {
     isError: isErrorMissing,
     refetch: refetchMissing,
   } = useQuery({
-    queryKey: ["topics", "list", "missing_knowledge"],
-    queryFn: () => topicService.getTopicList("missing_knowledge"),
+    queryKey: ["topics", "list", "missing_knowledge", selectedResultId],
+    queryFn: () => topicService.getTopicList("missing_knowledge", selectedResultId ?? undefined),
     select: (data) => data.items,
   });
 
@@ -64,8 +67,8 @@ export function TopicPageContent() {
     isError: isErrorPopular,
     refetch: refetchPopular,
   } = useQuery({
-    queryKey: ["topics", "list", "popular_questions"],
-    queryFn: () => topicService.getTopicList("popular_questions"),
+    queryKey: ["topics", "list", "popular_questions", selectedResultId],
+    queryFn: () => topicService.getTopicList("popular_questions", selectedResultId ?? undefined),
     select: (data) => data.items,
   });
 
@@ -157,6 +160,7 @@ export function TopicPageContent() {
         description: "Hệ thống sẽ phân tích cả Tri thức thiếu và Câu hỏi phổ biến.",
       });
       setShowPipelineModal(false);
+      setSelectedResultId(null); // Reset to latest when triggering new job
       queryClient.invalidateQueries({ queryKey: ["topics"] });
     },
     onError: (err: any) => {
@@ -246,6 +250,15 @@ export function TopicPageContent() {
       resultId: selectedTopic.result_id,
       topicId: selectedTopic.topic_id,
       knowledgeUpdated: !selectedTopic.knowledge_updated,
+    });
+  };
+
+  const handleUnconfirmKnowledge = () => {
+    if (!selectedTopic) return;
+    pinMutation.mutate({
+      resultId: selectedTopic.result_id,
+      topicId: selectedTopic.topic_id,
+      knowledgeUpdated: false,
     });
   };
 
@@ -346,7 +359,73 @@ export function TopicPageContent() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light text-base md:-m-6 relative">
+    <div className="topic-page-container -m-4 flex h-[calc(100vh-40px)] flex-col overflow-hidden bg-background-light text-sm md:-m-6 relative font-sans">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .topic-page-container p,
+        .topic-page-container span,
+        .topic-page-container div,
+        .topic-page-container button,
+        .topic-page-container input,
+        .topic-page-container table,
+        .topic-page-container td,
+        .topic-page-container th,
+        .topic-drawer-container p,
+        .topic-drawer-container span,
+        .topic-drawer-container div,
+        .topic-drawer-container button,
+        .topic-drawer-container input {
+          font-size: 13px !important;
+        }
+        .topic-page-container h1,
+        .topic-page-container .text-3xl {
+          font-size: 20px !important;
+        }
+        .topic-page-container .text-2xl {
+          font-size: 16px !important;
+        }
+        .topic-page-container h2,
+        .topic-page-container h3,
+        .topic-page-container h4,
+        .topic-drawer-container h1,
+        .topic-drawer-container h4 {
+          font-size: 14px !important;
+        }
+        /* Scoped font-size adjustments for list panel */
+        .topic-list-panel p,
+        .topic-list-panel div,
+        .topic-list-panel span,
+        .topic-list-panel button,
+        .topic-list-panel input {
+          font-size: 12.5px !important;
+        }
+        .topic-list-panel h2 {
+          font-size: 11.5px !important;
+        }
+        .topic-list-panel h3 {
+          font-size: 12.5px !important;
+        }
+        .topic-list-panel .filter-btn {
+          font-size: 10.5px !important;
+        }
+        .topic-list-panel .topic-queries {
+          font-size: 10.5px !important;
+        }
+        .topic-list-panel .topic-summary {
+          font-size: 11.5px !important;
+        }
+        .topic-list-panel .sync-ago {
+          font-size: 11px !important;
+        }
+        .topic-list-panel .warning-banner,
+        .topic-list-panel .warning-banner span,
+        .topic-list-panel .warning-banner button {
+          font-size: 11.5px !important;
+        }
+        .topic-list-panel .footer-btn,
+        .topic-list-panel .footer-btn span {
+          font-size: 11.5px !important;
+        }
+      `}} />
       <div
         className={`grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] ${
           showPipelineModal ? "select-none blur-xs" : ""
@@ -380,8 +459,14 @@ export function TopicPageContent() {
           topics={mappedTopics}
           selectedTopicKey={selectedKey}
           currentJob={currentJob ?? null}
+          selectedResultId={selectedResultId}
+          onClearResultId={() => {
+            setSelectedResultId(null);
+            setSelectedKey(null);
+          }}
           onTopicSelect={(key) => setSelectedKey(key)}
           onOpenPipelineModal={() => setShowPipelineModal(true)}
+          onOpenHistoryDrawer={() => setIsHistoryDrawerOpen(true)}
           onRetry={refetchTopics}
         />
       </div>
@@ -414,6 +499,7 @@ export function TopicPageContent() {
             handleConfirmKnowledgeUpdate();
             setIsDrawerOpen(false);
           }}
+          onUnconfirm={handleUnconfirmKnowledge}
         />
       )}
 
@@ -431,6 +517,19 @@ export function TopicPageContent() {
           onUnpin={handleUnpin}
         />
       )}
+
+      {/* Job History Drawer */}
+      <JobHistoryDrawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        topicType={topicType}
+        onSelectJobResult={(resultId) => {
+          setSelectedResultId(resultId);
+          setSelectedKey(null); // Reset selection to auto-select first topic of the past run
+          setIsHistoryDrawerOpen(false);
+          toast.success("Đã tải dữ liệu kết quả từ lần chạy được chọn.");
+        }}
+      />
     </div>
   );
 }

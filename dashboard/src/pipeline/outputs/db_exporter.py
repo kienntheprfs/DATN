@@ -36,20 +36,20 @@ class DBExporter:
         if doc_timestamps is None:
             doc_timestamps = [None] * len(documents)
 
-        n_topics = len(set(topics))
+        n_topics = len(set(topics) - {-1})
         topic_summary: dict[int, str] = {
-            topic_id: topic_labels.get(topic_id, "") for topic_id in set(topics)
+            topic_id: topic_labels.get(topic_id, "") for topic_id in set(topics) if topic_id != -1
         }
         topic_keywords: dict[int, list[dict[str, float | str]]] = {
             int(topic_id): [
                 {"term": str(term), "score": float(score)}
                 for term, score in words
             ]
-            for topic_id, words in topic_words.items()
+            for topic_id, words in topic_words.items() if topic_id != -1
         }
         # Serialise keys as strings for JSON storage compatibility
         sentiment_serialised: dict[str, dict[str, float]] = {
-            str(k): v for k, v in topic_sentiment.items()
+            str(k): v for k, v in topic_sentiment.items() if k != -1
         }
 
         result = await TopicResultRepository.create(
@@ -58,7 +58,7 @@ class DBExporter:
             topic_type=topic_type.value,
             time_range=time_range.value,
             n_topics=n_topics,
-            n_documents=len(documents),
+            n_documents=len([t for t in topics if t != -1]),
             topic_summary=topic_summary,
             topic_keywords=topic_keywords,
             topic_sentiment=sentiment_serialised,
@@ -74,6 +74,7 @@ class DBExporter:
                 "original_created_at": ts,
             }
             for doc, topic_id, ts in zip(documents, topics, doc_timestamps)
+            if topic_id != -1
         ]
         await TopicResultRepository.bulk_create_assignments(db, result.id, assignments)
 

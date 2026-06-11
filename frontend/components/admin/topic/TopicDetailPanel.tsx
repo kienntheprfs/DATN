@@ -93,7 +93,7 @@ function ConfirmModal({ open, type, topic, isLoading, onConfirm, onCancel }: Con
 
       {/* Panel */}
       <div
-        className="relative z-10 mx-4 w-full max-w-md rounded-lg border border-border-color bg-white shadow-2xl"
+        className="relative z-10 mx-4 w-full max-w-md rounded-lg border border-border-color bg-white shadow-2xl font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -252,6 +252,7 @@ function TopicDetailLoading() {
 function TrendChart({
   topicType,
   topicId,
+  resultId,
   view,
 }: {
   topicType: TopicType;
@@ -262,8 +263,8 @@ function TrendChart({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["topics", "trend", topicType, topicId, view],
-    queryFn: () => topicService.getTrend({ topic_type: topicType, topic_id: topicId, view }),
+    queryKey: ["topics", "trend", topicType, topicId, view, resultId],
+    queryFn: () => topicService.getTrend({ topic_type: topicType, topic_id: topicId, view, result_id: resultId }),
     enabled: topicId !== undefined && topicId !== null,
   });
 
@@ -414,16 +415,18 @@ function TrendChart({
 function QuestionsTable({
   topicType,
   topicId,
+  resultId,
 }: {
   topicType: TopicType;
   topicId: number;
+  resultId: string;
 }) {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<"created_desc" | "created_asc">("created_desc");
   const PAGE_SIZE = 20;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["topics", "questions", topicType, topicId, page, sortBy],
+    queryKey: ["topics", "questions", topicType, topicId, page, sortBy, resultId],
     queryFn: () =>
       topicService.getQuestions({
         topic_type: topicType,
@@ -431,6 +434,7 @@ function QuestionsTable({
         page,
         page_size: PAGE_SIZE,
         sort_by: sortBy,
+        result_id: resultId,
       }),
     enabled: topicId !== undefined && topicId !== null,
     placeholderData: (prev) => prev,
@@ -609,7 +613,7 @@ export function TopicDetailPanel({
   };
 
   return (
-    <section className="relative flex min-h-0 flex-col overflow-hidden">
+    <section className="relative flex min-h-0 flex-col overflow-hidden font-sans">
       <div className="custom-scrollbar flex-1 overflow-y-auto p-4 pb-28 md:p-8">
         <div className="mx-auto w-full max-w-4xl">
           {isLoading ? (
@@ -710,7 +714,7 @@ export function TopicDetailPanel({
                     Từ khóa nổi bật
                   </div>
                   <div 
-                    className="break-words line-clamp-2 text-3xl font-bold leading-tight text-white"
+                    className="break-words line-clamp-2 text-2xl font-bold leading-tight text-white"
                     title={selectedTopic.featured_entity.replace(/_/g, " ")}
                   >
                     {selectedTopic.featured_entity.replace(/_/g, " ")}
@@ -878,6 +882,7 @@ export function TopicDetailPanel({
               <QuestionsTable
                 topicType={topicType}
                 topicId={selectedTopic.topic_id}
+                resultId={selectedTopic.result_id}
               />
             </>
           )}

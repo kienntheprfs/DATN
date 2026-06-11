@@ -164,11 +164,22 @@ export function UploadModal({ isOpen, onClose, onUploaded }: UploadModalProps) {
 
   const secondStepDone = progress >= 40;
 
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div 
-      className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
       onClick={handleClose}
     >
       <div 

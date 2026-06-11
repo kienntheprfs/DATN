@@ -285,6 +285,22 @@ async def get_job(
     )
 
 
+@router.get("/jobs/{job_id}/results", response_model=dict[str, UUID])
+async def get_job_results(
+    job_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, UUID]:
+    """Get result IDs associated with a job."""
+    from sqlalchemy import select
+    from src.models.topic_pipeline import DashboardTopicResult
+
+    stmt = select(DashboardTopicResult.topic_type, DashboardTopicResult.id).where(
+        DashboardTopicResult.job_id == job_id
+    )
+    res = await db.execute(stmt)
+    return {row.topic_type: row.id for row in res}
+
+
 @router.delete("/jobs/{job_id}/cancel", response_model=JobDetailResponse)
 async def cancel_job(
     job_id: UUID,
@@ -406,9 +422,13 @@ async def get_latest_result(
 async def get_topic_list(
     topic_type: TopicType,
     db: Annotated[AsyncSession, Depends(get_db)],
+    result_id: UUID | None = Query(None),
 ) -> TopicListResponse:
-    """Return enriched topic list for the given topic_type from the latest result."""
-    result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+    """Return enriched topic list for the given topic_type from the latest or specific result."""
+    if result_id:
+        result = await TopicResultRepository.get_by_id(db, result_id)
+    else:
+        result = await TopicResultRepository.get_latest_result(db, topic_type.value)
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no result found")
 
@@ -472,20 +492,27 @@ async def get_latest_questions(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     topic_id: int | None = None,
     sort_by: str = "created_desc",
+    result_id: UUID | None = Query(None),
 ) -> TopicQuestionsResponse:
-    """Get paginated questions from the latest result for UI display."""
-    items, total_items, has_result = await TopicResultRepository.get_latest_questions(
+    """Get paginated questions from the latest or specific result for UI display."""
+    if result_id:
+        result = await TopicResultRepository.get_by_id(db, result_id)
+    else:
+        result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="no result found"
+        )
+
+    items, total_items = await TopicResultRepository.get_assignments_paginated(
         db,
-        topic_type.value,
+        result.id,
         page=page,
         page_size=page_size,
         topic_id=topic_id,
         sort_by=sort_by,
     )
-    if not has_result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="no result found"
-        )
 
     total_pages = math.ceil(total_items / page_size) if total_items > 0 else 0
     return TopicQuestionsResponse(
@@ -517,9 +544,14 @@ async def get_topic_trends(
     topic_id: int,
     view: Annotated[str, Query(pattern="^(day|week|month)$")] = "day",
     db: Annotated[AsyncSession, Depends(get_db)] = None,
+    result_id: UUID | None = Query(None),
 ) -> TopicTrendResponse:
     """Return query-count trend for a topic bucketed by day / week / month."""
-    result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+    if result_id:
+        result = await TopicResultRepository.get_by_id(db, result_id)
+    else:
+        result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+        
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no result found")
 
@@ -553,9 +585,14 @@ async def get_topic_keywords(
     topic_type: TopicType,
     topic_id: int,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
+    result_id: UUID | None = Query(None),
 ) -> TopicKeywordsResponse:
     """Return top keywords for a specific topic from the latest result."""
-    result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+    if result_id:
+        result = await TopicResultRepository.get_by_id(db, result_id)
+    else:
+        result = await TopicResultRepository.get_latest_result(db, topic_type.value)
+        
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no result found")
 
