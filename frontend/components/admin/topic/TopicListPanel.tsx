@@ -74,13 +74,13 @@ export function TopicListPanel({
       </div>
 
       {/* Filters */}
-      <div className="custom-scrollbar flex shrink-0 gap-2 overflow-x-auto border-b border-border-color bg-white px-4 py-1.5">
+      <div className="flex shrink-0 gap-2 border-b border-border-color bg-white px-4 py-1.5">
         {FILTERS.map((filter) => (
           <button
             key={filter.key}
             type="button"
             onClick={() => handleFilterChange(filter.key)}
-            className={`filter-btn whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+            className={`filter-btn flex-1 text-center whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
               activeFilter === filter.key
                 ? "bg-primary text-white shadow-sm"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"

@@ -330,9 +330,9 @@ function TrendChart({
   };
 
   return (
-    <div className="w-full outline-none">
-      <div className="h-64 w-full rounded-sm border border-border-color bg-slate-50 p-3 outline-none">
-        <ResponsiveContainer width="100%" height="100%" className="outline-none">
+    <div className="w-full min-w-0 outline-none">
+      <div className="h-64 w-full min-w-0 rounded-sm border border-border-color bg-slate-50 p-3 outline-none">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} className="outline-none">
           <BarChart 
             data={chartData} 
             margin={{ top: 25, right: 10, left: -25, bottom: 0 }}
@@ -477,7 +477,7 @@ function QuestionsTable({
             ))}
           </div>
         ) : (
-          <table className="w-full border-collapse text-left">
+          <table className="questions-table w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50">
                 <th className="border-b border-border-color px-6 py-3 text-[15px] font-bold uppercase tracking-wider text-primary">
@@ -714,7 +714,7 @@ export function TopicDetailPanel({
                     Từ khóa nổi bật
                   </div>
                   <div 
-                    className="break-words line-clamp-2 text-2xl font-bold leading-tight text-white"
+                    className="featured-entity-content break-words line-clamp-2 text-2xl font-bold leading-tight text-white"
                     title={selectedTopic.featured_entity.replace(/_/g, " ")}
                   >
                     {selectedTopic.featured_entity.replace(/_/g, " ")}
@@ -804,7 +804,7 @@ export function TopicDetailPanel({
                         {selectedTopic.tags.filter(tag => tag.trim()).map((tag) => (
                           <span
                             key={tag}
-                            className="break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[13px] font-medium text-slate-600"
+                            className="primary-keyword-tag break-all rounded-sm border border-border-color bg-slate-100 px-2 py-1 text-[13px] font-medium text-slate-600"
                             title={`Từ khóa: ${tag.replace(/_/g, " ")}`}
                           >
                             {tag.replace(/_/g, " ")}

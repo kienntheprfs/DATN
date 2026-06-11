@@ -405,7 +405,7 @@ export function TopicPageContent() {
           font-size: 12.5px !important;
         }
         .topic-list-panel .filter-btn {
-          font-size: 10.5px !important;
+          font-size: 11.5px !important;
         }
         .topic-list-panel .topic-queries {
           font-size: 10.5px !important;
@@ -424,6 +424,19 @@ export function TopicPageContent() {
         .topic-list-panel .footer-btn,
         .topic-list-panel .footer-btn span {
           font-size: 11.5px !important;
+        }
+        /* Scoped font-size adjustments for detail panel contents */
+        .topic-page-container .featured-entity-content {
+          font-size: 20px !important;
+        }
+        .topic-page-container .primary-keyword-tag {
+          font-size: 14.5px !important;
+        }
+        .topic-page-container .questions-table td {
+          font-size: 14.5px !important;
+        }
+        .topic-page-container .questions-table th {
+          font-size: 13.5px !important;
         }
       `}} />
       <div
