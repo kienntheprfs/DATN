@@ -7,6 +7,19 @@ import { Input } from "@/components/ui/input";
 import { CitationPdfPreview } from "./citation-pdf-preview";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+
+function preprocessLaTeX(text: string): string {
+	if (!text) return "";
+	return text
+		.replace(/\\\[/g, "\n$$\n")
+		.replace(/\\\]/g, "\n$$\n")
+		.replace(/\\\(/g, "$")
+		.replace(/\\\)/g, "$")
+		.replace(/(^|\n)\s*\$\s*(\n|$)/g, "$1$$$$$2");
+}
 
 interface Citation {
 	file_name: string;
@@ -214,8 +227,8 @@ const CitationItem = memo(({
 						</div>
 					) : isMarkdown ? (
 						<div className="text-sm prose prose-sm dark:prose-invert max-w-none bg-background/50 p-3 rounded-md border">
-							<ReactMarkdown remarkPlugins={[remarkGfm]}>
-								{preview?.content || cite.text_preview || ""}
+							<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+								{preprocessLaTeX(preview?.content || cite.text_preview || "")}
 							</ReactMarkdown>
 							<div className="mt-3 pt-3 border-t text-xs text-muted-foreground flex items-center gap-2">
 								<Highlighter className="size-3" />
