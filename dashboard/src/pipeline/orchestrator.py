@@ -88,7 +88,10 @@ class PipelineOrchestrator:
         topics, topic_words, topic_sentiment = await modeling_engine.fit_predict(documents)
         topic_labels: dict[int, str] = {}
         if hasattr(modeling_engine, "generate_labels"):
-            topic_labels = await modeling_engine.generate_labels(documents, topics, topic_words)
+            topic_labels = await modeling_engine.generate_labels(
+                documents, topics, topic_words, topic_type=topic_type
+            )
+
 
         await self._report(
             JobStage.EXPORTING_FILE,

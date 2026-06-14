@@ -506,13 +506,36 @@ async def evaluate_model(
         texts = [doc.split() for doc in processed_docs if doc.strip()]
         dictionary = Dictionary(texts)
         
+        from collections import Counter
+        
         topic_words_list = []
         all_keywords = []
         for t in sorted(top_words_per_topic.keys()):
             if t == -1: continue
-            words = [w for w, _ in top_words_per_topic[t]]
-            topic_words_list.append(words)
-            all_keywords.extend(words)
+            
+            # Lấy từ khóa, chuyển đổi khoảng trắng thành gạch dưới và viết thường
+            words = [w.replace(" ", "_").lower() for w, _ in top_words_per_topic[t]]
+            # Chỉ giữ các từ thực sự có trong từ điển Gensim để tránh lỗi ValueError
+            filtered_words = [w for w in words if w in dictionary.token2id]
+            
+            # Nếu toàn bộ từ khóa của topic bị OOV (ví dụ: LLM sinh ra các từ khái quát không xuất hiện trực tiếp)
+            if not filtered_words:
+                t_doc_words = []
+                for doc, topic_id in zip(processed_docs, topics):
+                    if topic_id == t:
+                        t_doc_words.extend([w for w in doc.split() if w.strip()])
+                word_counts = Counter(t_doc_words)
+                most_common = [w for w, _ in word_counts.most_common(10) if w in dictionary.token2id]
+                if most_common:
+                    filtered_words = most_common
+                else:
+                    # Fallback cuối cùng: lấy từ đầu tiên trong từ điển
+                    filtered_words = [list(dictionary.token2id.keys())[0]] if dictionary.token2id else ["dummy"]
+                    
+            topic_words_list.append(filtered_words)
+            all_keywords.extend(filtered_words)
+
+
         
         metrics = {}
         
@@ -766,6 +789,7 @@ class FastTopicEngine:
         docs: list[str],
         topics: list[int],
         topic_words: dict[int, list[tuple[str, float]]],
+        topic_type: Any = None,
     ) -> dict[int, str]:
         
         # 1. Gọi LLM Refine Labels
@@ -779,12 +803,17 @@ class FastTopicEngine:
         topic_words.clear()
         topic_words.update(top_words_per_topic_refined)
         
+        output_dir = OUTPUT_DIR
+        if topic_type:
+            type_str = topic_type.value if hasattr(topic_type, "value") else str(topic_type)
+            output_dir = OUTPUT_DIR / type_str
+
         # 2. Evaluate model (Lưu cho debug)
         await evaluate_model(
             processed_docs=self._processed_docs,
             topics=topics,
             top_words_per_topic=top_words_per_topic_refined,
-            output_dir=OUTPUT_DIR,
+            output_dir=output_dir,
             embeddings=self._embeddings,
             topic_model=self._topic_model
         )
@@ -810,7 +839,8 @@ class FastTopicEngine:
             probabilities=self._doc_probs,
             top_words_per_topic=top_words_per_topic_refined,
             topic_labels=topic_labels,
-            output_dir=OUTPUT_DIR
+            output_dir=output_dir
         )
         
         return topic_labels
+
