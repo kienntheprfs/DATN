@@ -320,6 +320,14 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
     }
   }, [onTranscript, onBotOutput, onBotPartialOutput, onToolStarted, onToolResult, onError, lastRunId, setLastRunId]);
 
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const startConversation = useCallback(async () => {
     if (state === "connected" || state === "connecting") {
       return;
@@ -473,17 +481,19 @@ export function useVoice(options: UseVoiceOptions): UseVoiceReturn {
       }
       pendingCandidatesRef.current = [];
 
+      if (!isMountedRef.current) return;
       setState("connected");
       setIsListening(true);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to connect";
+      if (!isMountedRef.current) return;
       setError(errorMessage);
       setState("error");
       cleanup();
       onError?.(errorMessage);
     }
-  }, [state, agentId, userId, model, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
+  }, [state, agentId, userId, model, threadIdProp, createThread, handleDataChannelMessage, cleanup, sendIceCandidate, onError]);
 
   const sendTextMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;

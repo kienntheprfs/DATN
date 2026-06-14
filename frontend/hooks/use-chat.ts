@@ -405,6 +405,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 	}, []);
 
 	const addVoiceToolCall = useCallback((tool: { id: string; name: string; args?: Record<string, unknown> }) => {
+		toolNamesRef.current[tool.id] = tool.name;
 		const newTool: ToolCall = {
 			id: tool.id,
 			name: tool.name,
@@ -422,6 +423,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 					: t
 			)
 		);
+		setMessages((prev) => {
+			if (prev.some((m) => m.id === toolCallId)) return prev;
+			const toolName = toolNamesRef.current[toolCallId] || "tool";
+			return [...prev, { id: toolCallId, role: "assistant", content, msgType: "tool", toolName }];
+		});
 	}, []);
 
 	const clearVoiceTools = useCallback(() => {
